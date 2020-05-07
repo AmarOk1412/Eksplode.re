@@ -48,10 +48,15 @@ func _physics_process(delta):
 	move_and_collide(movement)
 
 func _input(ev):
-	if ev is InputEventKey and ev.scancode == KEY_SPACE and not ev.echo:
+	if Input.is_action_just_pressed("ui_accept"):
+		var root = get_tree().get_root()
+		var tileMap = root.get_node("Main").get_node("Map")
+		var tilePos = tileMap.world_to_map(self.position)
 		var bomb = bombPacked.instance()
-		bomb.position = self.position
-		get_tree().get_root().add_child(bomb)
+		bomb.z_index = 2
+		# TODO clean this values
+		bomb.position = (tilePos * 120) + Vector2(60, 60)
+		root.add_child(bomb)
 
 func _ready():
 	anim.play("Base")
