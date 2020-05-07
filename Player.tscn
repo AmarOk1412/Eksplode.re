@@ -1,4 +1,4 @@
-[gd_scene load_steps=91 format=2]
+[gd_scene load_steps=93 format=2]
 
 [ext_resource path="res://Player.gd" type="Script" id=1]
 [ext_resource path="res://Animations/Player/Side/base1.png" type="Texture" id=2]
@@ -66,6 +66,7 @@
 [ext_resource path="res://Bomb.tscn" type="PackedScene" id=64]
 [ext_resource path="res://tile.png" type="Texture" id=65]
 [ext_resource path="res://box.png" type="Texture" id=66]
+[ext_resource path="res://Sprites/Items/MoreBomb.png" type="Texture" id=67]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
@@ -614,6 +615,9 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 1/shapes = [  ]
 1/z_index = 0
 
+[sub_resource type="RectangleShape2D" id=25]
+extents = Vector2( 25.6937, 26.8773 )
+
 [node name="Main" type="Node2D"]
 
 [node name="Player" type="KinematicBody2D" parent="." groups=[
@@ -653,3 +657,21 @@ tile_set = SubResource( 24 )
 cell_size = Vector2( 120, 120 )
 format = 1
 tile_data = PoolIntArray( 196614, 0, 0, 196616, 0, 0, 196618, 0, 0, 262150, 1, 0, 262152, 1, 0, 262154, 1, 0, 327684, 0, 0, 327688, 0, 0, 327690, 0, 0, 393220, 1, 0, 393224, 1, 0, 393226, 1, 0, 458758, 0, 0, 458760, 0, 0, 458762, 0, 0, 524294, 1, 0, 524296, 1, 0, 524298, 1, 0, 589828, 0, 0, 589830, 0, 0, 589834, 0, 0, 655364, 1, 0, 655366, 1, 0, 655370, 1, 0, 720900, 0, 0, 720904, 0, 0, 720906, 0, 0, 786436, 1, 0, 786440, 1, 0, 786442, 1, 0 )
+
+[node name="GameTimer" type="Label" parent="."]
+margin_right = 2152.0
+margin_bottom = 123.0
+custom_colors/font_color = Color( 0.172549, 0.172549, 0.172549, 1 )
+text = "03:00"
+align = 1
+
+[node name="Bonus" type="Area2D" parent="."]
+position = Vector2( 300, 500 )
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Bonus"]
+z_index = 3
+shape = SubResource( 25 )
+
+[node name="Sprite" type="Sprite" parent="Bonus"]
+scale = Vector2( 0.5, 0.5 )
+texture = ExtResource( 67 )
