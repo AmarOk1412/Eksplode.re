@@ -76,3 +76,5 @@ shape = SubResource( 3 )
 position = Vector2( 120, 0 )
 scale = Vector2( 3, 1 )
 shape = SubResource( 3 )
+[connection signal="body_entered" from="Area2D" to="." method="_on_bomb_body_enter"]
+[connection signal="body_exited" from="Area2D" to="." method="_on_bomb_body_exit"]
