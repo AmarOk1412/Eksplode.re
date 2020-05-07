@@ -60,3 +60,6 @@ func _input(ev):
 
 func _ready():
 	anim.play("Base")
+
+func explode():
+	queue_free()
