@@ -1,18 +1,78 @@
-[gd_scene load_steps=3 format=2]
+[gd_scene load_steps=9 format=2]
 
-[ext_resource path="res://enemySwimming_1.png" type="Texture" id=1]
+[ext_resource path="res://Bomb.gd" type="Script" id=1]
+[ext_resource path="res://Animations/Bomb/bomb1.png" type="Texture" id=2]
+[ext_resource path="res://Animations/Bomb/bomb2.png" type="Texture" id=3]
+[ext_resource path="res://Animations/Bomb/bomb3.png" type="Texture" id=4]
+[ext_resource path="res://Animations/Bomb/bomb.png" type="Texture" id=5]
 
-[sub_resource type="CircleShape2D" id=1]
-radius = 27.299
+[sub_resource type="SpriteFrames" id=1]
+animations = [ {
+"frames": [ ExtResource( 2 ), ExtResource( 3 ), ExtResource( 4 ), ExtResource( 5 ) ],
+"loop": true,
+"name": "Bomb",
+"speed": 1.0
+} ]
+
+[sub_resource type="RectangleShape2D" id=2]
+extents = Vector2( 65.9255, 63.336 )
+
+[sub_resource type="RectangleShape2D" id=3]
+extents = Vector2( 62.5251, 59.4976 )
 
 [node name="Bomb" type="StaticBody2D"]
-position = Vector2( -102.128, -87.5382 )
+position = Vector2( 60, 60 )
+script = ExtResource( 1 )
 
-[node name="Sprite" type="Sprite" parent="."]
-position = Vector2( 0.810547, 0.540367 )
-scale = Vector2( 0.480109, 0.515928 )
-texture = ExtResource( 1 )
+[node name="AnimBomb" type="AnimatedSprite" parent="."]
+frames = SubResource( 1 )
+animation = "Bomb"
 
-[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-position = Vector2( 1.52588e-05, 1.08072 )
-shape = SubResource( 1 )
+[node name="Top" type="CollisionShape2D" parent="."]
+visible = false
+shape = SubResource( 2 )
+one_way_collision = true
+one_way_collision_margin = 0.0
+
+[node name="Left" type="CollisionShape2D" parent="."]
+visible = false
+rotation = 1.5708
+shape = SubResource( 2 )
+one_way_collision = true
+one_way_collision_margin = 0.0
+
+[node name="Bottom" type="CollisionShape2D" parent="."]
+visible = false
+rotation = 3.14159
+shape = SubResource( 2 )
+one_way_collision = true
+one_way_collision_margin = 0.0
+
+[node name="Right" type="CollisionShape2D" parent="."]
+visible = false
+rotation = 4.71239
+shape = SubResource( 2 )
+one_way_collision = true
+one_way_collision_margin = 0.0
+
+[node name="Area2D" type="Area2D" parent="."]
+
+[node name="Bottom" type="CollisionShape2D" parent="Area2D"]
+position = Vector2( 0, 120 )
+scale = Vector2( 1, 3 )
+shape = SubResource( 3 )
+
+[node name="Top" type="CollisionShape2D" parent="Area2D"]
+position = Vector2( 0, -120 )
+scale = Vector2( 1, 3 )
+shape = SubResource( 3 )
+
+[node name="Left" type="CollisionShape2D" parent="Area2D"]
+position = Vector2( -120, 0 )
+scale = Vector2( 3, 1 )
+shape = SubResource( 3 )
+
+[node name="Right" type="CollisionShape2D" parent="Area2D"]
+position = Vector2( 120, 0 )
+scale = Vector2( 3, 1 )
+shape = SubResource( 3 )
