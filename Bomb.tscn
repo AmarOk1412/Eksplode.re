@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=2]
+[gd_scene load_steps=8 format=2]
 
 [ext_resource path="res://Bomb.gd" type="Script" id=1]
 [ext_resource path="res://Animations/Bomb/bomb1.png" type="Texture" id=2]
@@ -17,10 +17,9 @@ animations = [ {
 [sub_resource type="RectangleShape2D" id=2]
 extents = Vector2( 65.9255, 63.336 )
 
-[sub_resource type="RectangleShape2D" id=3]
-extents = Vector2( 62.5251, 59.4976 )
-
-[node name="Bomb" type="StaticBody2D"]
+[node name="Bomb" type="StaticBody2D" groups=[
+"Destroyable",
+]]
 position = Vector2( 60, 60 )
 script = ExtResource( 1 )
 
@@ -55,26 +54,20 @@ shape = SubResource( 2 )
 one_way_collision = true
 one_way_collision_margin = 0.0
 
-[node name="Area2D" type="Area2D" parent="."]
+[node name="Raycasts" type="Node2D" parent="."]
 
-[node name="Bottom" type="CollisionShape2D" parent="Area2D"]
-position = Vector2( 0, 120 )
-scale = Vector2( 1, 3 )
-shape = SubResource( 3 )
+[node name="East" type="RayCast2D" parent="Raycasts"]
+enabled = true
+cast_to = Vector2( 240, 0 )
 
-[node name="Top" type="CollisionShape2D" parent="Area2D"]
-position = Vector2( 0, -120 )
-scale = Vector2( 1, 3 )
-shape = SubResource( 3 )
+[node name="South" type="RayCast2D" parent="Raycasts"]
+enabled = true
+cast_to = Vector2( 0, 240 )
 
-[node name="Left" type="CollisionShape2D" parent="Area2D"]
-position = Vector2( -120, 0 )
-scale = Vector2( 3, 1 )
-shape = SubResource( 3 )
+[node name="North" type="RayCast2D" parent="Raycasts"]
+enabled = true
+cast_to = Vector2( 0, -240 )
 
-[node name="Right" type="CollisionShape2D" parent="Area2D"]
-position = Vector2( 120, 0 )
-scale = Vector2( 3, 1 )
-shape = SubResource( 3 )
-[connection signal="body_entered" from="Area2D" to="." method="_on_bomb_body_enter"]
-[connection signal="body_exited" from="Area2D" to="." method="_on_bomb_body_exit"]
+[node name="West" type="RayCast2D" parent="Raycasts"]
+enabled = true
+cast_to = Vector2( -240, 0 )
