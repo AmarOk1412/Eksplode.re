@@ -1,9 +1,11 @@
 extends KinematicBody2D
 onready var bombPacked = preload("res://Bomb.tscn")
+onready var bombScript = preload("res://Bomb.gd")
 onready var anim = get_node("AnimationPlayer")
 
 # Player movement speed
 export var speed = 300
+export var bombs = 1
 
 enum Direction {
 	Up,
@@ -48,12 +50,17 @@ func _physics_process(delta):
 	move_and_collide(movement)
 
 func _input(ev):
-	if Input.is_action_just_pressed("ui_accept"):
+	if Input.is_action_just_pressed("ui_accept") and bombs > 0:
+		bombs -= 1
 		var root = get_tree().get_root()
 		var tileMap = root.get_node("Main").get_node("Map")
 		var tilePos = tileMap.world_to_map(self.position)
 		var bomb = bombPacked.instance()
+		bomb.set_script(bombScript)
+		bomb.add_to_group("Destroyable")
+		bomb.add_to_group("Bomb")
 		bomb.z_index = 2
+		bomb.from_player = self
 		# TODO clean this values
 		bomb.position = (tilePos * 120) + Vector2(60, 60)
 		root.add_child(bomb)
