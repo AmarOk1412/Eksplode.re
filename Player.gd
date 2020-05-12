@@ -7,6 +7,17 @@ onready var anim = get_node("AnimationPlayer")
 export var speed = 300
 export var bombs = 1
 
+# Effects
+var timerEffect = Timer.new()
+enum Effect {
+	None,
+	Slow,
+	Fast,
+	Inverted
+}
+var currentEffect = Effect.None
+const EFFECT_DURATION = 15
+
 enum Direction {
 	Up,
 	Down,
@@ -18,21 +29,25 @@ var lastDir = Direction.Down
 func _physics_process(delta):
 	# Get player input
 	var direction: Vector2
-	direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
-	direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
-
-	anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
+	if currentEffect == Effect.Inverted:
+		direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
+		direction.y = Input.get_action_strength("ui_up") - Input.get_action_strength("ui_down")
+		anim.flip_h = Input.is_action_pressed("ui_right") || lastDir == Direction.Left
+	else:
+		direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
+		direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
+		anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
 	
-	if Input.is_action_pressed("ui_down"):
+	if direction.y > 0:
 		lastDir = Direction.Down
 		anim.play("Down")
-	elif Input.is_action_pressed("ui_up"):
+	elif direction.y < 0:
 		lastDir = Direction.Up
 		anim.play("Up")
-	elif Input.is_action_pressed("ui_right"):
+	elif direction.x > 0:
 		lastDir = Direction.Right
 		anim.play("Right")
-	elif Input.is_action_pressed("ui_left"):
+	elif direction.x < 0:
 		lastDir = Direction.Left
 		anim.play("Right")
 	elif lastDir == Direction.Down:
@@ -46,7 +61,12 @@ func _physics_process(delta):
 		direction = direction.normalized()
 	
 	# Apply movement
-	var movement = speed * direction * delta
+	var playerSpeed = speed
+	if currentEffect == Effect.Slow:
+		playerSpeed = 100
+	elif currentEffect == Effect.Fast:
+		playerSpeed = speed * 10
+	var movement = playerSpeed * direction * delta
 	move_and_collide(movement)
 
 func _input(ev):
@@ -70,3 +90,15 @@ func _ready():
 
 func explode():
 	queue_free()
+
+func removeEffect():
+	print("TIMEOUT")
+	currentEffect = Effect.None
+
+func affect():
+	timerEffect.stop()
+	# Note: random effect and avoid None
+	currentEffect = Effect.values()[randi()%(Effect.size() - 1) + 1]
+	timerEffect.connect("timeout", self, "removeEffect")
+	add_child(timerEffect)
+	timerEffect.start(EFFECT_DURATION)
