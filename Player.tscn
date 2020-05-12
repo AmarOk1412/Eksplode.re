@@ -1,4 +1,4 @@
-[gd_scene load_steps=92 format=2]
+[gd_scene load_steps=93 format=2]
 
 [ext_resource path="res://Main.gd" type="Script" id=1]
 [ext_resource path="res://Player.gd" type="Script" id=2]
@@ -69,6 +69,7 @@
 [ext_resource path="res://Item.tscn" type="PackedScene" id=67]
 [ext_resource path="res://DestructibleBox.tscn" type="PackedScene" id=68]
 [ext_resource path="res://DestructibleBox.gd" type="Script" id=69]
+[ext_resource path="res://Boom.tscn" type="PackedScene" id=70]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
@@ -635,8 +636,10 @@ align = 1
 position = Vector2( 600.586, -1587.03 )
 
 [node name="DestructibleBox" parent="." groups=[
-"Destroyable",
 "Box",
+"Destroyable",
 ] instance=ExtResource( 68 )]
 position = Vector2( -177.564, -645.819 )
 script = ExtResource( 69 )
+
+[node name="Boom" parent="." instance=ExtResource( 70 )]
