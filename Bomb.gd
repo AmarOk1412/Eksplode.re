@@ -1,5 +1,8 @@
 extends StaticBody2D
 
+onready var boomPacked = preload("res://Boom.tscn")
+onready var boomScript = preload("res://Boom.gd")
+
 var duration = 3
 var radius = 2
 onready var anim = get_node("AnimBomb")
@@ -14,7 +17,7 @@ var from_player = null
 func _ready():
 	anim.play("Bomb")
 	var timer = Timer.new()
-	timer.connect("timeout",self,"explode")
+	timer.connect("timeout", self, "explode")
 	add_child(timer)
 	timer.start(duration)
 
@@ -45,9 +48,41 @@ func explode():
 			final_colliders.append(collider) # ... add it.
 
 	# Add an explosion to each collider.
+	var tiles = []
+	var root = get_tree().get_root()
+	var tileMap = root.get_node("Main").get_node("Map")
 	for collider in final_colliders: # Loop through all the colliders.
+		if collider.is_in_group("Box"):
+			tiles.append(tileMap.world_to_map(collider.position) + Vector2(0, -1))
 		if collider.is_in_group("Destroyable"):
 			collider.explode()
+	
+	var currentPos = tileMap.world_to_map(self.position)
+	for d in range(0, 4):
+		for r in range(0, radius+1):
+			var newPos = currentPos
+			if d == 0:
+				newPos += Vector2(r, 0)
+			elif d == 1:
+				newPos -= Vector2(r, 0)
+			elif d == 2:
+				newPos += Vector2(0, r)
+			elif d == 3:
+				newPos -= Vector2(0, r)
+			if newPos in tiles:
+				break
+			# TODO clean
+			if newPos.x < 2 or newPos.x > 13 \
+			or newPos.y < 2 or newPos.y > 13:
+				break
+			# Instantiate explosion
+			var boom = boomPacked.instance()
+			boom.set_script(boomScript)
+			boom.z_index = 3
+			# TODO clean this values
+			boom.position = (newPos * 120) + Vector2(60, 60)
+			root.add_child(boom)
+
 	queue_free()
 
 

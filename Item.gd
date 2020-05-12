@@ -30,7 +30,6 @@ func explode():
 
 func on_player_entered(body):
 	if body.is_in_group("Player"):
-		body.affect()
 		if type == 4:
 			body.speed += 100
 		elif type == 5:

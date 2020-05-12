@@ -1,0 +1,22 @@
+[gd_scene load_steps=7 format=2]
+
+[ext_resource path="res://Animations/Bomb/Boom/00.png" type="Texture" id=1]
+[ext_resource path="res://Animations/Bomb/Boom/01.png" type="Texture" id=2]
+[ext_resource path="res://Animations/Bomb/Boom/02.png" type="Texture" id=3]
+[ext_resource path="res://Animations/Bomb/Boom/03.png" type="Texture" id=4]
+[ext_resource path="res://Boom.gd" type="Script" id=5]
+
+[sub_resource type="SpriteFrames" id=1]
+animations = [ {
+"frames": [ ExtResource( 1 ), ExtResource( 2 ), ExtResource( 3 ), ExtResource( 4 ) ],
+"loop": false,
+"name": "Boom",
+"speed": 40.0
+} ]
+
+[node name="Boom" type="AnimatedSprite"]
+position = Vector2( -712.416, 155.494 )
+frames = SubResource( 1 )
+animation = "Boom"
+script = ExtResource( 5 )
+[connection signal="animation_finished" from="." to="." method="_on_Boom_animation_finished"]
