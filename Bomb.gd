@@ -6,7 +6,6 @@ onready var boomScript = preload("res://Boom.gd")
 var duration = 3
 var radius = 2
 onready var anim = get_node("AnimBomb")
-var inArea = []
 var exploding = false
 var max_tiles = 20 # The ammount of tiles each ray will collide with.
 onready var rays = $Raycasts # The rays parent node.
@@ -85,12 +84,9 @@ func explode():
 
 	queue_free()
 
-
-func _on_bomb_body_enter(object):
-	if not object in inArea:
-		print("New for ")
-		print(self)
-		inArea.append(object)
-
-func _on_bomb_body_exit(object):
-	inArea.erase(object)
+func setRadius(r):
+	self.radius = r
+	$Raycasts/East.cast_to = Vector2(120 * radius, 0)
+	$Raycasts/West.cast_to = Vector2(120 * -radius, 0)
+	$Raycasts/South.cast_to = Vector2(0, 120 * radius)
+	$Raycasts/North.cast_to = Vector2(0, 120 * -radius)

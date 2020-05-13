@@ -59,15 +59,19 @@ one_way_collision_margin = 0.0
 [node name="East" type="RayCast2D" parent="Raycasts"]
 enabled = true
 cast_to = Vector2( 240, 0 )
+collide_with_areas = true
 
 [node name="South" type="RayCast2D" parent="Raycasts"]
 enabled = true
 cast_to = Vector2( 0, 240 )
+collide_with_areas = true
 
 [node name="North" type="RayCast2D" parent="Raycasts"]
 enabled = true
 cast_to = Vector2( 0, -240 )
+collide_with_areas = true
 
 [node name="West" type="RayCast2D" parent="Raycasts"]
 enabled = true
 cast_to = Vector2( -240, 0 )
+collide_with_areas = true

@@ -4,19 +4,21 @@
 [ext_resource path="res://Sprites/Items/malus.png" type="Texture" id=2]
 
 [sub_resource type="RectangleShape2D" id=1]
-extents = Vector2( 25.6937, 26.8773 )
+extents = Vector2( 42.0214, 38.7371 )
 
 [node name="Item" type="Area2D" groups=[
 "Destroyable",
 ]]
-position = Vector2( 301, 500 )
+position = Vector2( 289.722, 319.55 )
 script = ExtResource( 1 )
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
-z_index = 3
+position = Vector2( 0, -0.663452 )
+z_index = 2
 shape = SubResource( 1 )
 
 [node name="Sprite" type="Sprite" parent="."]
-scale = Vector2( 0.5, 0.5 )
+position = Vector2( -1.99025, -3.05176e-05 )
+scale = Vector2( 0.699026, 0.699025 )
 texture = ExtResource( 2 )
 [connection signal="body_entered" from="." to="." method="on_player_entered"]
