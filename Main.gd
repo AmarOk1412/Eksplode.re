@@ -7,6 +7,7 @@ const prefs = preload("res://Utils/constant.gd")
 
 # Todo clean
 func _ready():
+	$GameTrack.play()
 	for x in range(prefs.START_X, prefs.END_X):
 		for y in range(prefs.START_Y, prefs.END_Y):
 			if x%2 == 1 and y % 2 == 1:
@@ -27,5 +28,4 @@ func _ready():
 				box.add_to_group("Destroyable")
 				box.add_to_group("Box")
 				box.position = Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
-				var root = get_tree().get_root()
 				self.add_child(box)

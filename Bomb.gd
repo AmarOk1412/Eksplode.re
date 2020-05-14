@@ -9,7 +9,6 @@ var duration = 3
 var radius = 2
 onready var anim = get_node("AnimBomb")
 var exploding = false
-var max_tiles = 20 # The ammount of tiles each ray will collide with.
 onready var rays = $Raycasts # The rays parent node.
 
 var from_player = null
@@ -147,7 +146,8 @@ func explode():
 			# TODO clean this values
 			boom.position = (newPos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 			root.add_child(boom)
-
+	var bombTrack = root.get_node("Main").get_node("BombTrack")
+	bombTrack.play()
 	queue_free()
 
 func setRadius(r):

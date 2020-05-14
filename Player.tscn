@@ -1,4 +1,4 @@
-[gd_scene load_steps=93 format=2]
+[gd_scene load_steps=95 format=2]
 
 [ext_resource path="res://Main.gd" type="Script" id=1]
 [ext_resource path="res://Player.gd" type="Script" id=2]
@@ -70,6 +70,8 @@
 [ext_resource path="res://DestructibleBox.tscn" type="PackedScene" id=68]
 [ext_resource path="res://DestructibleBox.gd" type="Script" id=69]
 [ext_resource path="res://Boom.tscn" type="PackedScene" id=70]
+[ext_resource path="res://Sounds/track1.wav" type="AudioStream" id=71]
+[ext_resource path="res://Sounds/explosion.wav" type="AudioStream" id=72]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
@@ -155,7 +157,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 [sub_resource type="ConvexPolygonShape2D" id=18]
 points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 
-[sub_resource type="ConvexPolygonShape2D" id=23]
+[sub_resource type="ConvexPolygonShape2D" id=19]
 points = PoolVector2Array( 0.000427246, 59.7275, 120.238, 59.7275, 120, 120, 0, 120 )
 
 [sub_resource type="ConvexPolygonShape2D" id=20]
@@ -274,7 +276,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 "autotile_coord": Vector2( 0, 0 ),
 "one_way": false,
 "one_way_margin": 1.0,
-"shape": SubResource( 23 ),
+"shape": SubResource( 19 ),
 "shape_transform": Transform2D( 1, 0, 0, 1, 0, 0 )
 } ]
 7/z_index = 0
@@ -644,3 +646,10 @@ position = Vector2( -177.564, -645.819 )
 script = ExtResource( 69 )
 
 [node name="Boom" parent="." instance=ExtResource( 70 )]
+
+[node name="GameTrack" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource( 71 )
+
+[node name="BombTrack" type="AudioStreamPlayer2D" parent="."]
+stream = ExtResource( 72 )
+area_mask = 2
