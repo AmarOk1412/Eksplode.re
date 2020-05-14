@@ -2,6 +2,7 @@ extends StaticBody2D
 
 onready var itemPacked = preload("res://Item.tscn")
 onready var itemScript = preload("res://Item.gd")
+const prefs = preload("res://Utils/constant.gd")
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -17,7 +18,7 @@ func explode():
 		item.add_to_group("Destroyable")
 		item.z_index = 2
 		# TODO clean this values
-		item.position = (tilePos * 120) + Vector2(60, -60)
+		item.position = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, -prefs.CELL_SIZE/2)
 		root.add_child(item)
 		
 	queue_free()

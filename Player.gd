@@ -2,10 +2,11 @@ extends KinematicBody2D
 onready var bombPacked = preload("res://Bomb.tscn")
 onready var bombScript = preload("res://Bomb.gd")
 onready var anim = get_node("AnimationPlayer")
+const prefs = preload("res://Utils/constant.gd")
 
 # Player movement speed
 var speed = 300
-var bombs = 100
+var bombs = 1
 var radius = 2
 var repelBombs = false
 
@@ -96,7 +97,7 @@ func drop():
 	bomb.z_index = 2
 	bomb.from_player = self
 	# TODO clean this values
-	bomb.position = (tilePos * 120) + Vector2(60, 60)
+	bomb.position = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 	var finalRadius = self.radius
 	if self.currentEffect == Effect.SmallBomb:
 		finalRadius = 1
@@ -114,13 +115,13 @@ func removeEffect():
 
 func near(bomb):
 	if self.repelBombs:
-		if bomb.position.x - 60> self.position.x:
+		if bomb.position.x - prefs.CELL_SIZE/2 > self.position.x:
 			bomb.moveVector = Vector2(1,0)
-		elif bomb.position.x + 60 < self.position.x:
+		elif bomb.position.x + prefs.CELL_SIZE/2 < self.position.x:
 			bomb.moveVector = Vector2(-1,0)
-		elif bomb.position.y - 60 > self.position.y:
+		elif bomb.position.y - prefs.CELL_SIZE/2 > self.position.y:
 			bomb.moveVector = Vector2(0,1)
-		elif bomb.position.y + 60 < self.position.y:
+		elif bomb.position.y + prefs.CELL_SIZE/2 < self.position.y:
 			bomb.moveVector = Vector2(0,-1)
 
 func affect():

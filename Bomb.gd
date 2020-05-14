@@ -3,6 +3,8 @@ extends KinematicBody2D
 onready var boomPacked = preload("res://Boom.tscn")
 onready var boomScript = preload("res://Boom.gd")
 
+const prefs = preload("res://Utils/constant.gd")
+
 var duration = 3
 var radius = 2
 onready var anim = get_node("AnimBomb")
@@ -48,7 +50,7 @@ func _physics_process(delta):
 		if collider != self:
 			break
 	var nextTile = tileMap.world_to_map(self.position) + moveVector
-	if nextTile.x > 12 or nextTile.x < 2 or nextTile.y > 12 or nextTile.y < 2:
+	if nextTile.x >= prefs.END_X or nextTile.x < prefs.START_X or nextTile.y >= prefs.END_Y or nextTile.y < prefs.START_Y:
 		 nextTileEmpty = false
 	for collider in colliders:
 		# TODO avoid this
@@ -64,13 +66,13 @@ func _physics_process(delta):
 	# TODO CLEAN THIS
 	if not nextTileEmpty:
 		if moveVector.x < 0:
-			stopMove = position.x < (nextTile.x+1)*120+60
+			stopMove = position.x < (nextTile.x+1)*prefs.CELL_SIZE+prefs.CELL_SIZE/2
 		elif moveVector.x > 0:
-			stopMove = position.x >= nextTile.x*120-60
+			stopMove = position.x >= nextTile.x*prefs.CELL_SIZE-prefs.CELL_SIZE/2
 		elif moveVector.y > 0:
-			stopMove = position.y >= nextTile.y*120-60
+			stopMove = position.y >= nextTile.y*prefs.CELL_SIZE-prefs.CELL_SIZE/2
 		elif moveVector.y < 0:
-			stopMove = position.y < (nextTile.y+1)*120+60
+			stopMove = position.y < (nextTile.y+1)*prefs.CELL_SIZE+prefs.CELL_SIZE/2
 	if not stopMove:
 		if moveVector.x < 0:
 			position.x = lerp(position.x, position.x-800, delta)
@@ -115,7 +117,6 @@ func explode():
 	var root = get_tree().get_root()
 	var tileMap = root.get_node("Main").get_node("Map")
 	for collider in final_colliders: # Loop through all the colliders.
-		print(collider.get_groups())
 		if collider.is_in_group("Box"):
 			tiles.append(tileMap.world_to_map(collider.position) + Vector2(0, -1))
 		if collider.is_in_group("Destroyable"):
@@ -144,17 +145,17 @@ func explode():
 			boom.set_script(boomScript)
 			boom.z_index = 3
 			# TODO clean this values
-			boom.position = (newPos * 120) + Vector2(60, 60)
+			boom.position = (newPos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 			root.add_child(boom)
 
 	queue_free()
 
 func setRadius(r):
 	self.radius = r
-	$Raycasts/East.cast_to = Vector2(120 * radius, 0)
-	$Raycasts/West.cast_to = Vector2(120 * -radius, 0)
-	$Raycasts/South.cast_to = Vector2(0, 120 * radius)
-	$Raycasts/North.cast_to = Vector2(0, 120 * -radius)
+	$Raycasts/East.cast_to = Vector2(prefs.CELL_SIZE * radius, 0)
+	$Raycasts/West.cast_to = Vector2(prefs.CELL_SIZE * -radius, 0)
+	$Raycasts/South.cast_to = Vector2(0, prefs.CELL_SIZE * radius)
+	$Raycasts/North.cast_to = Vector2(0, prefs.CELL_SIZE * -radius)
 
 func _on_Area2D_body_entered(body):
 	if body.is_in_group("Player"):
