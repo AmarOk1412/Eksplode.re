@@ -1,4 +1,4 @@
-[gd_scene load_steps=93 format=2]
+[gd_scene load_steps=94 format=2]
 
 [ext_resource path="res://Main.gd" type="Script" id=1]
 [ext_resource path="res://Player.gd" type="Script" id=2]
@@ -65,11 +65,12 @@
 [ext_resource path="res://Animations/Player/Base/base6.png" type="Texture" id=63]
 [ext_resource path="res://Animations/Player/Base/base.png" type="Texture" id=64]
 [ext_resource path="res://Bomb.tscn" type="PackedScene" id=65]
-[ext_resource path="res://tile.png" type="Texture" id=66]
-[ext_resource path="res://Item.tscn" type="PackedScene" id=67]
-[ext_resource path="res://DestructibleBox.tscn" type="PackedScene" id=68]
-[ext_resource path="res://DestructibleBox.gd" type="Script" id=69]
-[ext_resource path="res://Boom.tscn" type="PackedScene" id=70]
+[ext_resource path="res://Bomb.gd" type="Script" id=66]
+[ext_resource path="res://tile.png" type="Texture" id=67]
+[ext_resource path="res://Item.tscn" type="PackedScene" id=68]
+[ext_resource path="res://DestructibleBox.tscn" type="PackedScene" id=69]
+[ext_resource path="res://DestructibleBox.gd" type="Script" id=70]
+[ext_resource path="res://Boom.tscn" type="PackedScene" id=71]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
@@ -166,7 +167,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 
 [sub_resource type="TileSet" id=22]
 0/name = "tile.png 0"
-0/texture = ExtResource( 66 )
+0/texture = ExtResource( 67 )
 0/tex_offset = Vector2( 0, 0 )
 0/modulate = Color( 1, 1, 1, 1 )
 0/region = Rect2( 160, 128, 32, 32 )
@@ -185,7 +186,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 0/shapes = [  ]
 0/z_index = 0
 1/name = "tile.png 1"
-1/texture = ExtResource( 66 )
+1/texture = ExtResource( 67 )
 1/tex_offset = Vector2( 0, 0 )
 1/modulate = Color( 1, 1, 1, 1 )
 1/region = Rect2( 96, 96, 32, 32 )
@@ -204,7 +205,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 1/shapes = [  ]
 1/z_index = 0
 2/name = "tile.png 2"
-2/texture = ExtResource( 66 )
+2/texture = ExtResource( 67 )
 2/tex_offset = Vector2( 0, 0 )
 2/modulate = Color( 1, 1, 1, 1 )
 2/region = Rect2( 96, 96, 96, 96 )
@@ -214,7 +215,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 2/shapes = [  ]
 2/z_index = 0
 3/name = "tile.png 3"
-3/texture = ExtResource( 66 )
+3/texture = ExtResource( 67 )
 3/tex_offset = Vector2( 0, 0 )
 3/modulate = Color( 1, 1, 1, 1 )
 3/region = Rect2( 0, 0, 120, 120 )
@@ -233,7 +234,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 3/shapes = [  ]
 3/z_index = 0
 4/name = "sol"
-4/texture = ExtResource( 66 )
+4/texture = ExtResource( 67 )
 4/tex_offset = Vector2( 0, 0 )
 4/modulate = Color( 1, 1, 1, 1 )
 4/region = Rect2( 0, 0, 120, 120 )
@@ -243,7 +244,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 4/shapes = [  ]
 4/z_index = 0
 5/name = "sol2"
-5/texture = ExtResource( 66 )
+5/texture = ExtResource( 67 )
 5/tex_offset = Vector2( 0, 0 )
 5/modulate = Color( 1, 1, 1, 1 )
 5/region = Rect2( 0, 120, 120, 120 )
@@ -253,7 +254,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 5/shapes = [  ]
 5/z_index = 0
 6/name = "sol3"
-6/texture = ExtResource( 66 )
+6/texture = ExtResource( 67 )
 6/tex_offset = Vector2( 0, 0 )
 6/modulate = Color( 1, 1, 1, 1 )
 6/region = Rect2( 0, 240, 120, 120 )
@@ -263,7 +264,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 6/shapes = [  ]
 6/z_index = 0
 7/name = "bg3"
-7/texture = ExtResource( 66 )
+7/texture = ExtResource( 67 )
 7/tex_offset = Vector2( 0, 0 )
 7/modulate = Color( 1, 1, 1, 1 )
 7/region = Rect2( 0, 360, 120, 120 )
@@ -279,7 +280,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 7/z_index = 0
 8/name = "bghautg"
-8/texture = ExtResource( 66 )
+8/texture = ExtResource( 67 )
 8/tex_offset = Vector2( 0, 0 )
 8/modulate = Color( 1, 1, 1, 1 )
 8/region = Rect2( 0, 480, 120, 120 )
@@ -295,7 +296,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 8/z_index = 0
 9/name = "bgl"
-9/texture = ExtResource( 66 )
+9/texture = ExtResource( 67 )
 9/tex_offset = Vector2( 0, 0 )
 9/modulate = Color( 1, 1, 1, 1 )
 9/region = Rect2( 0, 600, 120, 120 )
@@ -311,7 +312,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 9/z_index = 0
 10/name = "bgBasGauche"
-10/texture = ExtResource( 66 )
+10/texture = ExtResource( 67 )
 10/tex_offset = Vector2( 0, 0 )
 10/modulate = Color( 1, 1, 1, 1 )
 10/region = Rect2( 0, 720, 120, 120 )
@@ -327,7 +328,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 10/z_index = 0
 11/name = "bghautm"
-11/texture = ExtResource( 66 )
+11/texture = ExtResource( 67 )
 11/tex_offset = Vector2( 0, 0 )
 11/modulate = Color( 1, 1, 1, 1 )
 11/region = Rect2( 120, 480, 120, 120 )
@@ -343,7 +344,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 11/z_index = 0
 12/name = "bgm"
-12/texture = ExtResource( 66 )
+12/texture = ExtResource( 67 )
 12/tex_offset = Vector2( 0, 0 )
 12/modulate = Color( 1, 1, 1, 1 )
 12/region = Rect2( 120, 600, 120, 120 )
@@ -359,7 +360,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 12/z_index = 0
 13/name = "bgBas"
-13/texture = ExtResource( 66 )
+13/texture = ExtResource( 67 )
 13/tex_offset = Vector2( 0, 0 )
 13/modulate = Color( 1, 1, 1, 1 )
 13/region = Rect2( 120, 720, 120, 120 )
@@ -375,7 +376,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 13/z_index = 0
 14/name = "bghautd"
-14/texture = ExtResource( 66 )
+14/texture = ExtResource( 67 )
 14/tex_offset = Vector2( 0, 0 )
 14/modulate = Color( 1, 1, 1, 1 )
 14/region = Rect2( 240, 480, 120, 120 )
@@ -391,7 +392,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 14/z_index = 0
 15/name = "bgd"
-15/texture = ExtResource( 66 )
+15/texture = ExtResource( 67 )
 15/tex_offset = Vector2( 0, 0 )
 15/modulate = Color( 1, 1, 1, 1 )
 15/region = Rect2( 240, 600, 120, 120 )
@@ -407,7 +408,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 15/z_index = 0
 16/name = "bgBasDroite"
-16/texture = ExtResource( 66 )
+16/texture = ExtResource( 67 )
 16/tex_offset = Vector2( 0, 0 )
 16/modulate = Color( 1, 1, 1, 1 )
 16/region = Rect2( 240, 720, 120, 120 )
@@ -423,7 +424,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 16/z_index = 0
 17/name = "bg13"
-17/texture = ExtResource( 66 )
+17/texture = ExtResource( 67 )
 17/tex_offset = Vector2( 0, 0 )
 17/modulate = Color( 1, 1, 1, 1 )
 17/region = Rect2( 120, 360, 120, 120 )
@@ -439,7 +440,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 17/z_index = 0
 18/name = "bg14"
-18/texture = ExtResource( 66 )
+18/texture = ExtResource( 67 )
 18/tex_offset = Vector2( 0, 0 )
 18/modulate = Color( 1, 1, 1, 1 )
 18/region = Rect2( 240, 360, 120, 120 )
@@ -455,7 +456,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 18/z_index = 0
 19/name = "bg15"
-19/texture = ExtResource( 66 )
+19/texture = ExtResource( 67 )
 19/tex_offset = Vector2( 0, 0 )
 19/modulate = Color( 1, 1, 1, 1 )
 19/region = Rect2( 360, 360, 120, 120 )
@@ -471,7 +472,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 19/z_index = 0
 20/name = "bg16"
-20/texture = ExtResource( 66 )
+20/texture = ExtResource( 67 )
 20/tex_offset = Vector2( 0, 0 )
 20/modulate = Color( 1, 1, 1, 1 )
 20/region = Rect2( 120, 0, 120, 120 )
@@ -487,7 +488,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 20/z_index = 0
 21/name = "bg17"
-21/texture = ExtResource( 66 )
+21/texture = ExtResource( 67 )
 21/tex_offset = Vector2( 0, 0 )
 21/modulate = Color( 1, 1, 1, 1 )
 21/region = Rect2( 240, 0, 120, 120 )
@@ -503,7 +504,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 21/z_index = 0
 22/name = "bg18"
-22/texture = ExtResource( 66 )
+22/texture = ExtResource( 67 )
 22/tex_offset = Vector2( 0, 0 )
 22/modulate = Color( 1, 1, 1, 1 )
 22/region = Rect2( 360, 0, 120, 120 )
@@ -519,7 +520,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 22/z_index = 0
 23/name = "bg19"
-23/texture = ExtResource( 66 )
+23/texture = ExtResource( 67 )
 23/tex_offset = Vector2( 0, 0 )
 23/modulate = Color( 1, 1, 1, 1 )
 23/region = Rect2( 240, 120, 120, 120 )
@@ -535,7 +536,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 23/z_index = 0
 24/name = "b1"
-24/texture = ExtResource( 66 )
+24/texture = ExtResource( 67 )
 24/tex_offset = Vector2( 0, 0 )
 24/modulate = Color( 1, 1, 1, 1 )
 24/region = Rect2( 120, 120, 120, 120 )
@@ -551,7 +552,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 } ]
 24/z_index = 0
 25/name = "b2"
-25/texture = ExtResource( 66 )
+25/texture = ExtResource( 67 )
 25/tex_offset = Vector2( 0, 0 )
 25/modulate = Color( 1, 1, 1, 1 )
 25/region = Rect2( 120, 240, 120, 120 )
@@ -561,7 +562,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 25/shapes = [  ]
 25/z_index = 0
 26/name = "b3"
-26/texture = ExtResource( 66 )
+26/texture = ExtResource( 67 )
 26/tex_offset = Vector2( 0, 0 )
 26/modulate = Color( 1, 1, 1, 1 )
 26/region = Rect2( 240, 240, 120, 120 )
@@ -571,7 +572,7 @@ points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
 26/shapes = [  ]
 26/z_index = 0
 27/name = "bg18"
-27/texture = ExtResource( 66 )
+27/texture = ExtResource( 67 )
 27/tex_offset = Vector2( 0, 0 )
 27/modulate = Color( 1, 1, 1, 1 )
 27/region = Rect2( 360, 480, 120, 120 )
@@ -616,8 +617,13 @@ position = Vector2( 300, 300 )
 [node name="StartPosition" type="Position2D" parent="."]
 position = Vector2( 100, 100 )
 
-[node name="Bomb" parent="." instance=ExtResource( 65 )]
+[node name="Bomb" type="RigidBody2D" parent="." groups=[
+"Destroyable",
+] instance=ExtResource( 65 )]
 position = Vector2( 1638.03, -625.914 )
+mass = 0.01
+gravity_scale = 0.0
+script = ExtResource( 66 )
 
 [node name="Map" type="TileMap" parent="."]
 tile_set = SubResource( 22 )
@@ -632,15 +638,15 @@ custom_colors/font_color = Color( 0.172549, 0.172549, 0.172549, 1 )
 text = "03:00"
 align = 1
 
-[node name="Item" parent="." instance=ExtResource( 67 )]
+[node name="Item" parent="." instance=ExtResource( 68 )]
 position = Vector2( 600.586, -1587.03 )
 collision_layer = 15
 
 [node name="DestructibleBox" parent="." groups=[
 "Destroyable",
 "Box",
-] instance=ExtResource( 68 )]
+] instance=ExtResource( 69 )]
 position = Vector2( -177.564, -645.819 )
-script = ExtResource( 69 )
+script = ExtResource( 70 )
 
-[node name="Boom" parent="." instance=ExtResource( 70 )]
+[node name="Boom" parent="." instance=ExtResource( 71 )]

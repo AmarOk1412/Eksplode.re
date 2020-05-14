@@ -4,16 +4,12 @@ onready var destructibleBox = preload("res://DestructibleBox.tscn")
 onready var boxScript = preload("res://DestructibleBox.gd")
 var boxTexture = preload("res://Sprites/Box/box.png")
 const CELL_SIZE = 120
-var START_X = 2
-var START_Y = 2
-var END_X = 13
-var END_Y = 13
+const START_X = 2
+const START_Y = 2
+const END_X = 13
+const END_Y = 13
 
-# Declare member variables here. Examples:
-# var a = 2
-# var b = "text"
 
-# Called when the node enters the scene tree for the first time.
 # Todo clean
 func _ready():
 	for x in range(START_X, END_X):
@@ -38,7 +34,3 @@ func _ready():
 				box.position = Vector2(x*CELL_SIZE, y*CELL_SIZE)+ Vector2(CELL_SIZE/2, CELL_SIZE)
 				var root = get_tree().get_root()
 				self.add_child(box)
-
-# Called every frame. 'delta' is the elapsed time since the previous frame.
-#func _process(delta):
-#	pass

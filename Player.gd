@@ -5,8 +5,9 @@ onready var anim = get_node("AnimationPlayer")
 
 # Player movement speed
 var speed = 300
-var bombs = 1
+var bombs = 100
 var radius = 2
+var repelBombs = false
 
 # Effects
 var timerEffect = Timer.new()
@@ -109,8 +110,18 @@ func explode():
 	queue_free()
 
 func removeEffect():
-	print("TIMEOUT")
 	currentEffect = Effect.None
+
+func near(bomb):
+	if self.repelBombs:
+		if bomb.position.x - 60> self.position.x:
+			bomb.moveVector = Vector2(1,0)
+		elif bomb.position.x + 60 < self.position.x:
+			bomb.moveVector = Vector2(-1,0)
+		elif bomb.position.y - 60 > self.position.y:
+			bomb.moveVector = Vector2(0,1)
+		elif bomb.position.y + 60 < self.position.y:
+			bomb.moveVector = Vector2(0,-1)
 
 func affect():
 	timerEffect.stop()

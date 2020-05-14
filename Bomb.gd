@@ -1,4 +1,4 @@
-extends StaticBody2D
+extends KinematicBody2D
 
 onready var boomPacked = preload("res://Boom.tscn")
 onready var boomScript = preload("res://Boom.gd")
@@ -11,6 +11,8 @@ var max_tiles = 20 # The ammount of tiles each ray will collide with.
 onready var rays = $Raycasts # The rays parent node.
 
 var from_player = null
+var moveVector = Vector2()
+
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
@@ -19,6 +21,68 @@ func _ready():
 	timer.connect("timeout", self, "explode")
 	add_child(timer)
 	timer.start(duration)
+
+
+func _physics_process(delta):
+	if Vector2() == moveVector:
+		return
+	var root = get_tree().get_root()
+	var tileMap = root.get_node("Main").get_node("Map")
+	var nextTileEmpty = true
+	var colliders = [] # The colliding objects go here. This is a temporary array.
+	var ray = $Raycasts/West
+	if moveVector.x > 0:
+		ray = $Raycasts/East
+	elif moveVector.y > 0:
+		ray = $Raycasts/South
+	elif moveVector.y < 0:
+		ray = $Raycasts/North
+	# Get next collider
+	ray.add_exception(self)
+	while ray.is_colliding():
+		var collider = ray.get_collider()
+		if not collider.is_in_group("Player"): #TODOs
+			colliders.append(collider)
+		ray.add_exception(collider)
+		ray.force_raycast_update()
+		if collider != self:
+			break
+	var nextTile = tileMap.world_to_map(self.position) + moveVector
+	if nextTile.x > 12 or nextTile.x < 2 or nextTile.y > 12 or nextTile.y < 2:
+		 nextTileEmpty = false
+	for collider in colliders:
+		# TODO avoid this
+		var vectorOffset = Vector2()
+		if collider.is_in_group("Box"):
+			vectorOffset.y = 1
+		if tileMap.world_to_map(collider.position) == nextTile + vectorOffset:
+			nextTileEmpty = false
+		ray.remove_exception(collider)
+	ray.remove_exception(self)
+	
+	var stopMove = false
+	# TODO CLEAN THIS
+	if not nextTileEmpty:
+		if moveVector.x < 0:
+			stopMove = position.x < (nextTile.x+1)*120+60
+		elif moveVector.x > 0:
+			stopMove = position.x >= nextTile.x*120-60
+		elif moveVector.y > 0:
+			stopMove = position.y >= nextTile.y*120-60
+		elif moveVector.y < 0:
+			stopMove = position.y < (nextTile.y+1)*120+60
+	if not stopMove:
+		if moveVector.x < 0:
+			position.x = lerp(position.x, position.x-800, delta)
+		elif moveVector.x > 0:
+			position.x = lerp(position.x, position.x+800, delta)
+		elif moveVector.y > 0:
+			position.y = lerp(position.y, position.y+800, delta)
+		elif moveVector.y < 0:
+			position.y = lerp(position.y, position.y-800, delta)
+	else:
+		moveVector = Vector2()
+
 
 func explode():
 	if exploding:
@@ -51,6 +115,7 @@ func explode():
 	var root = get_tree().get_root()
 	var tileMap = root.get_node("Main").get_node("Map")
 	for collider in final_colliders: # Loop through all the colliders.
+		print(collider.get_groups())
 		if collider.is_in_group("Box"):
 			tiles.append(tileMap.world_to_map(collider.position) + Vector2(0, -1))
 		if collider.is_in_group("Destroyable"):
@@ -71,8 +136,8 @@ func explode():
 			if newPos in tiles:
 				break
 			# TODO clean
-			if newPos.x < 2 or newPos.x > 13 \
-			or newPos.y < 2 or newPos.y > 13:
+			if newPos.x < 2 or newPos.x > 12 \
+			or newPos.y < 2 or newPos.y > 12:
 				break
 			# Instantiate explosion
 			var boom = boomPacked.instance()
@@ -90,3 +155,8 @@ func setRadius(r):
 	$Raycasts/West.cast_to = Vector2(120 * -radius, 0)
 	$Raycasts/South.cast_to = Vector2(0, 120 * radius)
 	$Raycasts/North.cast_to = Vector2(0, 120 * -radius)
+
+func _on_Area2D_body_entered(body):
+	if body.is_in_group("Player"):
+		print("NEAR")
+		body.near(self)
