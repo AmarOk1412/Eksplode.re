@@ -34,6 +34,8 @@ func on_player_entered(body):
 			body.speed += 100
 		elif type == 5:
 			body.affect()
+		elif type == 0:
+			body.repelBombs = true
 		elif type == 1:
 			body.radius += 1
 		elif type == 2:
