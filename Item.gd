@@ -29,7 +29,9 @@ func explode():
 	queue_free()
 
 func on_player_entered(body):
-	if body.is_in_group("Player"):
+	if body.is_in_group("Bomb"):
+		queue_free()
+	elif body.is_in_group("Player"):
 		if type == 4:
 			body.speed += 100
 		elif type == 5:

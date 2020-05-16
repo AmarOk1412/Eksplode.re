@@ -9,75 +9,75 @@
 [ext_resource path="res://Animations/Player/Side/base5.png" type="Texture" id=7]
 [ext_resource path="res://Animations/Player/Side/base6.png" type="Texture" id=8]
 [ext_resource path="res://Animations/Player/Side/base.png" type="Texture" id=9]
-[ext_resource path="res://Animations/Player/Up/rbase00.png" type="Texture" id=10]
-[ext_resource path="res://Animations/Player/Up/rbase01.png" type="Texture" id=11]
-[ext_resource path="res://Animations/Player/Up/rbase02.png" type="Texture" id=12]
-[ext_resource path="res://Animations/Player/Up/rbase03.png" type="Texture" id=13]
-[ext_resource path="res://Animations/Player/Up/rbase04.png" type="Texture" id=14]
-[ext_resource path="res://Animations/Player/Up/rbase05.png" type="Texture" id=15]
-[ext_resource path="res://Animations/Player/Up/rbase06.png" type="Texture" id=16]
-[ext_resource path="res://Animations/Player/Up/rbase07.png" type="Texture" id=17]
-[ext_resource path="res://Animations/Player/Up/rbase08.png" type="Texture" id=18]
-[ext_resource path="res://Animations/Player/Up/rbase09.png" type="Texture" id=19]
-[ext_resource path="res://Animations/Player/Up/rbase10.png" type="Texture" id=20]
-[ext_resource path="res://Animations/Player/Up/rbase11.png" type="Texture" id=21]
-[ext_resource path="res://Animations/Player/Up/rbase12.png" type="Texture" id=22]
-[ext_resource path="res://Animations/Player/Up/rbase13.png" type="Texture" id=23]
-[ext_resource path="res://Animations/Player/Down/rbase00.png" type="Texture" id=24]
-[ext_resource path="res://Animations/Player/Down/rbase01.png" type="Texture" id=25]
-[ext_resource path="res://Animations/Player/Down/rbase02.png" type="Texture" id=26]
-[ext_resource path="res://Animations/Player/Down/rbase03.png" type="Texture" id=27]
-[ext_resource path="res://Animations/Player/Down/rbase04.png" type="Texture" id=28]
-[ext_resource path="res://Animations/Player/Down/rbase05.png" type="Texture" id=29]
-[ext_resource path="res://Animations/Player/Down/rbase06.png" type="Texture" id=30]
-[ext_resource path="res://Animations/Player/Down/rbase07.png" type="Texture" id=31]
-[ext_resource path="res://Animations/Player/Down/rbase08.png" type="Texture" id=32]
-[ext_resource path="res://Animations/Player/Down/rbase09.png" type="Texture" id=33]
-[ext_resource path="res://Animations/Player/Down/rbase10.png" type="Texture" id=34]
-[ext_resource path="res://Animations/Player/Down/rbase11.png" type="Texture" id=35]
-[ext_resource path="res://Animations/Player/Down/rbase12.png" type="Texture" id=36]
-[ext_resource path="res://Animations/Player/Down/rbase13.png" type="Texture" id=37]
-[ext_resource path="res://Animations/Player/Right/base00.png" type="Texture" id=38]
-[ext_resource path="res://Animations/Player/Right/base01.png" type="Texture" id=39]
-[ext_resource path="res://Animations/Player/Right/base02.png" type="Texture" id=40]
-[ext_resource path="res://Animations/Player/Right/base03.png" type="Texture" id=41]
-[ext_resource path="res://Animations/Player/Right/base04.png" type="Texture" id=42]
-[ext_resource path="res://Animations/Player/Right/base05.png" type="Texture" id=43]
-[ext_resource path="res://Animations/Player/Right/base06.png" type="Texture" id=44]
-[ext_resource path="res://Animations/Player/Right/base07.png" type="Texture" id=45]
-[ext_resource path="res://Animations/Player/Right/base08.png" type="Texture" id=46]
-[ext_resource path="res://Animations/Player/Right/base09.png" type="Texture" id=47]
-[ext_resource path="res://Animations/Player/Right/base10.png" type="Texture" id=48]
-[ext_resource path="res://Animations/Player/Right/base11.png" type="Texture" id=49]
-[ext_resource path="res://Animations/Player/Right/base12.png" type="Texture" id=50]
-[ext_resource path="res://Animations/Player/Down/base00.png" type="Texture" id=51]
-[ext_resource path="res://Animations/Player/Down/base01.png" type="Texture" id=52]
-[ext_resource path="res://Animations/Player/Down/base02.png" type="Texture" id=53]
-[ext_resource path="res://Animations/Player/Down/base03.png" type="Texture" id=54]
-[ext_resource path="res://Animations/Player/Down/base04.png" type="Texture" id=55]
-[ext_resource path="res://Animations/Player/Down/base05.png" type="Texture" id=56]
-[ext_resource path="res://Animations/Player/Down/base06.png" type="Texture" id=57]
-[ext_resource path="res://Animations/Player/Down/base07.png" type="Texture" id=58]
-[ext_resource path="res://Animations/Player/Down/base08.png" type="Texture" id=59]
-[ext_resource path="res://Animations/Player/Down/base09.png" type="Texture" id=60]
-[ext_resource path="res://Animations/Player/Down/base10.png" type="Texture" id=61]
-[ext_resource path="res://Animations/Player/Down/base11.png" type="Texture" id=62]
-[ext_resource path="res://Animations/Player/Down/base12.png" type="Texture" id=63]
-[ext_resource path="res://Animations/Player/Down/base13.png" type="Texture" id=64]
-[ext_resource path="res://Animations/Player/Up/base00.png" type="Texture" id=65]
-[ext_resource path="res://Animations/Player/Up/base01.png" type="Texture" id=66]
-[ext_resource path="res://Animations/Player/Up/base02.png" type="Texture" id=67]
-[ext_resource path="res://Animations/Player/Up/base03.png" type="Texture" id=68]
-[ext_resource path="res://Animations/Player/Up/base04.png" type="Texture" id=69]
-[ext_resource path="res://Animations/Player/Up/base05.png" type="Texture" id=70]
-[ext_resource path="res://Animations/Player/Up/base06.png" type="Texture" id=71]
-[ext_resource path="res://Animations/Player/Up/base07.png" type="Texture" id=72]
-[ext_resource path="res://Animations/Player/Up/base08.png" type="Texture" id=73]
-[ext_resource path="res://Animations/Player/Up/base09.png" type="Texture" id=74]
-[ext_resource path="res://Animations/Player/Up/base10.png" type="Texture" id=75]
-[ext_resource path="res://Animations/Player/Up/base11.png" type="Texture" id=76]
-[ext_resource path="res://Animations/Player/Up/base12.png" type="Texture" id=77]
-[ext_resource path="res://Animations/Player/Up/base13.png" type="Texture" id=78]
+[ext_resource path="res://Animations/Player/Right/base00.png" type="Texture" id=10]
+[ext_resource path="res://Animations/Player/Right/base01.png" type="Texture" id=11]
+[ext_resource path="res://Animations/Player/Right/base02.png" type="Texture" id=12]
+[ext_resource path="res://Animations/Player/Right/base03.png" type="Texture" id=13]
+[ext_resource path="res://Animations/Player/Right/base04.png" type="Texture" id=14]
+[ext_resource path="res://Animations/Player/Right/base05.png" type="Texture" id=15]
+[ext_resource path="res://Animations/Player/Right/base06.png" type="Texture" id=16]
+[ext_resource path="res://Animations/Player/Right/base07.png" type="Texture" id=17]
+[ext_resource path="res://Animations/Player/Right/base08.png" type="Texture" id=18]
+[ext_resource path="res://Animations/Player/Right/base09.png" type="Texture" id=19]
+[ext_resource path="res://Animations/Player/Right/base10.png" type="Texture" id=20]
+[ext_resource path="res://Animations/Player/Right/base11.png" type="Texture" id=21]
+[ext_resource path="res://Animations/Player/Right/base12.png" type="Texture" id=22]
+[ext_resource path="res://Animations/Player/Down/base00.png" type="Texture" id=23]
+[ext_resource path="res://Animations/Player/Down/base01.png" type="Texture" id=24]
+[ext_resource path="res://Animations/Player/Down/base02.png" type="Texture" id=25]
+[ext_resource path="res://Animations/Player/Down/base03.png" type="Texture" id=26]
+[ext_resource path="res://Animations/Player/Down/base04.png" type="Texture" id=27]
+[ext_resource path="res://Animations/Player/Down/base05.png" type="Texture" id=28]
+[ext_resource path="res://Animations/Player/Down/base06.png" type="Texture" id=29]
+[ext_resource path="res://Animations/Player/Down/base07.png" type="Texture" id=30]
+[ext_resource path="res://Animations/Player/Down/base08.png" type="Texture" id=31]
+[ext_resource path="res://Animations/Player/Down/base09.png" type="Texture" id=32]
+[ext_resource path="res://Animations/Player/Down/base10.png" type="Texture" id=33]
+[ext_resource path="res://Animations/Player/Down/base11.png" type="Texture" id=34]
+[ext_resource path="res://Animations/Player/Down/base12.png" type="Texture" id=35]
+[ext_resource path="res://Animations/Player/Down/base13.png" type="Texture" id=36]
+[ext_resource path="res://Animations/Player/Up/base00.png" type="Texture" id=37]
+[ext_resource path="res://Animations/Player/Up/base01.png" type="Texture" id=38]
+[ext_resource path="res://Animations/Player/Up/base02.png" type="Texture" id=39]
+[ext_resource path="res://Animations/Player/Up/base03.png" type="Texture" id=40]
+[ext_resource path="res://Animations/Player/Up/base04.png" type="Texture" id=41]
+[ext_resource path="res://Animations/Player/Up/base05.png" type="Texture" id=42]
+[ext_resource path="res://Animations/Player/Up/base06.png" type="Texture" id=43]
+[ext_resource path="res://Animations/Player/Up/base07.png" type="Texture" id=44]
+[ext_resource path="res://Animations/Player/Up/base08.png" type="Texture" id=45]
+[ext_resource path="res://Animations/Player/Up/base09.png" type="Texture" id=46]
+[ext_resource path="res://Animations/Player/Up/base10.png" type="Texture" id=47]
+[ext_resource path="res://Animations/Player/Up/base11.png" type="Texture" id=48]
+[ext_resource path="res://Animations/Player/Up/base12.png" type="Texture" id=49]
+[ext_resource path="res://Animations/Player/Up/base13.png" type="Texture" id=50]
+[ext_resource path="res://Animations/Player/Up/rbase00.png" type="Texture" id=51]
+[ext_resource path="res://Animations/Player/Up/rbase01.png" type="Texture" id=52]
+[ext_resource path="res://Animations/Player/Up/rbase02.png" type="Texture" id=53]
+[ext_resource path="res://Animations/Player/Up/rbase03.png" type="Texture" id=54]
+[ext_resource path="res://Animations/Player/Up/rbase04.png" type="Texture" id=55]
+[ext_resource path="res://Animations/Player/Up/rbase05.png" type="Texture" id=56]
+[ext_resource path="res://Animations/Player/Up/rbase06.png" type="Texture" id=57]
+[ext_resource path="res://Animations/Player/Up/rbase07.png" type="Texture" id=58]
+[ext_resource path="res://Animations/Player/Up/rbase08.png" type="Texture" id=59]
+[ext_resource path="res://Animations/Player/Up/rbase09.png" type="Texture" id=60]
+[ext_resource path="res://Animations/Player/Up/rbase10.png" type="Texture" id=61]
+[ext_resource path="res://Animations/Player/Up/rbase11.png" type="Texture" id=62]
+[ext_resource path="res://Animations/Player/Up/rbase12.png" type="Texture" id=63]
+[ext_resource path="res://Animations/Player/Up/rbase13.png" type="Texture" id=64]
+[ext_resource path="res://Animations/Player/Down/rbase00.png" type="Texture" id=65]
+[ext_resource path="res://Animations/Player/Down/rbase01.png" type="Texture" id=66]
+[ext_resource path="res://Animations/Player/Down/rbase02.png" type="Texture" id=67]
+[ext_resource path="res://Animations/Player/Down/rbase03.png" type="Texture" id=68]
+[ext_resource path="res://Animations/Player/Down/rbase04.png" type="Texture" id=69]
+[ext_resource path="res://Animations/Player/Down/rbase05.png" type="Texture" id=70]
+[ext_resource path="res://Animations/Player/Down/rbase06.png" type="Texture" id=71]
+[ext_resource path="res://Animations/Player/Down/rbase07.png" type="Texture" id=72]
+[ext_resource path="res://Animations/Player/Down/rbase08.png" type="Texture" id=73]
+[ext_resource path="res://Animations/Player/Down/rbase09.png" type="Texture" id=74]
+[ext_resource path="res://Animations/Player/Down/rbase10.png" type="Texture" id=75]
+[ext_resource path="res://Animations/Player/Down/rbase11.png" type="Texture" id=76]
+[ext_resource path="res://Animations/Player/Down/rbase12.png" type="Texture" id=77]
+[ext_resource path="res://Animations/Player/Down/rbase13.png" type="Texture" id=78]
 [ext_resource path="res://Animations/Player/BaseRevert/base1.png" type="Texture" id=79]
 [ext_resource path="res://Animations/Player/BaseRevert/base2.png" type="Texture" id=80]
 [ext_resource path="res://Animations/Player/BaseRevert/base3.png" type="Texture" id=81]
@@ -138,29 +138,29 @@ animations = [ {
 "name": "Side",
 "speed": 10.0
 }, {
-"frames": [ ExtResource( 10 ), ExtResource( 11 ), ExtResource( 12 ), ExtResource( 13 ), ExtResource( 14 ), ExtResource( 15 ), ExtResource( 16 ), ExtResource( 17 ), ExtResource( 18 ), ExtResource( 19 ), ExtResource( 20 ), ExtResource( 21 ), ExtResource( 22 ), ExtResource( 23 ) ],
-"loop": true,
-"name": "Red_Up",
-"speed": 5.0
-}, {
-"frames": [ ExtResource( 24 ), ExtResource( 25 ), ExtResource( 26 ), ExtResource( 27 ), ExtResource( 28 ), ExtResource( 29 ), ExtResource( 30 ), ExtResource( 31 ), ExtResource( 32 ), ExtResource( 33 ), ExtResource( 34 ), ExtResource( 35 ), ExtResource( 36 ), ExtResource( 37 ) ],
-"loop": true,
-"name": "Red_Down",
-"speed": 10.0
-}, {
-"frames": [ ExtResource( 38 ), ExtResource( 39 ), ExtResource( 40 ), ExtResource( 41 ), ExtResource( 42 ), ExtResource( 43 ), ExtResource( 44 ), ExtResource( 45 ), ExtResource( 46 ), ExtResource( 47 ), ExtResource( 48 ), ExtResource( 49 ), ExtResource( 50 ) ],
+"frames": [ ExtResource( 10 ), ExtResource( 11 ), ExtResource( 12 ), ExtResource( 13 ), ExtResource( 14 ), ExtResource( 15 ), ExtResource( 16 ), ExtResource( 17 ), ExtResource( 18 ), ExtResource( 19 ), ExtResource( 20 ), ExtResource( 21 ), ExtResource( 22 ) ],
 "loop": true,
 "name": "Right",
 "speed": 10.0
 }, {
-"frames": [ ExtResource( 51 ), ExtResource( 52 ), ExtResource( 53 ), ExtResource( 54 ), ExtResource( 55 ), ExtResource( 56 ), ExtResource( 57 ), ExtResource( 58 ), ExtResource( 59 ), ExtResource( 60 ), ExtResource( 61 ), ExtResource( 62 ), ExtResource( 63 ), ExtResource( 64 ) ],
+"frames": [ ExtResource( 23 ), ExtResource( 24 ), ExtResource( 25 ), ExtResource( 26 ), ExtResource( 27 ), ExtResource( 28 ), ExtResource( 29 ), ExtResource( 30 ), ExtResource( 31 ), ExtResource( 32 ), ExtResource( 33 ), ExtResource( 34 ), ExtResource( 35 ), ExtResource( 36 ) ],
 "loop": true,
 "name": "Down",
 "speed": 10.0
 }, {
-"frames": [ ExtResource( 65 ), ExtResource( 66 ), ExtResource( 67 ), ExtResource( 68 ), ExtResource( 69 ), ExtResource( 70 ), ExtResource( 71 ), ExtResource( 72 ), ExtResource( 73 ), ExtResource( 74 ), ExtResource( 75 ), ExtResource( 76 ), ExtResource( 77 ), ExtResource( 78 ) ],
+"frames": [ ExtResource( 37 ), ExtResource( 38 ), ExtResource( 39 ), ExtResource( 40 ), ExtResource( 41 ), ExtResource( 42 ), ExtResource( 43 ), ExtResource( 44 ), ExtResource( 45 ), ExtResource( 46 ), ExtResource( 47 ), ExtResource( 48 ), ExtResource( 49 ), ExtResource( 50 ) ],
 "loop": true,
 "name": "Up",
+"speed": 10.0
+}, {
+"frames": [ ExtResource( 51 ), ExtResource( 52 ), ExtResource( 53 ), ExtResource( 54 ), ExtResource( 55 ), ExtResource( 56 ), ExtResource( 57 ), ExtResource( 58 ), ExtResource( 59 ), ExtResource( 60 ), ExtResource( 61 ), ExtResource( 62 ), ExtResource( 63 ), ExtResource( 64 ) ],
+"loop": true,
+"name": "Red_Up",
+"speed": 5.0
+}, {
+"frames": [ ExtResource( 65 ), ExtResource( 66 ), ExtResource( 67 ), ExtResource( 68 ), ExtResource( 69 ), ExtResource( 70 ), ExtResource( 71 ), ExtResource( 72 ), ExtResource( 73 ), ExtResource( 74 ), ExtResource( 75 ), ExtResource( 76 ), ExtResource( 77 ), ExtResource( 78 ) ],
+"loop": true,
+"name": "Red_Down",
 "speed": 10.0
 }, {
 "frames": [ ExtResource( 79 ), ExtResource( 80 ), ExtResource( 81 ), ExtResource( 82 ), ExtResource( 83 ), ExtResource( 84 ), ExtResource( 85 ) ],
@@ -733,7 +733,6 @@ area_mask = 2
 [node name="Camera2D" type="Camera2D" parent="."]
 position = Vector2( 1090.59, 937.528 )
 current = true
-zoom = Vector2( 0.75, 0.75 )
 limit_left = 0
 limit_top = 0
 limit_right = 2000

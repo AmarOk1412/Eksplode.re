@@ -52,13 +52,14 @@ func _physics_process(delta):
 	if nextTile.x >= prefs.END_X or nextTile.x < prefs.START_X or nextTile.y >= prefs.END_Y or nextTile.y < prefs.START_Y:
 		 nextTileEmpty = false
 	for collider in colliders:
-		# TODO avoid this
+		ray.remove_exception(collider)
+		if collider.is_in_group("Item"): # Just erase that item
+			continue
 		var vectorOffset = Vector2()
 		if collider.is_in_group("Box"):
 			vectorOffset.y = 1
 		if tileMap.world_to_map(collider.position) == nextTile + vectorOffset:
 			nextTileEmpty = false
-		ray.remove_exception(collider)
 	ray.remove_exception(self)
 	
 	var stopMove = false
@@ -159,5 +160,4 @@ func setRadius(r):
 
 func _on_Area2D_body_entered(body):
 	if body.is_in_group("Player"):
-		print("NEAR")
 		body.near(self)
