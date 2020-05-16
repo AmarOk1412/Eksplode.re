@@ -83,7 +83,7 @@ func _input(ev):
 		drop()
 
 func drop():
-	if self.bomb <= 0:
+	if self.bombs <= 0:
 		return
 	var root = get_tree().get_root()
 	var tileMap = root.get_node("Main").get_node("Map")

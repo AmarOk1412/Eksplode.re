@@ -8,6 +8,7 @@ extents = Vector2( 42.0214, 38.7371 )
 
 [node name="Item" type="Area2D" groups=[
 "Destroyable",
+"Item",
 ]]
 position = Vector2( 289.722, 319.55 )
 script = ExtResource( 1 )
