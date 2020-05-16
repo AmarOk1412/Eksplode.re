@@ -9,6 +9,7 @@ var speed = 300
 var bombs = 1
 var radius = 2
 var repelBombs = false
+var type = "Red_"
 
 # Effects
 var timerEffect = Timer.new()
@@ -48,22 +49,22 @@ func _physics_process(delta):
 	
 	if direction.y > 0:
 		lastDir = Direction.Down
-		anim.play("Down")
+		anim.play(type + "Down")
 	elif direction.y < 0:
 		lastDir = Direction.Up
-		anim.play("Up")
+		anim.play(type + "Up")
 	elif direction.x > 0:
 		lastDir = Direction.Right
-		anim.play("Right")
+		anim.play(type + "Right")
 	elif direction.x < 0:
 		lastDir = Direction.Left
-		anim.play("Right")
+		anim.play(type + "Right")
 	elif lastDir == Direction.Down:
-		anim.play("Base")
+		anim.play(type + "Base")
 	elif lastDir == Direction.Up:
-		anim.play("BaseRevert")
+		anim.play(type + "BaseRevert")
 	else:
-		anim.play("Side")
+		anim.play(type + "Side")
 	# If input is digital, normalize it for diagonal movement
 	if abs(direction.x) == 1 and abs(direction.y) == 1:
 		direction = direction.normalized()
@@ -78,10 +79,12 @@ func _physics_process(delta):
 	move_and_collide(movement)
 
 func _input(ev):
-	if Input.is_action_just_pressed("ui_accept") and bombs > 0:
+	if Input.is_action_just_pressed("ui_accept"):
 		drop()
 
 func drop():
+	if self.bomb <= 0:
+		return
 	var root = get_tree().get_root()
 	var tileMap = root.get_node("Main").get_node("Map")
 	var tilePos = tileMap.world_to_map(self.position)
