@@ -9,7 +9,8 @@ var speed = 300
 var bombs = 1
 var radius = 2
 var repelBombs = false
-var type = "Red_"
+var pushBombs = false
+var type = ""
 
 # Effects
 var timerEffect = Timer.new()
@@ -78,9 +79,33 @@ func _physics_process(delta):
 	var movement = playerSpeed * direction * delta
 	move_and_collide(movement)
 
+func pushBombs():
+	if not self.pushBombs:
+		return
+	var offsetVec = Vector2()
+	if lastDir == Direction.Right:
+		offsetVec = Vector2(120, 0)
+	elif lastDir == Direction.Left:
+		offsetVec = Vector2(-120, 0)
+	elif lastDir == Direction.Up:
+		offsetVec = Vector2(0, -120)
+	elif lastDir == Direction.Down:
+		offsetVec = Vector2(0, 120)
+	var checkPos = self.position + offsetVec
+	var root = get_tree().get_root()
+	var tileMap = root.get_node("Main").get_node("Map")
+	var tilePos = tileMap.world_to_map(checkPos)
+	for bomb in get_tree().get_nodes_in_group("Bomb"):
+		var bombPos = tileMap.world_to_map(bomb.get_position())
+		if tilePos == bombPos:
+			bomb.push(offsetVec*2)
+			break
+
 func _input(ev):
 	if Input.is_action_just_pressed("ui_accept"):
 		drop()
+	if Input.is_action_just_pressed("ui_second_action"):
+		pushBombs()
 
 func drop():
 	if self.bombs <= 0:
@@ -99,7 +124,6 @@ func drop():
 	bomb.add_to_group("Bomb")
 	bomb.z_index = 2
 	bomb.from_player = self
-	# TODO clean this values
 	bomb.position = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 	var finalRadius = self.radius
 	if self.currentEffect == Effect.SmallBomb:

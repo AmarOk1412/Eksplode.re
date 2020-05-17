@@ -29,17 +29,19 @@ func explode():
 	queue_free()
 
 func on_player_entered(body):
-	if body.is_in_group("Bomb"):
+	if body.is_in_group("Bomb") and body.movingVec == Vector2():
 		queue_free()
 	elif body.is_in_group("Player"):
-		if type == 4:
-			body.speed += 100
-		elif type == 5:
-			body.affect()
-		elif type == 0:
+		if type == 0:
 			body.repelBombs = true
 		elif type == 1:
 			body.radius += 1
 		elif type == 2:
 			body.bombs += 1
+		elif type == 3:
+			body.pushBombs = true
+		elif type == 4:
+			body.speed += 100
+		elif type == 5:
+			body.affect()
 		queue_free()
