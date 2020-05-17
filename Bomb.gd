@@ -13,18 +13,74 @@ onready var rays = $Raycasts # The rays parent node.
 
 var from_player = null
 var moveVector = Vector2()
-
+var timer = Timer.new()
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
 	anim.play("Bomb")
-	var timer = Timer.new()
-	timer.connect("timeout", self, "explode")
-	add_child(timer)
-	timer.start(duration)
+	self.timer.connect("timeout", self, "explode")
+	add_child(self.timer)
+	self.timer.start(duration)
+
+const COMPLETION_TIME = 0.3
+var time_passed = 1.0
+
+var START = Vector2(300, 300)
+var END = Vector2(540, 300)
+var MID = Vector2(420, 160)
+var movingVec = Vector2()
+
+func push(offsetVec):
+	self.time_passed = 0.0
+	self.START = self.position
+	self.END = self.START + offsetVec
+	self.MID = self.START + offsetVec/2 + Vector2(0, -120)
+	self.timer.paused = true
+	self.movingVec = offsetVec
 
 
 func _physics_process(delta):
+	
+	if time_passed < COMPLETION_TIME:
+		time_passed += delta
+		var f = time_passed / COMPLETION_TIME
+		var Y = START.linear_interpolate(MID, f)
+		var Z = MID.linear_interpolate(END, f)
+		self.position = Y.linear_interpolate(Z, f)
+	elif self.movingVec != Vector2():
+		# Check if we are on a Box, a Player or Bomb
+		var root = get_tree().get_root()
+		var tileMap = root.get_node("Main").get_node("Map")
+		var tilePos = tileMap.world_to_map(self.position)
+		for bomb in get_tree().get_nodes_in_group("Bomb"):
+			var bombPos = tileMap.world_to_map(bomb.get_position())
+			if tilePos == bombPos and bomb.movingVec == Vector2():
+				self.push(self.movingVec)
+				return
+		for player in get_tree().get_nodes_in_group("Player"):
+			var playerPos = tileMap.world_to_map(player.get_position())
+			if tilePos == playerPos:
+				self.push(self.movingVec)
+				return
+		for box in get_tree().get_nodes_in_group("Box"):
+			var boxPos = tileMap.world_to_map(box.get_position()) + Vector2(0, -1)
+			if tilePos == boxPos:
+				self.push(self.movingVec)
+				return
+		if tilePos.x >= prefs.END_X or tilePos.x < prefs.START_X or tilePos.y >= prefs.END_Y or tilePos.y < prefs.START_Y:
+			if tilePos.x >= prefs.END_X + 6:
+				self.position -= Vector2(prefs.CELL_SIZE, 0) * (prefs.END_X-prefs.START_X+8)
+			elif tilePos.x <= prefs.START_X - 6:
+				self.position += Vector2(prefs.CELL_SIZE, 0) * (prefs.END_X-prefs.START_X+8)
+			elif tilePos.y >= prefs.END_Y + 6:
+				self.position -= Vector2(0, prefs.CELL_SIZE) * (prefs.END_Y-prefs.START_Y+8)
+			elif tilePos.y <= prefs.START_Y - 6:
+				self.position += Vector2(0, prefs.CELL_SIZE) * (prefs.END_Y-prefs.START_Y+8)
+			self.push(self.movingVec)
+			return
+		self.movingVec = Vector2()
+		self.timer.paused = false
+
 	if Vector2() == moveVector:
 		return
 	var root = get_tree().get_root()
