@@ -1,4 +1,4 @@
-[gd_scene load_steps=252 format=2]
+[gd_scene load_steps=255 format=2]
 
 [ext_resource path="res://Player.gd" type="Script" id=1]
 [ext_resource path="res://Animations/Player/Side/base1.png" type="Texture" id=2]
@@ -236,19 +236,22 @@
 [ext_resource path="res://Animations/Player/Side/pbase5.png" type="Texture" id=234]
 [ext_resource path="res://Animations/Player/Side/pbase6.png" type="Texture" id=235]
 [ext_resource path="res://Animations/Player/Side/pbase.png" type="Texture" id=236]
-[ext_resource path="res://Animations/Player/Right/pbase00.png" type="Texture" id=237]
-[ext_resource path="res://Animations/Player/Right/pbase01.png" type="Texture" id=238]
-[ext_resource path="res://Animations/Player/Right/pbase02.png" type="Texture" id=239]
-[ext_resource path="res://Animations/Player/Right/pbase03.png" type="Texture" id=240]
-[ext_resource path="res://Animations/Player/Right/pbase04.png" type="Texture" id=241]
-[ext_resource path="res://Animations/Player/Right/pbase05.png" type="Texture" id=242]
-[ext_resource path="res://Animations/Player/Right/pbase06.png" type="Texture" id=243]
-[ext_resource path="res://Animations/Player/Right/pbase07.png" type="Texture" id=244]
-[ext_resource path="res://Animations/Player/Right/pbase08.png" type="Texture" id=245]
-[ext_resource path="res://Animations/Player/Right/pbase09.png" type="Texture" id=246]
-[ext_resource path="res://Animations/Player/Right/pbase10.png" type="Texture" id=247]
-[ext_resource path="res://Animations/Player/Right/pbase11.png" type="Texture" id=248]
-[ext_resource path="res://Animations/Player/Right/pbase12.png" type="Texture" id=249]
+[ext_resource path="res://Animations/Player/Blew/base.png" type="Texture" id=237]
+[ext_resource path="res://Animations/Player/Blew/base1.png" type="Texture" id=238]
+[ext_resource path="res://Animations/Player/Blew/base2.png" type="Texture" id=239]
+[ext_resource path="res://Animations/Player/Right/pbase00.png" type="Texture" id=240]
+[ext_resource path="res://Animations/Player/Right/pbase01.png" type="Texture" id=241]
+[ext_resource path="res://Animations/Player/Right/pbase02.png" type="Texture" id=242]
+[ext_resource path="res://Animations/Player/Right/pbase03.png" type="Texture" id=243]
+[ext_resource path="res://Animations/Player/Right/pbase04.png" type="Texture" id=244]
+[ext_resource path="res://Animations/Player/Right/pbase05.png" type="Texture" id=245]
+[ext_resource path="res://Animations/Player/Right/pbase06.png" type="Texture" id=246]
+[ext_resource path="res://Animations/Player/Right/pbase07.png" type="Texture" id=247]
+[ext_resource path="res://Animations/Player/Right/pbase08.png" type="Texture" id=248]
+[ext_resource path="res://Animations/Player/Right/pbase09.png" type="Texture" id=249]
+[ext_resource path="res://Animations/Player/Right/pbase10.png" type="Texture" id=250]
+[ext_resource path="res://Animations/Player/Right/pbase11.png" type="Texture" id=251]
+[ext_resource path="res://Animations/Player/Right/pbase12.png" type="Texture" id=252]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
@@ -367,7 +370,12 @@ animations = [ {
 "name": "Pink_Side",
 "speed": 10.0
 }, {
-"frames": [ ExtResource( 237 ), ExtResource( 238 ), ExtResource( 239 ), ExtResource( 240 ), ExtResource( 241 ), ExtResource( 242 ), ExtResource( 243 ), ExtResource( 244 ), ExtResource( 245 ), ExtResource( 246 ), ExtResource( 247 ), ExtResource( 248 ), ExtResource( 249 ) ],
+"frames": [ ExtResource( 237 ), ExtResource( 238 ), ExtResource( 239 ) ],
+"loop": false,
+"name": "Blew",
+"speed": 100.0
+}, {
+"frames": [ ExtResource( 240 ), ExtResource( 241 ), ExtResource( 242 ), ExtResource( 243 ), ExtResource( 244 ), ExtResource( 245 ), ExtResource( 246 ), ExtResource( 247 ), ExtResource( 248 ), ExtResource( 249 ), ExtResource( 250 ), ExtResource( 251 ), ExtResource( 252 ) ],
 "loop": true,
 "name": "Pink_Right",
 "speed": 10.0
@@ -390,7 +398,7 @@ script = ExtResource( 1 )
 [node name="AnimationPlayer" type="AnimatedSprite" parent="."]
 scale = Vector2( 0.5, 0.5 )
 frames = SubResource( 1 )
-animation = "Pink_Up"
+animation = "Blew"
 
 [node name="CollisionPlayer" type="CollisionShape2D" parent="."]
 position = Vector2( 0.780487, 26.342 )
