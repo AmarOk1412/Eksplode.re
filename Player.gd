@@ -11,6 +11,7 @@ var radius = 2
 var repelBombs = false
 var pushBombs = false
 var type = ""
+var exploded = false
 
 # Effects
 var timerEffect = Timer.new()
@@ -34,6 +35,8 @@ enum Direction {
 var lastDir = Direction.Down
 
 func _physics_process(delta):
+	if exploded:
+		return
 	# Get player input
 	var direction: Vector2
 	if currentEffect == Effect.Inverted:
@@ -132,10 +135,12 @@ func drop():
 	root.add_child(bomb)
 
 func _ready():
-	anim.play("Base")
+	anim.play(type + "Base")
 
 func explode():
-	queue_free()
+	exploded = true
+	anim.play("Blew")
+	anim.connect("animation_finished", self, "queue_free")
 
 func removeEffect():
 	currentEffect = Effect.None
