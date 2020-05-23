@@ -6,6 +6,7 @@ func _ready():
 	gamestate.connect("player_list_changed", self, "refresh_lobby")
 	gamestate.connect("game_error", self, "_on_game_error")
 	gamestate.connect("connection_failed", self, "_on_connection_failed")
+	gamestate.connect("connection_succeeded", self, "_on_connection_success")
 	# Set the player name according to the system username. Fallback to the path.
 	if OS.has_environment("USERNAME"):
 		self.player_name = OS.get_environment("USERNAME")
@@ -22,8 +23,6 @@ func _on_Quit_pressed():
 	get_tree().quit()
 
 func _on_Host_pressed():
-	$MainScreen.hide()
-	$RoomLobby.show()
 	gamestate.host_game(self.player_name)
 	refresh_lobby()
 
@@ -33,10 +32,17 @@ func _on_Join_pressed():
 func _on_JoinCancel_pressed():
 	$JoinPopup.hide()
 
+func _on_connection_success():
+	$MainScreen.hide()
+	$JoinPopup.hide()
+	$RoomLobby.show()
+	$RoomLobby/Start.hide()
+
 func _on_connection_failed():
 	$JoinPopup/ErrorLabel.set_text("Connection failed.")
 
 func _on_JoinRoom_pressed():
+	$JoinPopup/ErrorLabel.set_text("")
 	var ip = $JoinPopup/Room.text
 	if not ip.is_valid_ip_address():
 		$JoinPopup/ErrorLabel.set_text("Invalid IP address!")
