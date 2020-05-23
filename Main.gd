@@ -2,12 +2,12 @@ extends Node
 
 onready var destructibleBox = preload("res://DestructibleBox.tscn")
 onready var boxScript = preload("res://DestructibleBox.gd")
-onready var player = preload("res://Player.tscn")
-onready var playerScript = preload("res://Player.gd")
 var boxTexture = preload("res://Sprites/Box/box.png")
 const prefs = preload("res://Utils/constant.gd")
 
 func spawn_player(pos, type):
+	var player = load("res://Player.tscn")
+	var playerScript = load("res://Player.gd")
 	var p = player.instance()
 	p.set_script(playerScript)
 	p.add_to_group("Destroyable")
@@ -41,8 +41,3 @@ func _ready():
 				box.add_to_group("Box")
 				box.position = Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
 				self.add_child(box)
-	# Players
-	self.spawn_player(Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(30, 30), "")
-	self.spawn_player(Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(30, -30), "Red_")
-	self.spawn_player(Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(-30, 30), "Dark_")
-	self.spawn_player(Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(-30, -30), "Pink_")

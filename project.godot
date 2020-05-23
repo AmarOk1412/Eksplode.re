@@ -19,6 +19,10 @@ config/name="Bomberman"
 run/main_scene="res://Main.tscn"
 config/icon="res://icon.png"
 
+[autoload]
+
+gamestate="*res://gamestate.gd"
+
 [display]
 
 window/size/width=600
