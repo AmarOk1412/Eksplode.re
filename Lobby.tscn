@@ -186,5 +186,6 @@ margin_bottom = 58.0
 [connection signal="pressed" from="MainScreen/Quit" to="." method="_on_Quit_pressed"]
 [connection signal="pressed" from="Settings/Apply" to="." method="_on_Apply_pressed"]
 [connection signal="pressed" from="RoomLobby/Start" to="." method="_on_Start_pressed"]
+[connection signal="pressed" from="RoomLobby/Leave" to="." method="_on_Leave_pressed"]
 [connection signal="pressed" from="JoinPopup/JoinRoom" to="." method="_on_JoinRoom_pressed"]
 [connection signal="pressed" from="JoinPopup/Cancel" to="." method="_on_JoinCancel_pressed"]

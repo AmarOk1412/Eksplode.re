@@ -23,6 +23,8 @@ func _on_Quit_pressed():
 	get_tree().quit()
 
 func _on_Host_pressed():
+	$MainScreen.hide()
+	$RoomLobby.show()
 	gamestate.host_game(self.player_name)
 	refresh_lobby()
 
@@ -75,6 +77,13 @@ func _on_Apply_pressed():
 func _on_game_error(errtxt):
 	$ErrorDialog.dialog_text = errtxt
 	$ErrorDialog.popup_centered_minsize()
+	$RoomLobby.hide()
+	$MainScreen.show()
 
 func _on_Start_pressed():
 	gamestate.begin_game()
+
+func _on_Leave_pressed():
+	$RoomLobby.hide()
+	$MainScreen.show()
+	get_tree().set_network_peer(null)
