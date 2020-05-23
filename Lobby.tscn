@@ -136,11 +136,10 @@ position = Vector2( 300, 300 )
 current = true
 
 [node name="JoinPopup" type="Panel" parent="."]
-visible = false
 margin_left = 60.0
-margin_top = 252.0
+margin_top = 240.0
 margin_right = 560.0
-margin_bottom = 372.0
+margin_bottom = 360.0
 
 [node name="Room" type="LineEdit" parent="JoinPopup"]
 margin_left = 100.0
@@ -170,6 +169,17 @@ margin_top = 60.0
 margin_right = 150.0
 margin_bottom = 100.0
 text = "Cancel"
+
+[node name="ErrorLabel" type="Label" parent="JoinPopup"]
+margin_left = 200.0
+margin_top = 60.0
+margin_right = 300.0
+margin_bottom = 92.0
+align = 1
+
+[node name="ErrorDialog" type="AcceptDialog" parent="."]
+margin_right = 83.0
+margin_bottom = 58.0
 [connection signal="pressed" from="MainScreen/Host" to="." method="_on_Host_pressed"]
 [connection signal="pressed" from="MainScreen/Join" to="." method="_on_Join_pressed"]
 [connection signal="pressed" from="MainScreen/Settings" to="." method="_on_Settings_pressed"]

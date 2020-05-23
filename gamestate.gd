@@ -15,6 +15,8 @@ var player_name = ""
 
 # Signals
 signal player_list_changed()
+signal game_error(what)
+signal connection_failed()
 
 # Callback from SceneTree.
 func _player_connected(id):
@@ -32,10 +34,12 @@ func _connected_ok():
 	#emit_signal("connection_succeeded")
 
 func _connected_fail():
-	print("Server Fail")
+	print("FAILURE")
+	get_tree().set_network_peer(null) # Remove peer
+	emit_signal("connection_failed")
 
 func _server_disconnected():
-	print("Server Disconnected")	
+	emit_signal("game_error", "Server disconnected")
 
 remote func register_player(new_player_name):
 	var id = get_tree().get_rpc_sender_id()
@@ -84,6 +88,6 @@ remote func pre_start_game(player_types):
 func _ready():
 	get_tree().connect("network_peer_connected", self, "_player_connected")
 	get_tree().connect("network_peer_disconnected", self,"_player_disconnected")
-	get_tree().connect("connected_to_server", self, "_connected_ok")
+	get_tree().connect("connected_to_1server", self, "_connected_ok")
 	get_tree().connect("connection_failed", self, "_connected_fail")
 	get_tree().connect("server_disconnected", self, "_server_disconnected")
