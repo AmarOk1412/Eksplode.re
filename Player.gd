@@ -13,6 +13,10 @@ var pushBombs = false
 var type = ""
 var exploded = false
 
+# Network
+puppet var puppet_pos = Vector2()
+puppet var puppet_motion = Vector2()
+
 # Effects
 var timerEffect = Timer.new()
 enum Effect {
@@ -39,28 +43,47 @@ func _physics_process(delta):
 		return
 	# Get player input
 	var direction: Vector2
-	if currentEffect == Effect.Inverted:
-		direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
-		direction.y = Input.get_action_strength("ui_up") - Input.get_action_strength("ui_down")
-		anim.flip_h = Input.is_action_pressed("ui_right") || lastDir == Direction.Left
+	var motion: Vector2
+	
+	if is_network_master():
+		if currentEffect == Effect.Inverted:
+			direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
+			direction.y = Input.get_action_strength("ui_up") - Input.get_action_strength("ui_down")
+			anim.flip_h = Input.is_action_pressed("ui_right") || lastDir == Direction.Left
+		else:
+			direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
+			direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
+			anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
+		
+		if currentEffect == Effect.Flu:
+			self.drop()
+		# If input is digital, normalize it for diagonal movement
+		if abs(direction.x) == 1 and abs(direction.y) == 1:
+			direction = direction.normalized()
+		
+		# Apply movement
+		var playerSpeed = speed
+		if currentEffect == Effect.Slow:
+			playerSpeed = 100
+		elif currentEffect == Effect.Fast:
+			playerSpeed = speed * 10
+		motion = direction * playerSpeed
+		rset("puppet_motion", motion)
+		rset("puppet_pos", position)
 	else:
-		direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
-		direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
-		anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
+		position = puppet_pos
+		motion = puppet_motion
 	
-	if currentEffect == Effect.Flu:
-		self.drop()
-	
-	if direction.y > 0:
+	if motion.y > 0:
 		lastDir = Direction.Down
 		anim.play(type + "Down")
-	elif direction.y < 0:
+	elif motion.y < 0:
 		lastDir = Direction.Up
 		anim.play(type + "Up")
-	elif direction.x > 0:
+	elif motion.x > 0:
 		lastDir = Direction.Right
 		anim.play(type + "Right")
-	elif direction.x < 0:
+	elif motion.x < 0:
 		lastDir = Direction.Left
 		anim.play(type + "Right")
 	elif lastDir == Direction.Down:
@@ -69,18 +92,11 @@ func _physics_process(delta):
 		anim.play(type + "BaseRevert")
 	else:
 		anim.play(type + "Side")
-	# If input is digital, normalize it for diagonal movement
-	if abs(direction.x) == 1 and abs(direction.y) == 1:
-		direction = direction.normalized()
-	
-	# Apply movement
-	var playerSpeed = speed
-	if currentEffect == Effect.Slow:
-		playerSpeed = 100
-	elif currentEffect == Effect.Fast:
-		playerSpeed = speed * 10
-	var movement = playerSpeed * direction * delta
+
+	var movement = motion * delta
 	move_and_collide(movement)
+	if not is_network_master():
+		puppet_pos = position # To avoid jitter
 
 func pushBombs():
 	if not self.pushBombs:

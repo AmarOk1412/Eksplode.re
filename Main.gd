@@ -5,10 +5,13 @@ onready var boxScript = preload("res://DestructibleBox.gd")
 var boxTexture = preload("res://Sprites/Box/box.png")
 const prefs = preload("res://Utils/constant.gd")
 
-func spawn_player(pos, type):
+func spawn_player(masterId, data):
+	var pos = data[0]
+	var type = data[1]
 	var player = load("res://Player.tscn")
 	var playerScript = load("res://Player.gd")
 	var p = player.instance()
+	p.set_network_master(masterId)
 	p.set_script(playerScript)
 	p.add_to_group("Destroyable")
 	p.add_to_group("Player")

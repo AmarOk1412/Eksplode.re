@@ -64,21 +64,40 @@ func join_game(ip, new_player_name):
 
 func begin_game():
 	assert(get_tree().is_network_server())
-	var player_types = ["", "Red_", "Dark_", "Pink_"]
+	var player_data = {}
+	# TODO type
+	player_data[get_tree().is_network_server()] = [ \
+		Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(30, 30), \
+		""]
+	var idx = 0
+	for p in players:
+		if idx == 0:
+			player_data[p] = [ \
+			Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(30, -30), \
+			"Red_"]
+		elif idx == 1:
+			player_data[p] = [ \
+			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(-30, 30), \
+			"Dark_"]
+		elif idx == 2:
+			player_data[p] = [ \
+			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(-30, -30), \
+			"Pink_"]
+		idx += 1
+		
+	
 	
 	for p in players:
-		rpc_id(p, "pre_start_game", player_types)
-	pre_start_game(player_types)
+		rpc_id(p, "pre_start_game", player_data)
+	pre_start_game(player_data)
 
-remote func pre_start_game(player_types):
+remote func pre_start_game(player_data):
 	# Change scene.
 	var world = load("res://Main.tscn").instance()
 	world.set_script(mainScript)
 	# Spawn players
-	world.spawn_player(Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(30, 30), player_types[0])
-	world.spawn_player(Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(30, -30), player_types[1])
-	world.spawn_player(Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(-30, 30), player_types[2])
-	world.spawn_player(Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(-30, -30), player_types[3])
+	for data in player_data:
+		world.spawn_player(data, player_data[data])
 	# Show game
 	get_tree().get_root().add_child(world)
 	get_tree().get_root().get_node("Lobby").hide()
