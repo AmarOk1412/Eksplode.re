@@ -56,7 +56,7 @@ func _physics_process(delta):
 			anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
 		
 		if currentEffect == Effect.Flu:
-			self.drop()
+			rpc("drop", self)
 		# If input is digital, normalize it for diagonal movement
 		if abs(direction.x) == 1 and abs(direction.y) == 1:
 			direction = direction.normalized()
@@ -121,12 +121,15 @@ func pushBombs():
 			break
 
 func _input(ev):
-	if Input.is_action_just_pressed("ui_accept"):
-		drop()
-	if Input.is_action_just_pressed("ui_second_action"):
-		pushBombs()
+	if is_network_master():
+		if Input.is_action_just_pressed("ui_accept"):
+			rpc("drop", get_tree().get_network_unique_id())
+		if Input.is_action_just_pressed("ui_second_action"):
+			pushBombs()
 
-func drop():
+sync func drop(id):
+	if get_network_master() != id:
+		return
 	if self.bombs <= 0:
 		return
 	var root = get_tree().get_root()
