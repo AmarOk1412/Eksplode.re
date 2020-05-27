@@ -8,6 +8,7 @@ const prefs = preload("res://Utils/constant.gd")
 func spawn_player(masterId, data):
 	var pos = data[0]
 	var type = data[1]
+	var playerName = data[2]
 	var player = load("res://Player.tscn")
 	var playerScript = load("res://Player.gd")
 	var p = player.instance()
@@ -18,11 +19,24 @@ func spawn_player(masterId, data):
 	p.z_index = 3
 	p.type = type
 	p.position = pos
+	p.playerName = playerName
 	self.add_child(p)
+
+func check_winner():
+	var players = get_tree().get_nodes_in_group("Player")
+	if players.size() == 1:
+		$NodeWinningLabel/WinningLabel.text = "Game Over\n" + players[0].playerName + " Wins!"
+	elif players.size() == 0:
+		$NodeWinningLabel/WinningLabel.text = "Game Over"
+	else:
+		return
+	$NodeWinningLabel/WinningLabel.show()
+	$GameTimer/ms.stop()
 
 # Todo clean
 func _ready():
 	$GameTrack.play()
+	$NodeWinningLabel/WinningLabel.hide()
 	for x in range(prefs.START_X, prefs.END_X):
 		for y in range(prefs.START_Y, prefs.END_Y):
 			if x%2 == 1 and y % 2 == 1:

@@ -37,6 +37,7 @@ enum Direction {
 	Right
 }
 var lastDir = Direction.Down
+var playerName = ""
 
 func _physics_process(delta):
 	if exploded:

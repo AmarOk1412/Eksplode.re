@@ -11,8 +11,6 @@ func _process(delta):
 	var str_s = str(s) if s > 9 else "0" + str(s)
 	set_text(str_m + ":" + str_s)
 
-
-
 func _on_ms_timeout():
 	if time < total:
 		time += 1
