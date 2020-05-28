@@ -71,7 +71,7 @@ func begin_game():
 	for p in players:
 		if idx == 0:
 			player_data[p] = [ \
-				Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(30, 30), \
+				Vector2(prefs.START_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(30, 30),
 				players[p][1],
 				players[p][0]]
 		elif idx == 1:
@@ -81,19 +81,36 @@ func begin_game():
 			players[p][0]]
 		elif idx == 2:
 			player_data[p] = [
-			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(-30, 30), \
+			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.START_Y * prefs.CELL_SIZE) + Vector2(-30, 30),
 			players[p][1],
 			players[p][0]]
 		elif idx == 3:
 			player_data[p] = [
-			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(-30, -30), \
+			Vector2(prefs.END_X * prefs.CELL_SIZE, prefs.END_Y * prefs.CELL_SIZE) + Vector2(-30, -30),
 			players[p][1],
 			players[p][0]]
 		idx += 1
 
+	var boxes = []
+	for x in range(prefs.START_X, prefs.END_X):
+		for y in range(prefs.START_Y, prefs.END_Y):
+			if x%2 == 1 and y % 2 == 1:
+				boxes.append([
+					false,
+					Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
+				])
+			elif (abs(x-prefs.START_X)<=1 or abs(x-(prefs.END_X-1))<=1) \
+				and (abs(y-prefs.START_Y)<=1 or abs(y-(prefs.END_Y-1))<=1):
+				continue
+			elif randi()%3+1 != 2:
+				boxes.append([
+					true,
+					Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
+				])
+
 	for p in players:
-		rpc_id(p, "pre_start_game", player_data)
-	pre_start_game(player_data)
+		rpc_id(p, "pre_start_game", player_data, boxes)
+	pre_start_game(player_data, boxes)
 
 func check_winner():
 	if get_tree().get_root().get_node("Main"):
@@ -101,13 +118,17 @@ func check_winner():
 	else:
 		self.timerFinish.stop()
 
-remote func pre_start_game(player_data):
+remote func pre_start_game(player_data, boxes):
+	print("pre start game")
 	# Change scene.
 	self.currentWorld = load("res://Main.tscn").instance()
 	self.currentWorld.set_script(mainScript)
 	# Spawn players
 	for data in player_data:
 		self.currentWorld.spawn_player(data, player_data[data])
+	# Spawn cubes
+	for box in boxes:
+		self.currentWorld.spawn_box(box)
 	# Show game
 	get_tree().get_root().add_child(self.currentWorld)
 	get_tree().get_root().get_node("Lobby").hide()
