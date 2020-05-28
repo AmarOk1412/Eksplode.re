@@ -55,6 +55,8 @@ func _on_JoinRoom_pressed():
 func _input(ev):
 	if len(gamestate.players) == 0:
 		return
+	if get_tree().get_network_unique_id() == 0:
+		return
 	var current_style = gamestate.players[get_tree().get_network_unique_id()][1]
 	var idx = self.possibleTypes.find(current_style)
 	if Input.is_action_just_pressed("ui_left"):
