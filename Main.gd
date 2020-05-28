@@ -45,6 +45,7 @@ func check_winner():
 		return
 	$NodeWinningLabel.show()
 	$GameTimer/ms.stop()
+	gamestate.timerEnd.stop()
 
 # Todo clean
 func _ready():
