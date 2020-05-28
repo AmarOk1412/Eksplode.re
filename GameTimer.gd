@@ -1,7 +1,8 @@
 extends Label
 
 var time = 0
-var total = 180
+var total = 61
+const prefs = preload("res://Utils/constant.gd")
 
 func _process(delta):
 	var diff = total - time
@@ -14,3 +15,5 @@ func _process(delta):
 func _on_ms_timeout():
 	if time < total:
 		time += 1
+	if total - time == prefs.END_ANIM:
+		gamestate.start_end()

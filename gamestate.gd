@@ -18,6 +18,8 @@ signal connection_succeeded()
 
 # Timer finish
 var timerFinish = Timer.new()
+var finishBox = 0
+var timerEnd = Timer.new()
 var currentWorld = null
 
 # Callback from SceneTree.
@@ -112,14 +114,39 @@ func begin_game():
 		rpc_id(p, "pre_start_game", player_data, boxes)
 	pre_start_game(player_data, boxes)
 
+func spawn_end_box():
+	var width = prefs.END_X - prefs.START_X
+	if self.currentWorld:
+		var boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (self.finishBox/width + prefs.START_Y)*prefs.CELL_SIZE)
+		var root = get_tree().get_root()
+		var tileMap = root.get_node("Main").get_node("Map")
+		var boxTile = tileMap.world_to_map(boxPos)
+		for player in get_tree().get_nodes_in_group("Player"):
+			var playerPos = tileMap.world_to_map(player.get_position())
+			if playerPos == boxTile:
+				player.explode()
+		self.currentWorld.spawn_box([
+			false,
+			boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
+		])
+	self.finishBox += 1
+	
+
+func start_end():
+	finishBox = 0
+	var duration = 1.0/(float((prefs.END_X - prefs.START_X)*(prefs.END_Y - prefs.START_Y))/float(prefs.END_ANIM))
+	self.timerEnd.connect("timeout", self, "spawn_end_box")
+	add_child(self.timerEnd)
+	self.timerEnd.start(duration)
+
 func check_winner():
 	if get_tree().get_root().get_node("Main"):
 		self.currentWorld.check_winner()
 	else:
 		self.timerFinish.stop()
+		self.timerEnd.stop()
 
 remote func pre_start_game(player_data, boxes):
-	print("pre start game")
 	# Change scene.
 	self.currentWorld = load("res://Main.tscn").instance()
 	self.currentWorld.set_script(mainScript)
