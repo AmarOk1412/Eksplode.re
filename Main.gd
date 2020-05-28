@@ -1,9 +1,10 @@
 extends Node
 
-onready var destructibleBox = preload("res://DestructibleBox.tscn")
-onready var boxScript = preload("res://DestructibleBox.gd")
-var boxTexture = preload("res://Sprites/Box/box.png")
 const prefs = preload("res://Utils/constant.gd")
+
+var destructibleBox = preload("res://DestructibleBox.tscn")
+var boxScript = preload("res://DestructibleBox.gd")
+var boxTexture = preload("res://Sprites/Box/box.png")
 
 func spawn_player(masterId, data):
 	var pos = data[0]
@@ -22,6 +23,18 @@ func spawn_player(masterId, data):
 	p.playerName = playerName
 	self.add_child(p)
 
+func spawn_box(box_data):
+	var box = destructibleBox.instance()
+	box.z_index = 0
+	if box_data[0]:
+		box.add_to_group("Destroyable")
+		box.set_script(boxScript)
+	else:
+		box.get_node("Sprite").set_texture(boxTexture)
+	box.add_to_group("Box")
+	box.position = box_data[1]
+	self.add_child(box)
+
 func check_winner():
 	var players = get_tree().get_nodes_in_group("Player")
 	if players.size() == 1:
@@ -37,27 +50,6 @@ func check_winner():
 func _ready():
 	$GameTrack.play()
 	$NodeWinningLabel.hide()
-	for x in range(prefs.START_X, prefs.END_X):
-		for y in range(prefs.START_Y, prefs.END_Y):
-			if x%2 == 1 and y % 2 == 1:
-				var box = destructibleBox.instance()
-				box.z_index = 0
-				box.get_node("Sprite").set_texture(boxTexture)
-				box.add_to_group("Box")
-				box.position = Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
-				var root = get_tree().get_root()
-				self.add_child(box)
-			elif (abs(x-prefs.START_X)<=1 or abs(x-(prefs.END_X-1))<=1) \
-				and (abs(y-prefs.START_Y)<=1 or abs(y-(prefs.END_Y-1))<=1):
-				continue
-			elif randi()%3+1 != 2:
-				var box = destructibleBox.instance()
-				box.set_script(boxScript)
-				box.z_index = 0
-				box.add_to_group("Destroyable")
-				box.add_to_group("Box")
-				box.position = Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
-				self.add_child(box)
 
 func _on_LeaveButton_pressed():
 	get_tree().get_root().get_node("Lobby").show()

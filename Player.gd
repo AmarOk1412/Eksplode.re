@@ -99,14 +99,14 @@ func _physics_process(delta):
 	if not is_network_master():
 		puppet_pos = position # To avoid jitter
 
-func pushBombs():
+func push():
 	if not self.pushBombs:
 		return
 	var offsetVec = Vector2()
 	if lastDir == Direction.Right:
 		offsetVec = Vector2(120, 0)
 	elif lastDir == Direction.Left:
-		offsetVec = Vector2(-120, 0)
+		offsetVec = Vector2( -120, 0)
 	elif lastDir == Direction.Up:
 		offsetVec = Vector2(0, -120)
 	elif lastDir == Direction.Down:
@@ -126,7 +126,7 @@ func _input(ev):
 		if Input.is_action_just_pressed("ui_accept"):
 			rpc("drop", get_tree().get_network_unique_id())
 		if Input.is_action_just_pressed("ui_second_action"):
-			pushBombs()
+			push()
 
 sync func drop(id):
 	if get_network_master() != id:
