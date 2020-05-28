@@ -1,3 +1,5 @@
+bin
+
 # Godot-specific ignores
 .import/
 *.import

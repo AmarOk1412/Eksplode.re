@@ -96,8 +96,10 @@ func begin_game():
 	pre_start_game(player_data)
 
 func check_winner():
-	if self.currentWorld:
+	if get_tree().get_root().get_node("Main"):
 		self.currentWorld.check_winner()
+	else:
+		self.timerFinish.stop()
 
 remote func pre_start_game(player_data):
 	# Change scene.

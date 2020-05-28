@@ -30,13 +30,13 @@ func check_winner():
 		$NodeWinningLabel/WinningLabel.text = "Game Over"
 	else:
 		return
-	$NodeWinningLabel/WinningLabel.show()
+	$NodeWinningLabel.show()
 	$GameTimer/ms.stop()
 
 # Todo clean
 func _ready():
 	$GameTrack.play()
-	$NodeWinningLabel/WinningLabel.hide()
+	$NodeWinningLabel.hide()
 	for x in range(prefs.START_X, prefs.END_X):
 		for y in range(prefs.START_Y, prefs.END_Y):
 			if x%2 == 1 and y % 2 == 1:
@@ -58,3 +58,7 @@ func _ready():
 				box.add_to_group("Box")
 				box.position = Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
 				self.add_child(box)
+
+func _on_LeaveButton_pressed():
+	get_tree().get_root().get_node("Lobby").show()
+	queue_free()

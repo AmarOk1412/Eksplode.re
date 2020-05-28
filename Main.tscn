@@ -1,4 +1,4 @@
-[gd_scene load_steps=30 format=2]
+[gd_scene load_steps=31 format=2]
 
 [ext_resource path="res://Main.gd" type="Script" id=1]
 [ext_resource path="res://tile.png" type="Texture" id=2]
@@ -7,6 +7,7 @@
 [ext_resource path="res://Sounds/explosion.wav" type="AudioStream" id=5]
 [ext_resource path="res://Fonts/FiraSans-Ultra.otf" type="DynamicFontData" id=6]
 [ext_resource path="res://GameTimer.gd" type="Script" id=7]
+[ext_resource path="res://Sprites/Buttons/close.png" type="Texture" id=8]
 
 [sub_resource type="ConvexPolygonShape2D" id=1]
 points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )
@@ -560,4 +561,13 @@ custom_constants/line_spacing = -28
 text = "Game Over
 Player 1 Wins"
 align = 1
+
+[node name="LeaveButton" type="TextureButton" parent="NodeWinningLabel"]
+margin_left = 1679.7
+margin_top = 248.684
+margin_right = 1979.7
+margin_bottom = 548.684
+rect_scale = Vector2( 0.33, 0.33 )
+texture_normal = ExtResource( 8 )
 [connection signal="timeout" from="GameTimer/ms" to="GameTimer" method="_on_ms_timeout"]
+[connection signal="pressed" from="NodeWinningLabel/LeaveButton" to="." method="_on_LeaveButton_pressed"]
