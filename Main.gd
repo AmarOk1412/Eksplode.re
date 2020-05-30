@@ -53,5 +53,5 @@ func _ready():
 	$NodeWinningLabel.hide()
 
 func _on_LeaveButton_pressed():
-	get_tree().get_root().get_node("Lobby").show()
+	get_tree().get_root().get_node("Lobby").show_lobby()
 	queue_free()
