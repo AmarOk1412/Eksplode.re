@@ -130,7 +130,6 @@ func spawn_end_box():
 			boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
 		])
 	self.finishBox += 1
-	
 
 func start_end():
 	finishBox = 0
@@ -158,7 +157,7 @@ remote func pre_start_game(player_data, boxes):
 		self.currentWorld.spawn_box(box)
 	# Show game
 	get_tree().get_root().add_child(self.currentWorld)
-	get_tree().get_root().get_node("Lobby").hide()
+	get_tree().get_root().get_node("Lobby").show_game()
 	
 	self.timerFinish.connect("timeout", self, "check_winner")
 	add_child(self.timerFinish)
