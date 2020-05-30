@@ -1,19 +1,69 @@
-[gd_scene load_steps=10 format=2]
+[gd_scene load_steps=38 format=2]
 
 [ext_resource path="res://Lobby.gd" type="Script" id=1]
-[ext_resource path="res://Sprites/Lobby/Players/Perso_.png" type="Texture" id=2]
-[ext_resource path="res://Sprites/Lobby/Players/Perso_Red_.png" type="Texture" id=3]
-[ext_resource path="res://Sprites/Lobby/Players/Perso_Dark_.png" type="Texture" id=4]
-[ext_resource path="res://Sprites/Lobby/Players/Perso_Pink_.png" type="Texture" id=5]
-[ext_resource path="res://Sprites/Lobby/bg.png" type="Texture" id=6]
+[ext_resource path="res://Sprites/Lobby/newgame.png" type="Texture" id=2]
+[ext_resource path="res://Sprites/Lobby/join.png" type="Texture" id=3]
+[ext_resource path="res://Sprites/Lobby/settings.png" type="Texture" id=4]
+[ext_resource path="res://Sprites/Lobby/quit.png" type="Texture" id=5]
+[ext_resource path="res://Animations/Player/Down/base00.png" type="Texture" id=6]
+[ext_resource path="res://Animations/Player/Down/base01.png" type="Texture" id=7]
+[ext_resource path="res://Animations/Player/Down/base02.png" type="Texture" id=8]
+[ext_resource path="res://Animations/Player/Down/base03.png" type="Texture" id=9]
+[ext_resource path="res://Animations/Player/Down/base04.png" type="Texture" id=10]
+[ext_resource path="res://Animations/Player/Down/base05.png" type="Texture" id=11]
+[ext_resource path="res://Animations/Player/Down/base06.png" type="Texture" id=12]
+[ext_resource path="res://Animations/Player/Down/base07.png" type="Texture" id=13]
+[ext_resource path="res://Animations/Player/Down/base08.png" type="Texture" id=14]
+[ext_resource path="res://Animations/Player/Down/base09.png" type="Texture" id=15]
+[ext_resource path="res://Animations/Player/Down/base10.png" type="Texture" id=16]
+[ext_resource path="res://Animations/Player/Down/base11.png" type="Texture" id=17]
+[ext_resource path="res://Animations/Player/Down/base12.png" type="Texture" id=18]
+[ext_resource path="res://Animations/Player/Down/base13.png" type="Texture" id=19]
+[ext_resource path="res://Sprites/Lobby/apply.png" type="Texture" id=20]
+[ext_resource path="res://Sprites/Lobby/go.png" type="Texture" id=21]
+[ext_resource path="res://Sprites/Lobby/close.png" type="Texture" id=22]
+[ext_resource path="res://Sprites/Lobby/Players/Perso_.png" type="Texture" id=23]
+[ext_resource path="res://Sprites/Lobby/Players/Perso_Red_.png" type="Texture" id=24]
+[ext_resource path="res://Sprites/Lobby/Players/Perso_Dark_.png" type="Texture" id=25]
+[ext_resource path="res://Sprites/Lobby/Players/Perso_Pink_.png" type="Texture" id=26]
+[ext_resource path="res://Sprites/Lobby/bg.png" type="Texture" id=27]
 
 [sub_resource type="StyleBoxFlat" id=1]
 bg_color = Color( 1, 1, 1, 1 )
 
 [sub_resource type="ButtonGroup" id=2]
 
-[sub_resource type="StyleBoxFlat" id=3]
+[sub_resource type="SpriteFrames" id=3]
+animations = [ {
+"frames": [ ExtResource( 6 ), ExtResource( 7 ), ExtResource( 8 ), ExtResource( 9 ), ExtResource( 10 ), ExtResource( 11 ), ExtResource( 12 ), ExtResource( 13 ), ExtResource( 14 ), ExtResource( 15 ), ExtResource( 16 ), ExtResource( 17 ), ExtResource( 18 ), ExtResource( 19 ) ],
+"loop": true,
+"name": "default",
+"speed": 10.0
+} ]
+
+[sub_resource type="StyleBoxFlat" id=4]
 bg_color = Color( 1, 1, 1, 1 )
+
+[sub_resource type="Theme" id=5]
+
+[sub_resource type="StyleBoxFlat" id=6]
+bg_color = Color( 1, 1, 1, 1 )
+
+[sub_resource type="StyleBoxFlat" id=7]
+bg_color = Color( 1, 1, 1, 1 )
+
+[sub_resource type="StyleBoxFlat" id=8]
+bg_color = Color( 1, 1, 1, 1 )
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color( 0.690196, 0.690196, 0.690196, 1 )
+
+[sub_resource type="StyleBoxFlat" id=10]
+bg_color = Color( 1, 1, 1, 1 )
+
+[sub_resource type="Theme" id=9]
 
 [node name="Lobby" type="Control"]
 anchor_right = 1.0
@@ -23,6 +73,7 @@ size_flags_vertical = 2
 script = ExtResource( 1 )
 
 [node name="MainScreen" type="Panel" parent="."]
+visible = false
 margin_left = 362.0
 margin_top = 63.0
 margin_right = 662.0
@@ -30,34 +81,45 @@ margin_bottom = 513.0
 rect_clip_content = true
 custom_styles/panel = SubResource( 1 )
 
-[node name="Host" type="Button" parent="MainScreen"]
+[node name="Host" type="TextureButton" parent="MainScreen"]
 margin_left = 50.0
-margin_top = 150.0
-margin_right = 250.0
-margin_bottom = 182.0
+margin_top = 120.0
+margin_right = 771.0
+margin_bottom = 336.0
+rect_scale = Vector2( 0.28, 0.28 )
 group = SubResource( 2 )
-text = "New Game"
+texture_normal = ExtResource( 2 )
 
-[node name="Join" type="Button" parent="MainScreen"]
+[node name="Join" type="TextureButton" parent="MainScreen"]
 margin_left = 50.0
-margin_top = 200.0
-margin_right = 250.0
-margin_bottom = 232.0
-text = "Join Game"
+margin_top = 180.0
+margin_right = 771.0
+margin_bottom = 396.0
+rect_scale = Vector2( 0.28, 0.28 )
+texture_normal = ExtResource( 3 )
 
-[node name="Settings" type="Button" parent="MainScreen"]
+[node name="Settings" type="TextureButton" parent="MainScreen"]
 margin_left = 50.0
-margin_top = 250.0
-margin_right = 250.0
-margin_bottom = 282.0
-text = "Settings"
+margin_top = 240.0
+margin_right = 771.0
+margin_bottom = 456.0
+rect_scale = Vector2( 0.28, 0.28 )
+texture_normal = ExtResource( 4 )
 
-[node name="Quit" type="Button" parent="MainScreen"]
+[node name="Quit" type="TextureButton" parent="MainScreen"]
 margin_left = 50.0
-margin_top = 400.0
-margin_right = 250.0
-margin_bottom = 432.0
-text = "Quit"
+margin_top = 380.0
+margin_right = 771.0
+margin_bottom = 596.0
+rect_scale = Vector2( 0.28, 0.28 )
+texture_normal = ExtResource( 5 )
+
+[node name="Sprite" type="AnimatedSprite" parent="MainScreen"]
+position = Vector2( 150, 70 )
+scale = Vector2( 0.33, 0.33 )
+frames = SubResource( 3 )
+frame = 13
+playing = true
 
 [node name="Settings" type="Panel" parent="."]
 visible = false
@@ -66,19 +128,22 @@ margin_top = 63.0
 margin_right = 662.0
 margin_bottom = 513.0
 rect_clip_content = true
+custom_styles/panel = SubResource( 4 )
 
-[node name="Apply" type="Button" parent="Settings"]
+[node name="Apply" type="TextureButton" parent="Settings"]
 margin_left = 50.0
-margin_top = 400.0
-margin_right = 250.0
-margin_bottom = 432.0
-text = "Apply"
+margin_top = 380.0
+margin_right = 771.0
+margin_bottom = 596.0
+rect_scale = Vector2( 0.28, 0.28 )
+texture_normal = ExtResource( 20 )
 
 [node name="PlayerNameLabel" type="Label" parent="Settings"]
 margin_left = 20.0
 margin_top = 60.0
 margin_right = 120.0
 margin_bottom = 84.0
+custom_colors/font_color = Color( 0, 0, 0, 1 )
 text = "Player Name:"
 align = 2
 
@@ -87,6 +152,9 @@ margin_left = 132.0
 margin_top = 56.0
 margin_right = 282.0
 margin_bottom = 80.0
+theme = SubResource( 5 )
+custom_styles/normal = SubResource( 6 )
+custom_colors/font_color = Color( 0, 0, 0, 1 )
 
 [node name="RoomLobby" type="Panel" parent="."]
 visible = false
@@ -95,7 +163,7 @@ margin_top = 63.0
 margin_right = 912.0
 margin_bottom = 513.0
 rect_clip_content = true
-custom_styles/panel = SubResource( 3 )
+custom_styles/panel = SubResource( 7 )
 
 [node name="Player1" type="Label" parent="RoomLobby"]
 margin_left = 100.0
@@ -134,92 +202,101 @@ text = "Player 4
 "
 align = 1
 
-[node name="Start" type="Button" parent="RoomLobby"]
-margin_left = 650.0
-margin_top = 400.0
-margin_right = 750.0
-margin_bottom = 420.0
-text = "Start"
+[node name="Start" type="TextureButton" parent="RoomLobby"]
+margin_left = 730.0
+margin_top = 380.0
+margin_right = 830.0
+margin_bottom = 476.0
+rect_scale = Vector2( 0.5, 0.5 )
+texture_normal = ExtResource( 21 )
 
-[node name="Leave" type="Button" parent="RoomLobby"]
-margin_left = 760.0
+[node name="Leave" type="TextureButton" parent="RoomLobby"]
+margin_left = 730.0
 margin_top = 20.0
-margin_right = 780.0
-margin_bottom = 40.0
-text = "X"
+margin_right = 826.0
+margin_bottom = 116.0
+rect_scale = Vector2( 0.5, 0.5 )
+texture_normal = ExtResource( 22 )
 
 [node name="Player1Sprite" type="Sprite" parent="RoomLobby"]
 position = Vector2( 150, 200 )
 scale = Vector2( 0.1, 0.1 )
-texture = ExtResource( 2 )
+texture = ExtResource( 23 )
 
 [node name="Player2Sprite" type="Sprite" parent="RoomLobby"]
 position = Vector2( 300, 200 )
 scale = Vector2( 0.1, 0.1 )
-texture = ExtResource( 3 )
+texture = ExtResource( 24 )
 
 [node name="Player3Sprite" type="Sprite" parent="RoomLobby"]
 position = Vector2( 450, 200 )
 scale = Vector2( 0.1, 0.1 )
-texture = ExtResource( 4 )
+texture = ExtResource( 25 )
 
 [node name="Player4Sprite" type="Sprite" parent="RoomLobby"]
 position = Vector2( 600, 200 )
 scale = Vector2( 0.1, 0.1 )
-texture = ExtResource( 5 )
+texture = ExtResource( 26 )
 
 [node name="JoinPopup" type="Panel" parent="."]
-visible = false
 margin_left = 262.0
 margin_top = 228.0
 margin_right = 762.0
 margin_bottom = 348.0
+custom_styles/panel = SubResource( 8 )
 
 [node name="Room" type="LineEdit" parent="JoinPopup"]
-margin_left = 100.0
+margin_left = 120.0
 margin_top = 10.0
 margin_right = 450.0
 margin_bottom = 34.0
+custom_styles/normal = SubResource( 10 )
+custom_colors/font_color = Color( 0, 0, 0, 1 )
 text = "127.0.0.1"
 
 [node name="Label" type="Label" parent="JoinPopup"]
 margin_top = 10.0
 margin_right = 100.0
 margin_bottom = 34.0
+custom_colors/font_color = Color( 0, 0, 0, 1 )
 text = "Address:"
 align = 2
 valign = 1
 
-[node name="JoinRoom" type="Button" parent="JoinPopup"]
-margin_left = 350.0
+[node name="JoinRoom" type="TextureButton" parent="JoinPopup"]
+margin_left = 400.0
 margin_top = 60.0
-margin_right = 450.0
-margin_bottom = 100.0
-text = "Join"
+margin_right = 500.0
+margin_bottom = 156.0
+rect_scale = Vector2( 0.5, 0.5 )
+texture_normal = ExtResource( 21 )
 
-[node name="Cancel" type="Button" parent="JoinPopup"]
-margin_left = 50.0
+[node name="Cancel" type="TextureButton" parent="JoinPopup"]
+margin_left = 20.0
 margin_top = 60.0
-margin_right = 150.0
-margin_bottom = 100.0
-text = "Cancel"
+margin_right = 120.0
+margin_bottom = 156.0
+rect_scale = Vector2( 0.5, 0.5 )
+texture_normal = ExtResource( 22 )
 
 [node name="ErrorLabel" type="Label" parent="JoinPopup"]
 margin_left = 200.0
 margin_top = 60.0
 margin_right = 300.0
 margin_bottom = 92.0
+custom_colors/font_color = Color( 0, 0, 0, 1 )
 align = 1
 
 [node name="ErrorDialog" type="AcceptDialog" parent="."]
 margin_right = 83.0
 margin_bottom = 58.0
+theme = SubResource( 9 )
 
 [node name="Sprite" type="Sprite" parent="."]
 scale = Vector2( 0.8, 0.8 )
 z_index = -1
-texture = ExtResource( 6 )
-normal_map = ExtResource( 6 )
+texture = ExtResource( 27 )
+normal_map = ExtResource( 27 )
 centered = false
 [connection signal="pressed" from="MainScreen/Host" to="." method="_on_Host_pressed"]
 [connection signal="pressed" from="MainScreen/Join" to="." method="_on_Join_pressed"]

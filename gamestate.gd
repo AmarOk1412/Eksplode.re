@@ -59,10 +59,10 @@ func host_game(new_player_name):
 	get_tree().set_network_peer(host)
 	players[1] = [new_player_name, ""]
 
-func join_game(ip, new_player_name):
+func join_game(new_player_name, domain, port=DEFAULT_PORT):
 	players = {}
 	var client = NetworkedMultiplayerENet.new()
-	client.create_client(ip, DEFAULT_PORT)
+	client.create_client(domain, port)
 	get_tree().set_network_peer(client)
 	players[get_tree().get_network_unique_id()] =  [new_player_name, ""]
 
