@@ -46,11 +46,11 @@ func _on_connection_failed():
 
 func _on_JoinRoom_pressed():
 	$JoinPopup/ErrorLabel.set_text("")
-	var ip = $JoinPopup/Room.text
-	if not ip.is_valid_ip_address():
-		$JoinPopup/ErrorLabel.set_text("Invalid IP address!")
-		return
-	gamestate.join_game(ip, self.player_name)
+	var address = $JoinPopup/Room.text.split(":")
+	if len(address) == 2:
+		gamestate.join_game(self.player_name, address[0], address[1])
+	else:
+		gamestate.join_game(self.player_name, address[0])
 
 func _input(ev):
 	if len(gamestate.players) == 0:
