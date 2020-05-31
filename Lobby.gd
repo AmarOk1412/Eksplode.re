@@ -27,6 +27,7 @@ func _on_Quit_pressed():
 func _on_Host_pressed():
 	$MainScreen.hide()
 	$RoomLobby.show()
+	$RoomLobby/Start.hide()
 	gamestate.host_game(self.player_name)
 	refresh_lobby()
 
@@ -40,13 +41,13 @@ func _on_connection_success():
 	$MainScreen.hide()
 	$JoinPopup.hide()
 	$RoomLobby.show()
-	$RoomLobby/Start.hide()
 
 func _on_connection_failed():
 	$JoinPopup/ErrorLabel.set_text("Connection failed.")
 
 func _on_JoinRoom_pressed():
 	$JoinPopup/ErrorLabel.set_text("")
+	$RoomLobby/Start.hide()
 	var address = $JoinPopup/Room.text.split(":")
 	if len(address) == 2:
 		gamestate.join_game(self.player_name, address[0], address[1])
@@ -127,6 +128,8 @@ func _on_Start_pressed():
 func show_lobby():
 	$LobbySound.play()
 	self.show()
+	$RoomLobby/Start.hide()
+	gamestate.lobby_shown()
 
 func show_game():
 	$LobbySound.stop()
