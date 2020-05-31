@@ -9,6 +9,8 @@ const MAX_PEERS = 4
 
 # Names for remote players in id:name format.
 var players = {}
+var in_lobby = 0
+var host_master = false
 
 # Signals
 signal player_list_changed()
@@ -46,6 +48,7 @@ remote func register_player(new_players):
 	var id = get_tree().get_rpc_sender_id()
 	print("New player connected: " + str(id))
 	players[id] = new_players[id]
+	self.in_lobby += 1
 	emit_signal("player_list_changed")
 
 func unregister_player(id):
@@ -54,12 +57,16 @@ func unregister_player(id):
 	emit_signal("player_list_changed")
 
 func host_game(new_player_name):
+	host_master = true
 	var host = NetworkedMultiplayerENet.new()
 	host.create_server(DEFAULT_PORT, MAX_PEERS)
 	get_tree().set_network_peer(host)
 	players[1] = [new_player_name, ""]
+	get_tree().get_root().get_node("Lobby").get_node("RoomLobby").get_node("Start").show()
+	self.in_lobby = 1
 
 func join_game(new_player_name, domain, port=DEFAULT_PORT):
+	host_master = false
 	players = {}
 	var client = NetworkedMultiplayerENet.new()
 	client.create_client(domain, port)
@@ -145,6 +152,11 @@ func check_winner():
 		self.timerFinish.stop()
 		self.timerEnd.stop()
 
+sync func in_lobby(id):
+	self.in_lobby += 1
+	if self.in_lobby == len(self.players) && host_master:
+		get_tree().get_root().get_node("Lobby").get_node("RoomLobby").get_node("Start").show()
+
 remote func pre_start_game(player_data, boxes):
 	# Change scene.
 	self.currentWorld = load("res://Main.tscn").instance()
@@ -162,6 +174,10 @@ remote func pre_start_game(player_data, boxes):
 	self.timerFinish.connect("timeout", self, "check_winner")
 	add_child(self.timerFinish)
 	self.timerFinish.start(0.5)
+	self.in_lobby = 0
+
+func lobby_shown():
+	rpc("in_lobby", get_tree().get_network_unique_id())
 
 func _ready():
 	get_tree().connect("network_peer_connected", self, "_player_connected")

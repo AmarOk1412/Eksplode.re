@@ -52,6 +52,7 @@ func _ready():
 	$GameTrack.play()
 	$NodeWinningLabel.hide()
 
+
 func _on_LeaveButton_pressed():
 	get_tree().get_root().get_node("Lobby").show_lobby()
 	queue_free()

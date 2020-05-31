@@ -1,4 +1,4 @@
-[gd_scene load_steps=39 format=2]
+[gd_scene load_steps=41 format=2]
 
 [ext_resource path="res://Lobby.gd" type="Script" id=1]
 [ext_resource path="res://Sprites/Lobby/newgame.png" type="Texture" id=2]
@@ -28,6 +28,7 @@
 [ext_resource path="res://Sprites/Lobby/Players/Perso_Pink_.png" type="Texture" id=26]
 [ext_resource path="res://Sprites/Lobby/bg.png" type="Texture" id=27]
 [ext_resource path="res://Sounds/One Man Symphony - Royalty Free Soundtrack Collection - 27 Vertical Cities.wav" type="AudioStream" id=28]
+[ext_resource path="res://Fonts/FiraSans-Ultra.otf" type="DynamicFontData" id=29]
 
 [sub_resource type="StyleBoxFlat" id=1]
 bg_color = Color( 1, 1, 1, 1 )
@@ -65,6 +66,10 @@ border_color = Color( 0.690196, 0.690196, 0.690196, 1 )
 bg_color = Color( 1, 1, 1, 1 )
 
 [sub_resource type="Theme" id=10]
+
+[sub_resource type="DynamicFont" id=11]
+size = 35
+font_data = ExtResource( 29 )
 
 [node name="Lobby" type="Control"]
 anchor_right = 1.0
@@ -118,7 +123,7 @@ texture_normal = ExtResource( 5 )
 position = Vector2( 150, 70 )
 scale = Vector2( 0.33, 0.33 )
 frames = SubResource( 3 )
-frame = 11
+frame = 3
 playing = true
 
 [node name="Settings" type="Panel" parent="."]
@@ -297,6 +302,15 @@ centered = false
 
 [node name="LobbySound" type="AudioStreamPlayer" parent="."]
 stream = ExtResource( 28 )
+
+[node name="PreviewLabel" type="Label" parent="."]
+margin_left = 8.12057
+margin_top = 5.27289
+margin_right = 148.121
+margin_bottom = 48.2729
+custom_fonts/font = SubResource( 11 )
+custom_colors/font_color = Color( 1, 1, 1, 1 )
+text = "PREVIEW"
 [connection signal="pressed" from="MainScreen/Host" to="." method="_on_Host_pressed"]
 [connection signal="pressed" from="MainScreen/Join" to="." method="_on_Join_pressed"]
 [connection signal="pressed" from="MainScreen/Settings" to="." method="_on_Settings_pressed"]
