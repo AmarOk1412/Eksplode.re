@@ -56,18 +56,27 @@ func unregister_player(id):
 	print("Player disconnected: " + str(id))
 	emit_signal("player_list_changed")
 
+func reset():
+	self.timerFinish = Timer.new()
+	self.finishBox = 0
+	self.timerEnd = Timer.new()
+	self.currentWorld = null
+	self.players = {}
+	self.in_lobby = 0
+
 func host_game(new_player_name):
 	host_master = true
+	self.reset()
 	var host = NetworkedMultiplayerENet.new()
 	host.create_server(DEFAULT_PORT, MAX_PEERS)
 	get_tree().set_network_peer(host)
-	players[1] = [new_player_name, ""]
+	players[get_tree().get_network_unique_id()] = [new_player_name, ""]
 	get_tree().get_root().get_node("Lobby").get_node("RoomLobby").get_node("Start").show()
 	self.in_lobby = 1
 
 func join_game(new_player_name, domain, port=DEFAULT_PORT):
 	host_master = false
-	players = {}
+	self.reset()
 	var client = NetworkedMultiplayerENet.new()
 	client.create_client(domain, port)
 	get_tree().set_network_peer(client)
@@ -144,6 +153,12 @@ func start_end():
 	self.timerEnd.connect("timeout", self, "spawn_end_box")
 	add_child(self.timerEnd)
 	self.timerEnd.start(duration)
+
+func close_current_game():
+	var current_game = get_tree().get_root().get_node("Main")
+	if current_game:
+		current_game._on_LeaveButton_pressed()
+	
 
 func check_winner():
 	if get_tree().get_root().get_node("Main"):
