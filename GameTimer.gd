@@ -1,7 +1,7 @@
 extends Label
 
 var time = 0
-var total = 61
+var total = 180
 const prefs = preload("res://Utils/constant.gd")
 
 func _process(delta):

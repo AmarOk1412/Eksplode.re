@@ -117,6 +117,7 @@ func _on_Apply_pressed():
 	$Settings.hide()
 
 func _on_game_error(errtxt):
+	gamestate.close_current_game()
 	$ErrorDialog.dialog_text = errtxt
 	$ErrorDialog.popup_centered_minsize()
 	$RoomLobby.hide()
