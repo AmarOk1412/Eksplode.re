@@ -142,4 +142,5 @@ func _on_Leave_pressed():
 	get_tree().set_network_peer(null)
 
 func _on_LobbySound_finished():
-	$LobbySound.play()
+	if self.is_visible_in_tree():
+		$LobbySound.play()

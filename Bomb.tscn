@@ -27,6 +27,7 @@ position = Vector2( 60, 60 )
 script = ExtResource( 1 )
 
 [node name="AnimBomb" type="AnimatedSprite" parent="."]
+position = Vector2( 1.19162, 14.6969 )
 frames = SubResource( 1 )
 animation = "Bomb"
 
@@ -58,6 +59,7 @@ one_way_collision = true
 one_way_collision_margin = 0.0
 
 [node name="Raycasts" type="Node2D" parent="."]
+visible = false
 
 [node name="East" type="RayCast2D" parent="Raycasts"]
 enabled = true
@@ -80,6 +82,7 @@ cast_to = Vector2( -240, 0 )
 collide_with_areas = true
 
 [node name="Area2D" type="Area2D" parent="."]
+visible = false
 collision_layer = 2
 collision_mask = 2
 
