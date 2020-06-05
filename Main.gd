@@ -21,7 +21,7 @@ func spawn_player(masterId, data):
 	p.type = type
 	p.position = pos
 	p.playerName = playerName
-	self.add_child(p)
+	$ObjectSort.add_child(p)
 
 func spawn_box(box_data):
 	var box = destructibleBox.instance()
@@ -33,7 +33,7 @@ func spawn_box(box_data):
 		box.get_node("Sprite").set_texture(boxTexture)
 	box.add_to_group("Box")
 	box.position = box_data[1]
-	self.add_child(box)
+	$ObjectSort.add_child(box)
 
 func check_winner():
 	var players = get_tree().get_nodes_in_group("Player")

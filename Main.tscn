@@ -569,5 +569,7 @@ margin_right = 1979.7
 margin_bottom = 548.684
 rect_scale = Vector2( 0.33, 0.33 )
 texture_normal = ExtResource( 8 )
+
+[node name="ObjectSort" type="YSort" parent="."]
 [connection signal="timeout" from="GameTimer/ms" to="GameTimer" method="_on_ms_timeout"]
 [connection signal="pressed" from="NodeWinningLabel/LeaveButton" to="." method="_on_LeaveButton_pressed"]
