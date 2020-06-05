@@ -141,6 +141,11 @@ func spawn_end_box():
 			var playerPos = tileMap.world_to_map(player.get_position())
 			if playerPos == boxTile:
 				player.explode()
+		for box in get_tree().get_nodes_in_group("Box"):
+			var mapBoxPos = tileMap.world_to_map(box.get_position() + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE))
+			if mapBoxPos == boxTile + Vector2(1, 2):
+				box.queue_free()
+		print(boxTile + Vector2(0, 4))
 		self.currentWorld.spawn_box([
 			false,
 			boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
