@@ -1,6 +1,8 @@
 extends Node
 const prefs = preload("res://Utils/constant.gd")
 onready var mainScript = load("res://Game.gd")
+onready var itemPacked = preload("res://Item.tscn")
+onready var itemScript = preload("res://Item.gd")
 # Default game port. Can be any number between 1024 and 49151.
 const DEFAULT_PORT = 14121
 
@@ -135,7 +137,7 @@ func spawn_end_box():
 	if self.currentWorld:
 		var boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (self.finishBox/width + prefs.START_Y)*prefs.CELL_SIZE)
 		var root = get_tree().get_root()
-		var tileMap = root.get_node("Main").get_node("Map")
+		var tileMap = root.get_node("Game").get_node("Map")
 		var boxTile = tileMap.world_to_map(boxPos)
 		for player in get_tree().get_nodes_in_group("Player"):
 			var playerPos = tileMap.world_to_map(player.get_position())
@@ -145,7 +147,6 @@ func spawn_end_box():
 			var mapBoxPos = tileMap.world_to_map(box.get_position() + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE))
 			if mapBoxPos == boxTile + Vector2(1, 2):
 				box.queue_free()
-		print(boxTile + Vector2(0, 4))
 		self.currentWorld.spawn_box([
 			false,
 			boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
@@ -160,13 +161,13 @@ func start_end():
 	self.timerEnd.start(duration)
 
 func close_current_game():
-	var current_game = get_tree().get_root().get_node("Main")
+	var current_game = get_tree().get_root().get_node("Game")
 	if current_game:
 		current_game._on_LeaveButton_pressed()
 	
 
 func check_winner():
-	if get_tree().get_root().get_node("Main"):
+	if get_tree().get_root().get_node("Game"):
 		self.currentWorld.check_winner()
 	else:
 		self.timerFinish.stop()
@@ -198,6 +199,27 @@ remote func pre_start_game(player_data, boxes):
 
 func lobby_shown():
 	rpc("in_lobby", get_tree().get_network_unique_id())
+
+remote func spawn_item(position, type):
+	var root = get_tree().get_root()
+	var tileMap = root.get_node("Game").get_node("Map")
+	if not tileMap:
+		return
+	var tilePos = tileMap.world_to_map(position)
+	var item = itemPacked.instance()
+	item.set_script(itemScript)
+	item.add_to_group("Destroyable")
+	item.set_type(type)
+	item.z_index = 2
+	# TODO clean this values
+	item.position = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, -prefs.CELL_SIZE/2)
+	root.add_child(item)
+
+func new_item(position):
+	var type = randi()%6
+	for p in players:
+		rpc_id(p, "spawn_item", position, type)
+	spawn_item(position, type)
 
 func _ready():
 	get_tree().connect("network_peer_connected", self, "_player_connected")

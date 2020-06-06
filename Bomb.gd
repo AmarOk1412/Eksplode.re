@@ -50,7 +50,7 @@ func _physics_process(delta):
 	elif self.movingVec != Vector2():
 		# Check if we are on a Box, a Player or Bomb
 		var root = get_tree().get_root()
-		var tileMap = root.get_node("Main").get_node("Map")
+		var tileMap = root.get_node("Game").get_node("Map")
 		var tilePos = tileMap.world_to_map(self.position)
 		for bomb in get_tree().get_nodes_in_group("Bomb"):
 			var bombPos = tileMap.world_to_map(bomb.get_position())
@@ -84,7 +84,7 @@ func _physics_process(delta):
 	if Vector2() == moveVector:
 		return
 	var root = get_tree().get_root()
-	var tileMap = root.get_node("Main").get_node("Map")
+	var tileMap = root.get_node("Game").get_node("Map")
 	var nextTileEmpty = true
 	var colliders = [] # The colliding objects go here. This is a temporary array.
 	var ray = $Raycasts/West
@@ -171,7 +171,7 @@ func explode():
 	# Add an explosion to each collider.
 	var tiles = []
 	var root = get_tree().get_root()
-	var tileMap = root.get_node("Main").get_node("Map")
+	var tileMap = root.get_node("Game").get_node("Map")
 	for collider in final_colliders: # Loop through all the colliders.
 		if collider.is_in_group("Box"):
 			tiles.append(tileMap.world_to_map(collider.position) + Vector2(0, -1))
@@ -203,7 +203,7 @@ func explode():
 			# TODO clean this values
 			boom.position = (newPos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 			root.add_child(boom)
-	var bombTrack = root.get_node("Main").get_node("BombTrack")
+	var bombTrack = root.get_node("Game").get_node("BombTrack")
 	bombTrack.play()
 	queue_free()
 
