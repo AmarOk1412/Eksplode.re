@@ -21,6 +21,7 @@ signal connection_succeeded()
 # Timer finish
 var timerFinish = Timer.new()
 var finishBox = 0
+var endAnim = -1
 var timerEnd = Timer.new()
 var currentWorld = null
 
@@ -131,29 +132,60 @@ func begin_game():
 		rpc_id(p, "pre_start_game", player_data, boxes, track)
 	pre_start_game(player_data, boxes, track)
 
+remote func spawn_final_box(boxPos):
+	if not self.currentWorld:
+		return
+	var root = get_tree().get_root()
+	var tileMap = root.get_node("Game").get_node("Map")
+	var boxTile = tileMap.world_to_map(boxPos)
+	for player in get_tree().get_nodes_in_group("Player"):
+		var playerPos = tileMap.world_to_map(player.get_position())
+		if playerPos == boxTile:
+			player.explode()
+	for box in get_tree().get_nodes_in_group("Box"):
+		var mapBoxPos = tileMap.world_to_map(box.get_position() + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE))
+		if mapBoxPos == boxTile + Vector2(1, 2):
+			box.queue_free()
+	var pos = boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
+	self.currentWorld.spawn_box([
+			false,
+			pos
+		])
+
 func spawn_end_box():
 	var width = prefs.END_X - prefs.START_X
 	if self.currentWorld:
-		var boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (self.finishBox/width + prefs.START_Y)*prefs.CELL_SIZE)
-		var root = get_tree().get_root()
-		var tileMap = root.get_node("Game").get_node("Map")
-		var boxTile = tileMap.world_to_map(boxPos)
-		for player in get_tree().get_nodes_in_group("Player"):
-			var playerPos = tileMap.world_to_map(player.get_position())
-			if playerPos == boxTile:
-				player.explode()
-		for box in get_tree().get_nodes_in_group("Box"):
-			var mapBoxPos = tileMap.world_to_map(box.get_position() + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE))
-			if mapBoxPos == boxTile + Vector2(1, 2):
-				box.queue_free()
-		self.currentWorld.spawn_box([
-			false,
-			boxPos + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
-		])
+		var boxPos = Vector2()
+		if endAnim == 0:
+			# From top to bottom
+			boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (self.finishBox/width + prefs.START_Y)*prefs.CELL_SIZE)
+		elif endAnim == 1:
+			# top/bottom/top/bottom...
+			var y = self.finishBox/width
+			if y % 2 == 0:
+				boxPos = Vector2((prefs.END_X - 1 - self.finishBox%width)*prefs.CELL_SIZE, (y/2 + prefs.START_Y)*prefs.CELL_SIZE)
+			else:
+				boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (prefs.END_Y - 1 - y/2)*prefs.CELL_SIZE)
+		elif endAnim == 2:
+			# bottom/top/bottom/top
+			var y = self.finishBox/width
+			if y % 2 == 1:
+				boxPos = Vector2((prefs.END_X - 1 - self.finishBox%width)*prefs.CELL_SIZE, (y/2 + prefs.START_Y)*prefs.CELL_SIZE)
+			else:
+				boxPos = Vector2((self.finishBox%width + prefs.START_X)*prefs.CELL_SIZE, (prefs.END_Y - 1 - y/2)*prefs.CELL_SIZE)
+		elif endAnim == 3:
+			# From bottom to top
+			boxPos = Vector2((prefs.END_X - 1 - self.finishBox%width)*prefs.CELL_SIZE, (prefs.END_Y - 1 - self.finishBox/width)*prefs.CELL_SIZE)
+		for p in players:
+			rpc_id(p, "spawn_final_box", boxPos)
+		self.spawn_final_box(boxPos)
 	self.finishBox += 1
 
 func start_end():
+	if not is_network_master():
+		return
 	finishBox = 0
+	endAnim = randi()%4
 	var duration = 1.0/(float((prefs.END_X - prefs.START_X)*(prefs.END_Y - prefs.START_Y))/float(prefs.END_ANIM))
 	self.timerEnd.connect("timeout", self, "spawn_end_box")
 	add_child(self.timerEnd)
