@@ -128,9 +128,10 @@ func begin_game():
 					Vector2(x*prefs.CELL_SIZE, y*prefs.CELL_SIZE)+ Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE)
 				])
 
+	var track = randi()%2 + 1
 	for p in players:
-		rpc_id(p, "pre_start_game", player_data, boxes)
-	pre_start_game(player_data, boxes)
+		rpc_id(p, "pre_start_game", player_data, boxes, track)
+	pre_start_game(player_data, boxes, track)
 
 func spawn_end_box():
 	var width = prefs.END_X - prefs.START_X
@@ -164,7 +165,6 @@ func close_current_game():
 	var current_game = get_tree().get_root().get_node("Game")
 	if current_game:
 		current_game._on_LeaveButton_pressed()
-	
 
 func check_winner():
 	if get_tree().get_root().get_node("Game"):
@@ -178,7 +178,7 @@ sync func in_lobby(id):
 	if self.in_lobby == len(self.players) && host_master:
 		get_tree().get_root().get_node("Lobby").get_node("RoomLobby").get_node("Start").show()
 
-remote func pre_start_game(player_data, boxes):
+remote func pre_start_game(player_data, boxes, track):
 	# Change scene.
 	self.currentWorld = load("res://Game.tscn").instance()
 	self.currentWorld.set_script(mainScript)
@@ -196,6 +196,7 @@ remote func pre_start_game(player_data, boxes):
 	add_child(self.timerFinish)
 	self.timerFinish.start(0.5)
 	self.in_lobby = 0
+	self.currentWorld.start_track(track)
 
 func lobby_shown():
 	rpc("in_lobby", get_tree().get_network_unique_id())
