@@ -113,7 +113,7 @@ func push():
 		offsetVec = Vector2(0, 120)
 	var checkPos = self.position + offsetVec
 	var root = get_tree().get_root()
-	var tileMap = root.get_node("Main").get_node("Map")
+	var tileMap = root.get_node("Game").get_node("Map")
 	var tilePos = tileMap.world_to_map(checkPos)
 	for bomb in get_tree().get_nodes_in_group("Bomb"):
 		var bombPos = tileMap.world_to_map(bomb.get_position())
@@ -134,7 +134,7 @@ sync func drop(id):
 	if self.bombs <= 0:
 		return
 	var root = get_tree().get_root()
-	var tileMap = root.get_node("Main").get_node("Map")
+	var tileMap = root.get_node("Game").get_node("Map")
 	var tilePos = tileMap.world_to_map(self.position)
 	for bomb in get_tree().get_nodes_in_group("Bomb"):
 		var bombPos = tileMap.world_to_map(bomb.position)

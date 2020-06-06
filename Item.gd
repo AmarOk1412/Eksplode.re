@@ -7,11 +7,11 @@ var moreBombTexture = preload("res://Sprites/Items/moreBomb.png")
 var redgloveTexture = preload("res://Sprites/Items/redglove.png")
 var speedTexture = preload("res://Sprites/Items/speed.png")
 
-var type = randi()%6
+var type = -1
 
 # Called when the node enters the scene tree for the first time.
-# TODO clean with enums
-func _ready():
+func set_type(new_type):
+	type = new_type
 	if type == 0:
 		$Sprite.set_texture(bluegloveTexture)
 	elif type == 1:
