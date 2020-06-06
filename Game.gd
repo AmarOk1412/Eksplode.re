@@ -52,6 +52,11 @@ func _ready():
 	$GameTrack.play()
 	$NodeWinningLabel.hide()
 
+func start_track(track):
+	$GameTrack.stop()
+	var stream = load("res://Sounds/track" + str(track) + ".wav")
+	$GameTrack.stream = stream
+	$GameTrack.play()
 
 func _on_LeaveButton_pressed():
 	get_tree().get_root().get_node("Lobby").show_lobby()
