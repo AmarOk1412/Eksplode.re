@@ -1,8 +1,6 @@
 extends Node
 const prefs = preload("res://Utils/constant.gd")
 onready var mainScript = load("res://Game.gd")
-onready var itemPacked = preload("res://Item.tscn")
-onready var itemScript = preload("res://Item.gd")
 # Default game port. Can be any number between 1024 and 49151.
 const DEFAULT_PORT = 14121
 
@@ -207,14 +205,8 @@ remote func spawn_item(position, type):
 	if not tileMap:
 		return
 	var tilePos = tileMap.world_to_map(position)
-	var item = itemPacked.instance()
-	item.set_script(itemScript)
-	item.add_to_group("Destroyable")
-	item.set_type(type)
-	item.z_index = 2
-	# TODO clean this values
-	item.position = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, -prefs.CELL_SIZE/2)
-	root.add_child(item)
+	var final_pos = (tilePos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, -prefs.CELL_SIZE/2)
+	self.currentWorld.spawn_item(final_pos, type)
 
 func new_item(position):
 	var type = randi()%6
