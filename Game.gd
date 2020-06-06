@@ -23,6 +23,7 @@ func spawn_player(masterId, data):
 	p.type = type
 	p.position = pos
 	p.playerName = playerName
+	p.puppet_pos = pos
 	$ObjectSort.add_child(p)
 
 func spawn_box(box_data):
