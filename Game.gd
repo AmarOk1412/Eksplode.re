@@ -5,6 +5,8 @@ const prefs = preload("res://Utils/constant.gd")
 var destructibleBox = preload("res://DestructibleBox.tscn")
 var boxScript = preload("res://DestructibleBox.gd")
 var boxTexture = preload("res://Sprites/Box/box.png")
+var itemPacked = preload("res://Item.tscn")
+var itemScript = preload("res://Item.gd")
 
 func spawn_player(masterId, data):
 	var pos = data[0]
@@ -34,6 +36,15 @@ func spawn_box(box_data):
 	box.add_to_group("Box")
 	box.position = box_data[1]
 	$ObjectSort.add_child(box)
+
+func spawn_item(position, type):
+	var item = itemPacked.instance()
+	item.set_script(itemScript)
+	item.add_to_group("Destroyable")
+	item.set_type(type)
+	item.z_index = 2
+	item.position = position
+	self.add_child(item)
 
 func check_winner():
 	var players = get_tree().get_nodes_in_group("Player")
