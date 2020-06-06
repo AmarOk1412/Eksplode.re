@@ -50,6 +50,8 @@ func spawn_item(position, type):
 func check_winner():
 	var players = get_tree().get_nodes_in_group("Player")
 	if players.size() == 1:
+		for p in players:
+			p.finished = true
 		$NodeWinningLabel/WinningLabel.text = "Game Over\n" + players[0].playerName + " Wins!"
 	elif players.size() == 0:
 		$NodeWinningLabel/WinningLabel.text = "Game Over"

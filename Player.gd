@@ -12,6 +12,7 @@ var repelBombs = false
 var pushBombs = false
 var type = ""
 var exploded = false
+var finished = false
 
 # Network
 puppet var puppet_pos = Vector2()
@@ -40,7 +41,7 @@ var lastDir = Direction.Down
 var playerName = ""
 
 func _physics_process(delta):
-	if exploded:
+	if exploded or finished:
 		return
 	# Get player input
 	var direction: Vector2
@@ -100,7 +101,7 @@ func _physics_process(delta):
 		puppet_pos = position # To avoid jitter
 
 func push():
-	if not self.pushBombs:
+	if not self.pushBombs or self.finished:
 		return
 	var offsetVec = Vector2()
 	if lastDir == Direction.Right:
@@ -122,6 +123,8 @@ func push():
 			break
 
 func _input(ev):
+	if self.finished:
+		return
 	if is_network_master():
 		if Input.is_action_just_pressed("ui_accept"):
 			rpc("drop", get_tree().get_network_unique_id())
@@ -131,7 +134,7 @@ func _input(ev):
 sync func drop(id):
 	if get_network_master() != id:
 		return
-	if self.bombs <= 0:
+	if self.bombs <= 0 or self.finished:
 		return
 	var root = get_tree().get_root()
 	var tileMap = root.get_node("Game").get_node("Map")
@@ -166,6 +169,8 @@ func removeEffect():
 	currentEffect = Effect.None
 
 func near(bomb):
+	if self.finished:
+		return
 	if self.repelBombs:
 		if bomb.position.x - prefs.CELL_SIZE/2 > self.position.x:
 			bomb.moveVector = Vector2(1,0)
@@ -177,6 +182,8 @@ func near(bomb):
 			bomb.moveVector = Vector2(0,-1)
 
 func affect():
+	if self.finished:
+		return
 	timerEffect.stop()
 	# Note: random effect and avoid None
 	currentEffect = Effect.values()[randi()%(Effect.size() - 1) + 1]
