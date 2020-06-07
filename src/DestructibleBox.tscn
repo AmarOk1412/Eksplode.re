@@ -1,6 +1,6 @@
 [gd_scene load_steps=3 format=2]
 
-[ext_resource path="res://Sprites/DestructibleBox/box.png" type="Texture" id=1]
+[ext_resource path="res://Media/Sprites/DestructibleBox/box.png" type="Texture" id=1]
 
 [sub_resource type="RectangleShape2D" id=1]
 extents = Vector2( 61.1795, 52.7512 )

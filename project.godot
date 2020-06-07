@@ -16,12 +16,12 @@ _global_script_class_icons={
 [application]
 
 config/name="Eksplode.re"
-run/main_scene="res://Lobby.tscn"
-config/icon="res://icon.png"
+run/main_scene="res://src/Lobby.tscn"
+config/icon="res://Media/icon.png"
 
 [autoload]
 
-gamestate="*res://gamestate.gd"
+gamestate="*res://src/gamestate.gd"
 
 [display]
 
@@ -45,4 +45,4 @@ ui_second_action={
 
 [rendering]
 
-environment/default_environment="res://default_env.tres"
+environment/default_environment="res://src/default_env.tres"

@@ -1,14 +1,19 @@
 [gd_scene load_steps=32 format=2]
 
-[ext_resource path="res://Game.gd" type="Script" id=1]
-[ext_resource path="res://Sprites/tile.png" type="Texture" id=2]
-[ext_resource path="res://Item.tscn" type="PackedScene" id=3]
-[ext_resource path="res://Sounds/track2.wav" type="AudioStream" id=4]
-[ext_resource path="res://Sounds/explosion.wav" type="AudioStream" id=5]
-[ext_resource path="res://Fonts/FiraSans-Ultra.otf" type="DynamicFontData" id=6]
-[ext_resource path="res://GameTimer.gd" type="Script" id=7]
-[ext_resource path="res://Sprites/Buttons/close.png" type="Texture" id=8]
-[ext_resource path="res://Sprites/Lobby/bg.png" type="Texture" id=9]
+[ext_resource path="res://src/Game.gd" type="Script" id=1]
+[ext_resource path="res://Media/Sprites/tile.png" type="Texture" id=2]
+[ext_resource path="res://src/Item.tscn" type="PackedScene" id=3]
+[ext_resource path="res://Media/Sounds/track2.wav" type="AudioStream" id=4]
+[ext_resource path="res://Media/Sounds/explosion.wav" type="AudioStream" id=5]
+[ext_resource path="res://Media/Fonts/FiraSans-Ultra.otf" type="DynamicFontData" id=6]
+[ext_resource path="res://src/GameTimer.gd" type="Script" id=7]
+[ext_resource path="res://Media/Sprites/Buttons/close.png" type="Texture" id=8]
+[ext_resource path="res://Media/Sprites/Lobby/bg.png" type="Texture" id=9]
+
+
+
+
+
 
 [sub_resource type="ConvexPolygonShape2D" id=1]
 points = PoolVector2Array( 0, 0, 120, 0, 120, 120, 0, 120 )

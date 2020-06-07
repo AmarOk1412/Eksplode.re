@@ -1,6 +1,6 @@
 extends Node
-const prefs = preload("res://Utils/constant.gd")
-onready var mainScript = load("res://Game.gd")
+const prefs = preload("res://src/Utils/constant.gd")
+onready var mainScript = load("res://src/Game.gd")
 # Default game port. Can be any number between 1024 and 49151.
 const DEFAULT_PORT = 14121
 
@@ -210,7 +210,7 @@ sync func in_lobby(id):
 
 remote func pre_start_game(player_data, boxes, track):
 	# Change scene.
-	self.currentWorld = load("res://Game.tscn").instance()
+	self.currentWorld = load("res://src/Game.tscn").instance()
 	self.currentWorld.set_script(mainScript)
 	# Spawn players
 	for data in player_data:

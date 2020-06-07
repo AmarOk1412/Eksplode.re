@@ -89,22 +89,22 @@ func refresh_lobby():
 		if p == 0:
 			$RoomLobby/Player1.text = player[0]
 			$RoomLobby/Player1.show()
-			$RoomLobby/Player1Sprite.set_texture(load("res://Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
+			$RoomLobby/Player1Sprite.set_texture(load("res://Media/Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
 			$RoomLobby/Player1Sprite.show()
 		elif p == 1:
 			$RoomLobby/Player2.text = player[0]
 			$RoomLobby/Player2.show()
-			$RoomLobby/Player2Sprite.set_texture(load("res://Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
+			$RoomLobby/Player2Sprite.set_texture(load("res://Media/Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
 			$RoomLobby/Player2Sprite.show()
 		elif p == 2:
 			$RoomLobby/Player3.text = player[0]
 			$RoomLobby/Player3.show()
-			$RoomLobby/Player3Sprite.set_texture(load("res://Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
+			$RoomLobby/Player3Sprite.set_texture(load("res://Media/Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
 			$RoomLobby/Player3Sprite.show()
 		elif p == 3:
 			$RoomLobby/Player4.text = player[0]
 			$RoomLobby/Player4.show()
-			$RoomLobby/Player4Sprite.set_texture(load("res://Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
+			$RoomLobby/Player4Sprite.set_texture(load("res://Media/Sprites/Lobby/Players/Perso_" + player[1] + ".png"))
 			$RoomLobby/Player4Sprite.show()
 		p += 1
 

@@ -1,19 +1,19 @@
 extends Node
 
-const prefs = preload("res://Utils/constant.gd")
+const prefs = preload("res://src/Utils/constant.gd")
 
-var destructibleBox = preload("res://DestructibleBox.tscn")
-var boxScript = preload("res://DestructibleBox.gd")
-var boxTexture = preload("res://Sprites/Box/box.png")
-var itemPacked = preload("res://Item.tscn")
-var itemScript = preload("res://Item.gd")
+var destructibleBox = preload("res://src/DestructibleBox.tscn")
+var boxScript = load("res://src/DestructibleBox.gd")
+var boxTexture = preload("res://Media/Sprites/Box/box.png")
+var itemPacked = preload("res://src/Item.tscn")
+var itemScript = preload("res://src/Item.gd")
 
 func spawn_player(masterId, data):
 	var pos = data[0]
 	var type = data[1]
 	var playerName = data[2]
-	var player = load("res://Player.tscn")
-	var playerScript = load("res://Player.gd")
+	var player = load("res://src/Player.tscn")
+	var playerScript = load("res://src/Player.gd")
 	var p = player.instance()
 	p.set_network_master(masterId)
 	p.set_script(playerScript)
@@ -61,14 +61,13 @@ func check_winner():
 	$GameTimer/ms.stop()
 	gamestate.timerEnd.stop()
 
-# Todo clean
 func _ready():
 	$GameTrack.play()
 	$NodeWinningLabel.hide()
 
 func start_track(track):
 	$GameTrack.stop()
-	var stream = load("res://Sounds/track" + str(track) + ".wav")
+	var stream = load("res://Media/Sounds/track" + str(track) + ".wav")
 	$GameTrack.stream = stream
 	$GameTrack.play()
 

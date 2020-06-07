@@ -1,7 +1,7 @@
 [gd_scene load_steps=4 format=2]
 
-[ext_resource path="res://Item.gd" type="Script" id=1]
-[ext_resource path="res://Sprites/Items/malus.png" type="Texture" id=2]
+[ext_resource path="res://src/Item.gd" type="Script" id=1]
+[ext_resource path="res://Media/Sprites/Items/malus.png" type="Texture" id=2]
 
 [sub_resource type="RectangleShape2D" id=1]
 extents = Vector2( 42.0214, 38.7371 )

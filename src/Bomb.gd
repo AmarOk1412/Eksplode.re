@@ -1,9 +1,9 @@
 extends KinematicBody2D
 
-onready var boomPacked = preload("res://Boom.tscn")
-onready var boomScript = preload("res://Boom.gd")
+onready var boomPacked = preload("res://src/Boom.tscn")
+onready var boomScript = preload("res://src/Boom.gd")
 
-const prefs = preload("res://Utils/constant.gd")
+const prefs = preload("res://src/Utils/constant.gd")
 
 var duration = 3
 var radius = 2
@@ -15,7 +15,6 @@ var from_player = null
 var moveVector = Vector2()
 var timer = Timer.new()
 
-# Called when the node enters the scene tree for the first time.
 func _ready():
 	anim.play("Bomb")
 	self.timer.connect("timeout", self, "explode")
@@ -98,7 +97,7 @@ func _physics_process(delta):
 	ray.add_exception(self)
 	while ray.is_colliding():
 		var collider = ray.get_collider()
-		if not collider.is_in_group("Player"): #TODOs
+		if not collider.is_in_group("Player"):
 			colliders.append(collider)
 		ray.add_exception(collider)
 		ray.force_raycast_update()
@@ -119,7 +118,6 @@ func _physics_process(delta):
 	ray.remove_exception(self)
 	
 	var stopMove = false
-	# TODO CLEAN THIS
 	if not nextTileEmpty:
 		if moveVector.x < 0:
 			stopMove = position.x < (nextTile.x+1)*prefs.CELL_SIZE+prefs.CELL_SIZE/2
@@ -192,7 +190,6 @@ func explode():
 				newPos -= Vector2(0, r)
 			if newPos in tiles:
 				break
-			# TODO clean
 			if newPos.x < 2 or newPos.x > 12 \
 			or newPos.y < 2 or newPos.y > 12:
 				break
@@ -200,7 +197,6 @@ func explode():
 			var boom = boomPacked.instance()
 			boom.set_script(boomScript)
 			boom.z_index = 3
-			# TODO clean this values
 			boom.position = (newPos * prefs.CELL_SIZE) + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE/2)
 			root.add_child(boom)
 	var bombTrack = root.get_node("Game").get_node("BombTrack")

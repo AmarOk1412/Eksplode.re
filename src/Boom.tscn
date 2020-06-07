@@ -1,10 +1,10 @@
 [gd_scene load_steps=7 format=2]
 
-[ext_resource path="res://Animations/Bomb/Boom/00.png" type="Texture" id=1]
-[ext_resource path="res://Animations/Bomb/Boom/01.png" type="Texture" id=2]
-[ext_resource path="res://Animations/Bomb/Boom/02.png" type="Texture" id=3]
-[ext_resource path="res://Animations/Bomb/Boom/03.png" type="Texture" id=4]
-[ext_resource path="res://Boom.gd" type="Script" id=5]
+[ext_resource path="res://Media/Animations/Bomb/Boom/00.png" type="Texture" id=1]
+[ext_resource path="res://Media/Animations/Bomb/Boom/01.png" type="Texture" id=2]
+[ext_resource path="res://Media/Animations/Bomb/Boom/02.png" type="Texture" id=3]
+[ext_resource path="res://Media/Animations/Bomb/Boom/03.png" type="Texture" id=4]
+[ext_resource path="res://src/Boom.gd" type="Script" id=5]
 
 [sub_resource type="SpriteFrames" id=1]
 animations = [ {
