@@ -1,11 +1,11 @@
 extends Area2D
 
-var malusTexture = preload("res://Sprites/Items/malus.png")
-var bluegloveTexture = preload("res://Sprites/Items/blueglove.png")
-var flameTexture = preload("res://Sprites/Items/flame.png")
-var moreBombTexture = preload("res://Sprites/Items/moreBomb.png")
-var redgloveTexture = preload("res://Sprites/Items/redglove.png")
-var speedTexture = preload("res://Sprites/Items/speed.png")
+var malusTexture = preload("res://Media/Sprites/Items/malus.png")
+var bluegloveTexture = preload("res://Media/Sprites/Items/blueglove.png")
+var flameTexture = preload("res://Media/Sprites/Items/flame.png")
+var moreBombTexture = preload("res://Media/Sprites/Items/moreBomb.png")
+var redgloveTexture = preload("res://Media/Sprites/Items/redglove.png")
+var speedTexture = preload("res://Media/Sprites/Items/speed.png")
 
 var type = -1
 

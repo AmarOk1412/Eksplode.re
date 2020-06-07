@@ -1,6 +1,6 @@
 extends StaticBody2D
 
-const prefs = preload("res://Utils/constant.gd")
+const prefs = preload("res://src/Utils/constant.gd")
 
 # Called when the node enters the scene tree for the first time.
 func _ready():

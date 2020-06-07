@@ -1,8 +1,8 @@
 extends KinematicBody2D
-onready var bombPacked = preload("res://Bomb.tscn")
-onready var bombScript = preload("res://Bomb.gd")
+onready var bombPacked = preload("res://src/Bomb.tscn")
+onready var bombScript = preload("res://src/Bomb.gd")
 onready var anim = get_node("AnimationPlayer")
-const prefs = preload("res://Utils/constant.gd")
+const prefs = preload("res://src/Utils/constant.gd")
 
 # Player movement speed
 var speed = 300

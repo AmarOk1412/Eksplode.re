@@ -2,7 +2,7 @@ extends Label
 
 var time = 0
 var total = 180
-const prefs = preload("res://Utils/constant.gd")
+const prefs = preload("res://src/Utils/constant.gd")
 
 func _process(delta):
 	var diff = total - time
