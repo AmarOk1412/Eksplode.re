@@ -187,6 +187,8 @@ func explode():
 			colliders.append(collider)
 			ray.add_exception(collider)
 			ray.force_raycast_update()
+			if collider.is_in_group("Player") or collider.is_in_group("Item"):
+				continue
 			if collider != self:
 				break
 
