@@ -2,7 +2,7 @@
 
 **Eksplode.re** is a Bomberman game made with [Godot](https://godotengine.org) under BSD3.
 
-This is, for now, a personnal project. I just want to have some fun. I think Bomberman can have a lot of new game modes. However, everybody who wants to improve the game is welcome!
+This is, for now, a personal project. I just want to have some fun. I think Bomberman can have a lot of new game modes. However, everybody who wants to improve the game is welcome!
 
 **DISCLAIMER** This is a project done in my spare time (and my first using Godot), mostly when drinking some maté. The code is really ugly for now, I just want to play. Also, I am not a designer nor a sound designer. However this is some ideas I want to implement:
 

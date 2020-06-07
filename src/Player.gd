@@ -79,16 +79,22 @@ func _physics_process(delta):
 
 	if is_network_master():
 		if currentEffect == Effect.Inverted:
-			direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
-			direction.y = Input.get_action_strength("ui_up") - Input.get_action_strength("ui_down")
+			if self.timerDetection and not self.timerDetection.is_stopped():
+				direction = -1 * self.lastSwipe
+			else:
+				direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
+				direction.y = Input.get_action_strength("ui_up") - Input.get_action_strength("ui_down")
 			anim.flip_h = Input.is_action_pressed("ui_right") || lastDir == Direction.Left
 		else:
-			direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
-			direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
+			if self.timerDetection and not self.timerDetection.is_stopped():
+				direction = self.lastSwipe
+			else:
+				direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
+				direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
 			anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
 
 		if currentEffect == Effect.Flu:
-			rpc("drop", self)
+			rpc("drop", get_tree().get_network_unique_id())
 		# If input is digital, normalize it for diagonal movement
 		if abs(direction.x) == 1 and abs(direction.y) == 1:
 			direction = direction.normalized()
@@ -152,14 +158,42 @@ func push():
 			bomb.push(offsetVec*2)
 			break
 
+#################### Android
+
+var swipeStart = Vector2()
+var lastSwipe = Vector2()
+var timerDetection = null
+
+func set_swipe(direction):
+	if not self.timerDetection:
+		self.timerDetection = Timer.new()
+	if self.timerDetection.is_stopped():
+		self.timerDetection.start()
+	print(direction)
+	if abs(direction.x) < 0.1:
+		direction.x = 0
+	if abs(direction.y) < 0.1:
+		direction.y = 0
+	self.lastSwipe = direction.normalized()
+
+func end_detection():
+	if self.timerDetection:
+		self.timerDetection.stop()
+
 func _input(ev):
 	if self.finished:
 		return
 	if is_network_master():
-		if Input.is_action_just_pressed("ui_accept"):
-			rpc("drop", get_tree().get_network_unique_id())
-		if Input.is_action_just_pressed("ui_second_action"):
-			push()
+		if ev is InputEventScreenDrag:
+			set_swipe(ev.relative)
+		elif ev is InputEventScreenTouch:
+			if not ev.pressed:
+				end_detection()
+		else:
+			if Input.is_action_just_pressed("ui_accept"):
+				rpc("drop", get_tree().get_network_unique_id())
+			if Input.is_action_just_pressed("ui_second_action"):
+				push()
 
 sync func drop(id):
 	if get_network_master() != id:
@@ -220,3 +254,14 @@ func affect():
 	timerEffect.connect("timeout", self, "removeEffect")
 	add_child(timerEffect)
 	timerEffect.start(EFFECT_DURATION)
+
+func announce_push():
+	if self.finished:
+		return
+	if is_network_master():
+		push()
+
+func announce_drop():
+	if self.finished:
+		return
+	rpc("drop", get_tree().get_network_unique_id())

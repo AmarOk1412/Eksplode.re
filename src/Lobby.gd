@@ -85,6 +85,8 @@ func _on_JoinRoom_pressed():
 		gamestate.join_game(self.player_name, address[0])
 
 func _input(ev):
+	if not self.is_visible_in_tree():
+		return
 	if len(gamestate.players) == 0:
 		return
 	if get_tree().get_network_unique_id() == 0:
@@ -94,6 +96,8 @@ func _input(ev):
 	if Input.is_action_just_pressed("ui_left"):
 		idx = (idx - 1 + len(self.possibleTypes)) % len(self.possibleTypes)
 	elif Input.is_action_just_pressed("ui_right"):
+		idx = (idx + 1 + len(self.possibleTypes)) % len(self.possibleTypes)
+	elif ev is InputEventScreenTouch and ev.pressed:
 		idx = (idx + 1 + len(self.possibleTypes)) % len(self.possibleTypes)
 	rpc("change_character", get_tree().get_network_unique_id(), self.possibleTypes[idx])
 
