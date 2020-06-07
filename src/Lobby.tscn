@@ -125,7 +125,7 @@ texture_normal = ExtResource( 5 )
 position = Vector2( 150, 70 )
 scale = Vector2( 0.33, 0.33 )
 frames = SubResource( 3 )
-frame = 10
+frame = 5
 playing = true
 
 [node name="Settings" type="Panel" parent="."]
@@ -315,19 +315,19 @@ custom_colors/font_color = Color( 1, 1, 1, 1 )
 text = "PREVIEW"
 
 [node name="Github" type="TextureButton" parent="."]
-margin_left = 970.0
-margin_top = 520.0
-margin_right = 1170.0
-margin_bottom = 720.0
-rect_scale = Vector2( 0.25, 0.25 )
+margin_left = 990.0
+margin_top = 550.0
+margin_right = 1190.0
+margin_bottom = 750.0
+rect_scale = Vector2( 0.1, 0.1 )
 texture_normal = ExtResource( 30 )
 
 [node name="Credits" type="TextureButton" parent="."]
-margin_left = 920.0
-margin_top = 520.0
-margin_right = 1120.0
-margin_bottom = 720.0
-rect_scale = Vector2( 0.25, 0.25 )
+margin_left = 960.0
+margin_top = 550.0
+margin_right = 1160.0
+margin_bottom = 750.0
+rect_scale = Vector2( 0.1, 0.1 )
 texture_normal = ExtResource( 31 )
 [connection signal="pressed" from="MainScreen/Host" to="." method="_on_Host_pressed"]
 [connection signal="pressed" from="MainScreen/Join" to="." method="_on_Join_pressed"]
