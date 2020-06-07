@@ -69,6 +69,8 @@ func on_player_entered(body):
 		elif type == 2:
 			body.bombs += 1
 		elif type == 3:
+			if body.get_network_master() == get_tree().get_network_unique_id() and OS.get_name() == "Android":
+				get_tree().get_root().get_node("Game").get_node("PushButton").show()
 			body.pushBombs = true
 		elif type == 4:
 			body.speed += 100

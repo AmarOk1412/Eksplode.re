@@ -94,6 +94,9 @@ func check_winner():
 func _ready():
 	$GameTrack.play()
 	$NodeWinningLabel.hide()
+	$PushButton.hide()
+	if OS.get_name() != "Android":
+		$DropButton.hide()
 
 func start_track(track):
 	$GameTrack.stop()
@@ -104,3 +107,13 @@ func start_track(track):
 func _on_LeaveButton_pressed():
 	get_tree().get_root().get_node("Lobby").show_lobby()
 	queue_free()
+
+func _on_DropButton_pressed():
+	for player in get_tree().get_nodes_in_group("Player"):
+		if get_tree().get_network_unique_id() == player.get_network_master():
+			player.announce_drop()
+
+func _on_PushButton_pressed():
+	for player in get_tree().get_nodes_in_group("Player"):
+		if get_tree().get_network_unique_id() == player.get_network_master():
+			player.announce_push()
