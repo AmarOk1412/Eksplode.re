@@ -1,4 +1,4 @@
-[gd_scene load_steps=41 format=2]
+[gd_scene load_steps=43 format=2]
 
 [ext_resource path="res://src/Lobby.gd" type="Script" id=1]
 [ext_resource path="res://Media/Sprites/Lobby/newgame.png" type="Texture" id=2]
@@ -29,6 +29,8 @@
 [ext_resource path="res://Media/Sprites/Lobby/bg.png" type="Texture" id=27]
 [ext_resource path="res://Media/Sounds/One Man Symphony - Royalty Free Soundtrack Collection - 27 Vertical Cities.wav" type="AudioStream" id=28]
 [ext_resource path="res://Media/Fonts/FiraSans-Ultra.otf" type="DynamicFontData" id=29]
+[ext_resource path="res://Media/Sprites/Lobby/github.png" type="Texture" id=30]
+[ext_resource path="res://Media/Sprites/Lobby/credits.png" type="Texture" id=31]
 
 [sub_resource type="StyleBoxFlat" id=1]
 bg_color = Color( 1, 1, 1, 1 )
@@ -123,7 +125,7 @@ texture_normal = ExtResource( 5 )
 position = Vector2( 150, 70 )
 scale = Vector2( 0.33, 0.33 )
 frames = SubResource( 3 )
-frame = 3
+frame = 10
 playing = true
 
 [node name="Settings" type="Panel" parent="."]
@@ -311,6 +313,22 @@ margin_bottom = 48.2729
 custom_fonts/font = SubResource( 11 )
 custom_colors/font_color = Color( 1, 1, 1, 1 )
 text = "PREVIEW"
+
+[node name="Github" type="TextureButton" parent="."]
+margin_left = 970.0
+margin_top = 520.0
+margin_right = 1170.0
+margin_bottom = 720.0
+rect_scale = Vector2( 0.25, 0.25 )
+texture_normal = ExtResource( 30 )
+
+[node name="Credits" type="TextureButton" parent="."]
+margin_left = 920.0
+margin_top = 520.0
+margin_right = 1120.0
+margin_bottom = 720.0
+rect_scale = Vector2( 0.25, 0.25 )
+texture_normal = ExtResource( 31 )
 [connection signal="pressed" from="MainScreen/Host" to="." method="_on_Host_pressed"]
 [connection signal="pressed" from="MainScreen/Join" to="." method="_on_Join_pressed"]
 [connection signal="pressed" from="MainScreen/Settings" to="." method="_on_Settings_pressed"]
@@ -321,3 +339,5 @@ text = "PREVIEW"
 [connection signal="pressed" from="JoinPopup/JoinRoom" to="." method="_on_JoinRoom_pressed"]
 [connection signal="pressed" from="JoinPopup/Cancel" to="." method="_on_JoinCancel_pressed"]
 [connection signal="finished" from="LobbySound" to="." method="_on_LobbySound_finished"]
+[connection signal="pressed" from="Github" to="." method="_on_Github_pressed"]
+[connection signal="pressed" from="Credits" to="." method="_on_Credits_pressed"]
