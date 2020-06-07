@@ -174,3 +174,9 @@ func _on_Leave_pressed():
 func _on_LobbySound_finished():
 	if self.is_visible_in_tree():
 		$LobbySound.play()
+
+func _on_Github_pressed():
+	OS.shell_open("https://github.com/AmarOk1412/Eksplode.re")
+
+func _on_Credits_pressed():
+	OS.shell_open("https://github.com/AmarOk1412/Eksplode.re/blob/master/LICENSE.md")
