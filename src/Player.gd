@@ -1,3 +1,33 @@
+# BSD 3-Clause License
+#
+# Copyright (c) 2020, Sébastien Blin <sebastien.blin@enconn.fr>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# * Redistributions of source code must retain the above copyright notice, this
+#   list of conditions and the following disclaimer.
+#
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
+#   and/or other materials provided with the distribution.
+#
+# * Neither the name of the copyright holder nor the names of its
+#   contributors may be used to endorse or promote products derived from
+#   this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 extends KinematicBody2D
 onready var bombPacked = preload("res://src/Bomb.tscn")
 onready var bombScript = preload("res://src/Bomb.gd")
@@ -46,7 +76,7 @@ func _physics_process(delta):
 	# Get player input
 	var direction: Vector2
 	var motion: Vector2
-	
+
 	if is_network_master():
 		if currentEffect == Effect.Inverted:
 			direction.x = Input.get_action_strength("ui_left") - Input.get_action_strength("ui_right")
@@ -56,13 +86,13 @@ func _physics_process(delta):
 			direction.x = Input.get_action_strength("ui_right") - Input.get_action_strength("ui_left")
 			direction.y = Input.get_action_strength("ui_down") - Input.get_action_strength("ui_up")
 			anim.flip_h = Input.is_action_pressed("ui_left") || lastDir == Direction.Left
-		
+
 		if currentEffect == Effect.Flu:
 			rpc("drop", self)
 		# If input is digital, normalize it for diagonal movement
 		if abs(direction.x) == 1 and abs(direction.y) == 1:
 			direction = direction.normalized()
-		
+
 		# Apply movement
 		var playerSpeed = speed
 		if currentEffect == Effect.Slow:
@@ -75,7 +105,7 @@ func _physics_process(delta):
 	else:
 		position = puppet_pos
 		motion = puppet_motion
-	
+
 	if motion.y > 0:
 		lastDir = Direction.Down
 		anim.play(type + "Down")
