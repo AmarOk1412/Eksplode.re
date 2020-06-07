@@ -203,8 +203,14 @@ func explode():
 	for collider in final_colliders: # Loop through all the colliders.
 		if collider.is_in_group("Box"):
 			tiles.append(tileMap.world_to_map(collider.position) + Vector2(0, -1))
-		if collider.is_in_group("Destroyable"):
-			collider.explode()
+		if is_network_master():
+			# Handle explosions server side
+			if collider.is_in_group("Player"):
+				gamestate.master_explode_player(collider.get_network_master())
+			elif collider.is_in_group("Box") && collider.is_in_group("Destroyable"):
+				gamestate.master_explode_box(collider.position)
+			elif collider.is_in_group("Item"):
+				gamestate.master_explode_item(collider.position)
 
 	var currentPos = tileMap.world_to_map(self.position)
 	for d in range(0, 4):
