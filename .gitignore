@@ -1,4 +1,9 @@
 bin
+*.x86_64
+*.pck
+.DirIcon
+packaging/AppDir/icon.png
+*.AppImage
 
 # Godot-specific ignores
 .import/
