@@ -170,8 +170,8 @@ remote func spawn_final_box(boxPos):
 	var boxTile = tileMap.world_to_map(boxPos)
 	for player in get_tree().get_nodes_in_group("Player"):
 		var playerPos = tileMap.world_to_map(player.get_position())
-		if playerPos == boxTile:
-			player.explode()
+		if playerPos == boxTile && is_network_master():
+			master_explode_player(player.get_network_master())
 	for box in get_tree().get_nodes_in_group("Box"):
 		var mapBoxPos = tileMap.world_to_map(box.get_position() + Vector2(prefs.CELL_SIZE/2, prefs.CELL_SIZE))
 		if mapBoxPos == boxTile + Vector2(1, 2):
@@ -181,6 +181,38 @@ remote func spawn_final_box(boxPos):
 			false,
 			pos
 		])
+
+func master_explode_player(master_id):
+	for p in players:
+		rpc_id(p, "explode_player", master_id)
+	self.explode_player(master_id)
+
+func master_explode_box(pos):
+	for p in players:
+		rpc_id(p, "explode_box", pos)
+	self.explode_box(pos)
+	
+func master_explode_item(pos):
+	for p in players:
+		rpc_id(p, "explode_item", pos)
+	self.explode_item(pos)
+
+remote func explode_player(master_id):
+	for player in get_tree().get_nodes_in_group("Player"):
+		if master_id == player.get_network_master():
+			player.explode()
+
+remote func explode_box(position):
+	for box in get_tree().get_nodes_in_group("Box"):
+		if position == box.position:
+			box.explode()
+			break
+
+remote func explode_item(position):
+	for item in get_tree().get_nodes_in_group("Item"):
+		if position == item.position:
+			item.explode()
+			break
 
 func spawn_end_box():
 	var width = prefs.END_X - prefs.START_X
