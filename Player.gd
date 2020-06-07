@@ -155,7 +155,7 @@ sync func drop(id):
 	if self.currentEffect == Effect.SmallBomb:
 		finalRadius = 1
 	bomb.setRadius(finalRadius)
-	root.add_child(bomb)
+	tileMap.add_child(bomb)
 
 func _ready():
 	anim.play(type + "Base")
