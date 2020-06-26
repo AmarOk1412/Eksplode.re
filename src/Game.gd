@@ -38,6 +38,11 @@ var boxTexture = preload("res://Media/Sprites/Box/box.png")
 var itemPacked = preload("res://src/Item.tscn")
 var itemScript = preload("res://src/Item.gd")
 
+func _input(ev):
+	if (Input.is_action_just_released("ui_accept") or Input.is_action_just_released("ui_second_action")) \
+		and $NodeWinningLabel/LeaveButton.is_visible_in_tree():
+			_on_LeaveButton_pressed()
+
 func spawn_player(masterId, data):
 	var pos = data[0]
 	var type = data[1]

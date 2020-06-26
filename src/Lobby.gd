@@ -87,9 +87,27 @@ func _on_JoinRoom_pressed():
 func _input(ev):
 	if not self.is_visible_in_tree():
 		return
-	if len(gamestate.players) == 0:
-		return
-	if get_tree().get_network_unique_id() == 0:
+
+	if Input.is_action_just_released("ui_accept"):
+		if $JoinPopup.is_visible_in_tree():
+			_on_Join_pressed()
+		elif $RoomLobby/Start.is_visible_in_tree():
+			_on_Start_pressed()
+		elif $Settings/Apply.is_visible_in_tree():
+			_on_Apply_pressed()
+		elif $MainScreen.is_visible_in_tree():
+			_on_Host_pressed()
+	elif Input.is_action_just_released("ui_second_action"):
+		if $JoinPopup.is_visible_in_tree():
+			_on_JoinCancel_pressed()
+		elif $RoomLobby/Leave.is_visible_in_tree():
+			_on_Leave_pressed()
+		elif $Settings/Apply.is_visible_in_tree():
+			_on_Apply_pressed()
+		elif $MainScreen.is_visible_in_tree():
+			_on_Quit_pressed()
+
+	if len(gamestate.players) == 0 or get_tree().get_network_unique_id() == 0:
 		return
 	var current_style = gamestate.players[get_tree().get_network_unique_id()][1]
 	var idx = self.possibleTypes.find(current_style)
