@@ -14,6 +14,7 @@ name = "bomberust-cli"
 path = "src/main.rs"
 
 [dependencies]
+bomberust-bots = { path = "../bots" }
 bomberust-core = { path = "../core" }
 ratatui = "0.29"
 

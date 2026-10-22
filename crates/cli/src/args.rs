@@ -7,12 +7,13 @@ Usage: bomberust-cli [OPTIONS]
 
 Options:
   --players <N>   number of local human players, 0-4 (default 1)
-  --bots <N>      number of bots, 0-4 (default 0)
+  --bots <N>      number of bots, 0-4 (default: fill up to 4 participants)
   --seed <U64>    RNG seed (default: from the system time)
+  --lobby         choose the slots on a lobby screen before the game starts
   -h, --help      show this help
   -V, --version   show the version
 
-players + bots must be between 1 and 4.
+players + bots must be between 1 and 4 (0 is fine with --lobby).
 Keys: P1 arrows+Space, P2 WASD+E, P3 IJKL+O, P4 TFGH+Y; q quit, p pause, r rematch.";
 
 /// Options of a local match.
@@ -21,16 +22,8 @@ pub struct LocalOptions {
     pub players: u8,
     pub bots: u8,
     pub seed: Option<u64>,
-}
-
-impl Default for LocalOptions {
-    fn default() -> Self {
-        Self {
-            players: 1,
-            bots: 0,
-            seed: None,
-        }
-    }
+    /// Show the lobby screen first.
+    pub lobby: bool,
 }
 
 /// What the user asked the program to do.
@@ -73,19 +66,23 @@ pub fn parse<I>(args: I) -> Result<Command, UsageError>
 where
     I: IntoIterator<Item = String>,
 {
-    let mut opts = LocalOptions::default();
+    let mut players = 1;
+    let mut bots = None;
+    let mut seed = None;
+    let mut lobby = false;
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
             "-V" | "--version" => return Ok(Command::Version),
-            "--players" => opts.players = count(&arg, it.next())?,
-            "--bots" => opts.bots = count(&arg, it.next())?,
+            "--players" => players = count(&arg, it.next())?,
+            "--bots" => bots = Some(count(&arg, it.next())?),
+            "--lobby" => lobby = true,
             "--seed" => {
                 let v = it
                     .next()
                     .ok_or_else(|| UsageError::MissingValue(arg.clone()))?;
-                opts.seed = Some(v.parse().map_err(|_| UsageError::InvalidValue {
+                seed = Some(v.parse().map_err(|_| UsageError::InvalidValue {
                     option: arg.clone(),
                     value: v,
                 })?);
@@ -93,14 +90,18 @@ where
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }
-    let total = u16::from(opts.players) + u16::from(opts.bots);
-    if !(1..=4).contains(&total) {
-        return Err(UsageError::BadParticipants {
-            players: opts.players,
-            bots: opts.bots,
-        });
+    let bots = bots.unwrap_or(4 - players);
+    let total = u16::from(players) + u16::from(bots);
+    let min = if lobby { 0 } else { 1 };
+    if !(min..=4).contains(&total) {
+        return Err(UsageError::BadParticipants { players, bots });
     }
-    Ok(Command::Run(opts))
+    Ok(Command::Run(LocalOptions {
+        players,
+        bots,
+        seed,
+        lobby,
+    }))
 }
 
 fn count(option: &str, value: Option<String>) -> Result<u8, UsageError> {

@@ -13,13 +13,27 @@ cargo test --workspace
 ## Play in the terminal
 
 ```sh
-cargo run -p bomberust-cli -- --players 1 --seed 42
+cargo run -p bomberust-cli -- --players 1 --bots 3 --seed 42
+cargo run -p bomberust-cli -- --lobby
 cargo run -p bomberust-cli -- --help
 ```
 
 The terminal must be at least 40x20. Options: `--players N` (local humans, 0-4, default 1),
-`--bots N` (0-4, default 0), `--seed N`. `players + bots` must be 1 to 4; wrong usage exits with
-code 2.
+`--bots N` (0-4, default: fill up to 4 participants), `--seed N`, `--lobby` (pick the slots on a
+lobby screen first: Up/Down select, `h` human, `b` bot, Enter start). `players + bots` must be 1
+to 4; wrong usage exits with code 2.
+
+## Bots
+
+Bots take any slot that is not a human. They see exactly what a human sees (the public
+observation) and act through the same input type. A bot flees fire (including chain reactions),
+picks up power-ups, hunts opponents and digs through blocks, and only drops a bomb when it has a
+way to escape. Check them with:
+
+```sh
+cargo test -p bomberust-bots
+cargo test -p bomberust-bots --test soak -- --nocapture   # 100 four-bot matches + escape rate
+```
 
 Controls (up to four players share one keyboard; the terminal reports no key releases, so a
 direction key moves one tile per tap and keeps moving while the key repeats):

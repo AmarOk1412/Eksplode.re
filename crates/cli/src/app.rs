@@ -1,30 +1,36 @@
-//! Local game session and the terminal event loop.
+//! Local game session and the terminal event loops.
 
 use std::fmt;
 use std::io;
 use std::time::{Duration, Instant};
 
-use bomberust_core::{Config, CoreError, Event, GameState, Phase, MAX_PLAYERS};
+use bomberust_bots::{Bot, DefaultBot};
+use bomberust_core::{
+    Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase, PlayerId,
+    MAX_PLAYERS,
+};
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind};
+use ratatui::DefaultTerminal;
 
 use crate::args::LocalOptions;
 use crate::input::{map_key, InputState, KeyAction};
+use crate::lobby::{self, LobbyScreen};
 use crate::view::{self, ViewContext};
 
 /// Errors that end the program with exit code 1.
 #[derive(Debug)]
 pub enum AppError {
     Core(CoreError),
+    Lobby(LobbyError),
     Io(io::Error),
-    Unsupported(&'static str),
 }
 
 impl fmt::Display for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             AppError::Core(e) => write!(f, "{e}"),
+            AppError::Lobby(e) => write!(f, "{e}"),
             AppError::Io(e) => write!(f, "terminal error: {e}"),
-            AppError::Unsupported(m) => write!(f, "{m}"),
         }
     }
 }
@@ -37,18 +43,25 @@ impl From<CoreError> for AppError {
     }
 }
 
+impl From<LobbyError> for AppError {
+    fn from(e: LobbyError) -> Self {
+        AppError::Lobby(e)
+    }
+}
+
 impl From<io::Error> for AppError {
     fn from(e: io::Error) -> Self {
         AppError::Io(e)
     }
 }
 
-/// A local match: the game state plus everything between keyboard and simulation.
+/// A local match: the game state plus everything between keyboard, bots and simulation.
 pub struct Session {
     config: Config,
     seed: u64,
+    controllers: [Controller; MAX_PLAYERS],
     active: [bool; MAX_PLAYERS],
-    humans: usize,
+    bots: [Option<DefaultBot>; MAX_PLAYERS],
     pub state: GameState,
     input: InputState,
     pub paused: bool,
@@ -58,17 +71,23 @@ pub struct Session {
 impl Session {
     /// Humans take the first slots, bots the following ones.
     pub fn new(opts: &LocalOptions, seed: u64) -> Result<Session, CoreError> {
+        let lobby = Lobby::from_counts(opts.players, opts.bots)
+            .map_err(|e| CoreError::InvalidSlots(e.to_string()))?;
+        Self::from_lobby(&lobby, seed)
+    }
+
+    /// Starts a round with the slots chosen in `lobby`.
+    pub fn from_lobby(lobby: &Lobby, seed: u64) -> Result<Session, CoreError> {
         let config = Config::default();
-        let humans = usize::from(opts.players);
-        let total = humans + usize::from(opts.bots);
-        let active = [0, 1, 2, 3].map(|i| i < total);
-        let state = GameState::new(config.clone(), seed, active)?;
+        let state = GameState::new(config.clone(), seed, lobby.active())?;
+        let controllers = [0, 1, 2, 3].map(|i| lobby.slots[i].controller);
         Ok(Session {
             input: InputState::new(config.base_move_cooldown),
+            bots: make_bots(&controllers, seed),
+            active: lobby.active(),
             config,
             seed,
-            active,
-            humans,
+            controllers,
             state,
             paused: false,
             quit: false,
@@ -87,7 +106,9 @@ impl Session {
                 self.input.clear();
             }
             KeyAction::Rematch if matches!(self.state.phase, Phase::Ended(_)) => self.rematch(),
-            KeyAction::Player { slot, action } if slot < self.humans && !self.paused => {
+            KeyAction::Player { slot, action }
+                if self.controllers[slot] == Controller::Local && !self.paused =>
+            {
                 self.input.press(slot, action);
             }
             _ => {}
@@ -99,20 +120,23 @@ impl Session {
         if self.paused {
             return Vec::new();
         }
-        let inputs = self.input.take();
+        let mut inputs = self.input.take();
+        let ids = PlayerId::all();
+        for (i, bot) in self.bots.iter_mut().enumerate() {
+            if let Some(bot) = bot {
+                inputs[i] = bot.decide(&self.state.observe(ids[i]));
+            }
+        }
         bomberust_core::step(&mut self.state, &inputs)
     }
 
     /// Slot descriptions for the status lines.
     pub fn context(&self) -> ViewContext {
-        let tags = [0, 1, 2, 3].map(|i| {
-            if !self.active[i] {
-                None
-            } else if i < self.humans {
-                Some("human".to_string())
-            } else {
-                Some("bot".to_string())
-            }
+        let tags = [0, 1, 2, 3].map(|i| match self.controllers[i] {
+            Controller::Local => Some("human".to_string()),
+            Controller::Remote => Some("remote".to_string()),
+            Controller::Bot => Some("bot".to_string()),
+            Controller::Empty => None,
         });
         ViewContext {
             paused: self.paused,
@@ -124,9 +148,20 @@ impl Session {
         self.seed = self.seed.wrapping_add(1);
         if let Ok(state) = GameState::new(self.config.clone(), self.seed, self.active) {
             self.state = state;
+            self.bots = make_bots(&self.controllers, self.seed);
             self.input.clear();
         }
     }
+}
+
+fn make_bots(
+    controllers: &[Controller; MAX_PLAYERS],
+    seed: u64,
+) -> [Option<DefaultBot>; MAX_PLAYERS] {
+    [0, 1, 2, 3].map(|i| {
+        (controllers[i] == Controller::Bot)
+            .then(|| DefaultBot::new(seed.wrapping_mul(4).wrapping_add(i as u64)))
+    })
 }
 
 /// Restores the terminal when dropped, also on early returns and panics.
@@ -140,15 +175,34 @@ impl Drop for TerminalGuard {
 
 /// Runs a local match in the terminal until the player quits.
 pub fn run(opts: &LocalOptions, seed: u64) -> Result<(), AppError> {
-    if opts.bots > 0 {
-        return Err(AppError::Unsupported(
-            "bots are not available in this build yet",
-        ));
-    }
-    let mut session = Session::new(opts, seed)?;
+    let mut lobby = Lobby::from_counts(opts.players, opts.bots)?;
     let mut terminal = ratatui::try_init()?;
     let _guard = TerminalGuard;
 
+    if opts.lobby {
+        match lobby_loop(&mut terminal, lobby)? {
+            Some(chosen) => lobby = chosen,
+            None => return Ok(()),
+        }
+    }
+    game_loop(&mut terminal, Session::from_lobby(&lobby, seed)?)
+}
+
+/// Returns the chosen lobby, or `None` when the user quit.
+fn lobby_loop(terminal: &mut DefaultTerminal, lobby: Lobby) -> Result<Option<Lobby>, AppError> {
+    let mut screen = LobbyScreen::new(lobby);
+    while !screen.start && !screen.quit {
+        terminal.draw(|f| lobby::render(f, &screen))?;
+        if let TermEvent::Key(key) = event::read()? {
+            if key.kind != KeyEventKind::Release {
+                screen.handle_key(key.code);
+            }
+        }
+    }
+    Ok(screen.start.then_some(screen.lobby))
+}
+
+fn game_loop(terminal: &mut DefaultTerminal, mut session: Session) -> Result<(), AppError> {
     let tick = Duration::from_secs(1) / session.config.tick_hz;
     let mut next = Instant::now() + tick;
     while !session.quit {

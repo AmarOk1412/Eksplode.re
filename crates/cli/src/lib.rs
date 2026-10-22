@@ -3,4 +3,5 @@
 pub mod app;
 pub mod args;
 pub mod input;
+pub mod lobby;
 pub mod view;

@@ -25,6 +25,7 @@ dependencies = [
 name = "bomberust-cli"
 version = "0.1.0"
 dependencies = [
+ "bomberust-bots",
  "bomberust-core",
  "ratatui",
 ]
