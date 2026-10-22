@@ -3,7 +3,7 @@
 pub const TILE_W: f32 = 64.0;
 pub const TILE_H: f32 = 32.0;
 /// Height in pixels of a wall box.
-pub const WALL_H: f32 = 32.0;
+pub const WALL_H: f32 = 22.0;
 /// Empty border around the arena in the canvas.
 pub const MARGIN: f32 = 16.0;
 

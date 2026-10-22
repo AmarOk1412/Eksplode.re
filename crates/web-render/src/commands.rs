@@ -134,7 +134,7 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item) {
             faces(out, view, f, [WALL_LEFT, WALL_RIGHT, WALL_TOP], layer);
         }
         Sprite::Block => {
-            let f = box_faces(cx, cy, 0.94, 0.0, 26.0);
+            let f = box_faces(cx, cy, 0.94, 0.0, 18.0);
             faces(out, view, f, [BLOCK_LEFT, BLOCK_RIGHT, BLOCK_TOP], layer);
         }
         Sprite::Flame => {
