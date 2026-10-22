@@ -97,7 +97,7 @@ long description to explain the feature
 on multiple lines
 ```
 
-Parts: `core`, `bots`, `net`, `cli`, `gui`, `build`, `docs`, `test`.
+Parts: `core`, `bots`, `net`, `cli`, `web`, `render`, `build`, `docs`, `test`.
 
 Before merging: `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
 `cargo test --workspace`.

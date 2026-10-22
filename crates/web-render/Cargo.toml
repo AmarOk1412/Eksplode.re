@@ -1,0 +1,23 @@
+[package]
+name = "bomberust-web-render"
+description = "Isometric graphics of Bomberust as a WebAssembly module (and a native library for tests)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "bomberust_web_render"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+bomberust-core = { path = "../core", features = ["serde"] }
+serde_json = "1"
+
+# ffi.rs opts out of the unsafe lint: see the module comment.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"

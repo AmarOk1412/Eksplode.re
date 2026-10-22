@@ -21,3 +21,12 @@ opt-level = 3
 
 [profile.dev.package.bomberust-bots]
 opt-level = 3
+
+# Small WebAssembly build of the render module, see scripts/build-wasm.sh.
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"
+lto = true
+panic = "abort"
+strip = true
+codegen-units = 1

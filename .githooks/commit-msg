@@ -7,9 +7,9 @@ case "$subject" in
     Merge\ *|Revert\ *|fixup!*|squash!*) exit 0 ;;
 esac
 
-if ! printf '%s\n' "$subject" | grep -Eq '^(core|bots|net|cli|gui|build|docs|test): .+'; then
+if ! printf '%s\n' "$subject" | grep -Eq '^(core|bots|net|cli|web|render|build|docs|test): .+'; then
     echo "commit-msg: subject must look like 'part: short desc'" >&2
-    echo "  parts: core, bots, net, cli, gui, build, docs, test" >&2
+    echo "  parts: core, bots, net, cli, web, render, build, docs, test" >&2
     exit 1
 fi
 

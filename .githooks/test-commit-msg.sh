@@ -19,6 +19,9 @@ check() {
 
 check ok "core: add rng"
 check ok "docs: update readme"
+check ok "web: add server"
+check ok "render: add cubes"
+check reject "gui: native window"
 check reject "feature: add rng"
 check reject "core add rng"
 check reject "core:missing space"
