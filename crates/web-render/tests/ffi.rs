@@ -1,0 +1,127 @@
+#![allow(unsafe_code, clippy::unwrap_used)]
+
+mod common;
+
+use bomberust_web_render::ffi::*;
+use common::*;
+
+fn load(bytes: &[u8]) -> i32 {
+    let size = bytes.len().max(1);
+    let ptr = bomberust_alloc(size);
+    assert!(!ptr.is_null());
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
+    let code = unsafe { bomberust_load(ptr, bytes.len()) };
+    unsafe { bomberust_free(ptr, size) };
+    code
+}
+
+fn fixture_json() -> Vec<u8> {
+    serde_json::to_vec(&obs(&standard())).unwrap()
+}
+
+#[test]
+fn allocation_limits() {
+    assert!(bomberust_alloc(0).is_null());
+    assert!(bomberust_alloc(2_000_000).is_null());
+    let p = bomberust_alloc(64);
+    assert!(!p.is_null());
+    unsafe {
+        for i in 0..64 {
+            p.add(i).write(i as u8);
+        }
+        bomberust_free(p, 64);
+    }
+    unsafe { bomberust_free(std::ptr::null_mut(), 10) };
+}
+
+#[test]
+fn the_stride_is_sixteen() {
+    assert_eq!(bomberust_stride(), 16);
+}
+
+#[test]
+fn nothing_is_drawn_before_a_load() {
+    assert_eq!(bomberust_frame(800.0, 600.0, 0.5), 0);
+}
+
+#[test]
+fn loading_the_fixture_works_and_frames_have_commands() {
+    assert_eq!(load(&fixture_json()), 0);
+    let n = bomberust_frame(800.0, 600.0, 1.0);
+    assert!(n > 100, "{n}");
+    let ptr = bomberust_output_ptr();
+    assert!(!ptr.is_null());
+    let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
+    assert_eq!(first[0], 0.0, "first command is a quad");
+    // calling again with the same arguments gives the same count
+    assert_eq!(bomberust_frame(800.0, 600.0, 1.0), n);
+}
+
+#[test]
+fn bad_input_gives_error_codes_not_panics() {
+    assert_eq!(load(&[0xff, 0xfe, 0xfd]), 1, "not UTF-8");
+    assert_eq!(load(b"{}"), 2);
+    assert_eq!(load(b"not json"), 2);
+    assert_eq!(load(b""), 2);
+
+    let mut big = serde_json::to_value(obs(&standard())).unwrap();
+    let tiles = big["arena"]["tiles"].as_array().unwrap().clone();
+    big["arena"]["width"] = serde_json::json!(65);
+    big["arena"]["height"] = serde_json::json!(65);
+    big["arena"]["tiles"] =
+        serde_json::Value::Array(tiles.iter().cycle().take(65 * 65).cloned().collect());
+    assert_eq!(
+        load(big.to_string().as_bytes()),
+        3,
+        "arena larger than 64x64"
+    );
+
+    let mut short = serde_json::to_value(obs(&standard())).unwrap();
+    short["arena"]["tiles"] = serde_json::json!(["Floor", "Wall"]);
+    assert_eq!(
+        load(short.to_string().as_bytes()),
+        2,
+        "tile list does not match the size"
+    );
+}
+
+#[test]
+fn random_bytes_never_panic() {
+    let mut x: u64 = 0x1234_5678_9abc_def0;
+    for len in 0..300usize {
+        let bytes: Vec<u8> = (0..len)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x & 0xff) as u8
+            })
+            .collect();
+        let code = load(&bytes);
+        assert!(code == 1 || code == 2, "len {len} gave {code}");
+    }
+}
+
+#[test]
+fn odd_frame_arguments_are_handled() {
+    assert_eq!(load(&fixture_json()), 0);
+    for (w, h, a) in [
+        (0.0, 0.0, 0.5),
+        (-5.0, 100.0, 0.5),
+        (f32::NAN, 100.0, 0.5),
+        (800.0, 600.0, f32::NAN),
+    ] {
+        let n = bomberust_frame(w, h, a);
+        assert!(n < 100_000);
+    }
+}
+
+#[test]
+fn picking_a_tile_finds_the_tile_under_a_point() {
+    assert_eq!(load(&fixture_json()), 0);
+    bomberust_frame(800.0, 600.0, 1.0);
+    // the centre of the arena is the centre of the canvas
+    let t = bomberust_pick_tile(400.0, 300.0);
+    assert!(t >= 0, "{t}");
+    assert_eq!(bomberust_pick_tile(-100.0, -100.0), -1);
+}

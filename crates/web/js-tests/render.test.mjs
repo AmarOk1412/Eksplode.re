@@ -1,0 +1,113 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { loadModule, fixtureText, commands, KIND, shaded, near } from "./wasm-helper.mjs";
+
+const CANVAS = [800, 600];
+
+test("exports the documented functions", async () => {
+  const { ex } = await loadModule();
+  for (const name of [
+    "memory",
+    "bomberust_alloc",
+    "bomberust_free",
+    "bomberust_load",
+    "bomberust_frame",
+    "bomberust_output_ptr",
+    "bomberust_stride",
+    "bomberust_pick_tile",
+  ]) {
+    assert.ok(name in ex, `missing export ${name}`);
+  }
+  assert.equal(ex.bomberust_stride(), 16);
+});
+
+test("us1_as3_four_distinct_coloured_cubes with badges", async () => {
+  const m = await loadModule();
+  assert.equal(m.loadJson(fixtureText()), 0);
+  const list = commands(m.frame(...CANVAS, 1));
+  const quads = list.filter((c) => c.kind === KIND.quad && c.color[3] === 1);
+  for (let slot = 0; slot < 4; slot += 1) {
+    for (const f of [1.0, 0.8, 0.6]) {
+      const n = quads.filter((c) => near(c.color.slice(0, 3), shaded(slot, f))).length;
+      assert.equal(n, 1, `slot ${slot} face ${f}`);
+    }
+  }
+  const badges = list.filter((c) => c.kind === KIND.text).map((c) => String.fromCharCode(c.text));
+  assert.deepEqual(badges.sort(), ["1", "2", "3", "4"]);
+});
+
+test("us1_as3_commands are ordered back to front", async () => {
+  const m = await loadModule();
+  assert.equal(m.loadJson(fixtureText()), 0);
+  const layers = commands(m.frame(...CANVAS, 1)).map((c) => c.layer);
+  for (let i = 1; i < layers.length; i += 1) {
+    assert.ok(layers[i - 1] <= layers[i], `command ${i} is out of order`);
+  }
+});
+
+test("the same input gives the same buffer", async () => {
+  const m = await loadModule();
+  assert.equal(m.loadJson(fixtureText()), 0);
+  const a = m.frame(...CANVAS, 0.5);
+  const b = m.frame(...CANVAS, 0.5);
+  assert.deepEqual(Array.from(a.data), Array.from(b.data));
+  assert.ok(a.count > 100);
+});
+
+test("nothing is drawn before a load and odd canvases are handled", async () => {
+  const m = await loadModule();
+  assert.equal(m.frame(800, 600, 0.5).count, 0);
+  assert.equal(m.loadJson(fixtureText()), 0);
+  assert.equal(m.frame(0, 0, 0.5).count, 0);
+  assert.equal(m.frame(NaN, 600, 0.5).count, 0);
+  assert.ok(m.frame(800, 600, NaN).count > 0);
+});
+
+test("load error codes", async () => {
+  const m = await loadModule();
+  assert.equal(m.loadJson(new Uint8Array([0xff, 0xfe, 0xfd])), 1);
+  assert.equal(m.loadJson("{}"), 2);
+  assert.equal(m.loadJson("not json"), 2);
+  assert.equal(m.loadJson(""), 2);
+
+  const big = JSON.parse(fixtureText());
+  big.arena.width = 65;
+  big.arena.height = 65;
+  big.arena.tiles = Array.from({ length: 65 * 65 }, () => "Floor");
+  assert.equal(m.loadJson(JSON.stringify(big)), 3);
+
+  const short = JSON.parse(fixtureText());
+  short.arena.tiles = ["Floor"];
+  assert.equal(m.loadJson(JSON.stringify(short)), 2);
+});
+
+test("allocation limits", async () => {
+  const { ex } = await loadModule();
+  assert.equal(ex.bomberust_alloc(0), 0);
+  assert.equal(ex.bomberust_alloc(2_000_000), 0);
+  const p = ex.bomberust_alloc(16);
+  assert.notEqual(p, 0);
+  ex.bomberust_free(p, 16);
+});
+
+test("random bytes never trap the module", async () => {
+  const m = await loadModule();
+  let x = 0x1234abcd;
+  for (let len = 0; len < 200; len += 1) {
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i += 1) {
+      x = (Math.imul(x, 1664525) + 1013904223) >>> 0;
+      bytes[i] = x >>> 24;
+    }
+    const code = m.loadJson(bytes);
+    assert.ok(code === 1 || code === 2, `len ${len} gave ${code}`);
+  }
+});
+
+test("a loaded game can be picked by canvas position", async () => {
+  const m = await loadModule();
+  assert.equal(m.loadJson(fixtureText()), 0);
+  m.frame(...CANVAS, 1);
+  assert.ok(m.ex.bomberust_pick_tile(400, 300) >= 0);
+  assert.equal(m.ex.bomberust_pick_tile(-50, -50), -1);
+});
