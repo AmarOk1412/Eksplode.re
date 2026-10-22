@@ -81,6 +81,11 @@ impl Arena {
         arena
     }
 
+    /// Does the tile list match the declared size? Deserialised data can be inconsistent.
+    pub fn is_valid(&self) -> bool {
+        self.tiles.len() == usize::from(self.width) * usize::from(self.height)
+    }
+
     pub fn width(&self) -> u8 {
         self.width
     }
