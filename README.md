@@ -2,13 +2,14 @@
 
 Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, and let browser and
 terminal players share the same match. The rules, the bots, the network protocol and the
-isometric view are all small, tested crates.
+pixel-art view are all small, tested crates.
 
 ## Features
 
 - Four players per match: any mix of people (terminal or browser) and bots.
-- **Web page** with an isometric 3D-style view: cubic players in four colours, walls, blocks,
-  bombs and flames drawn by a Rust module compiled to WebAssembly.
+- **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
+  grey pillars, red-brick blocks, bombs and flames, a round timer and character cards in the
+  lobby, all drawn by a Rust module compiled to WebAssembly.
 - **Terminal version** for local play on one keyboard, with a lobby screen.
 - **Network play:** an authoritative host, `join` by address, or a server that hosts the match
   and serves the web page.
@@ -134,7 +135,7 @@ connection that sends ten bad messages is closed. The details are in
 | `crates/net` | wire protocol, authoritative host, client |
 | `crates/cli` | the terminal game, `host` and `join` |
 | `crates/web` | `bomberust-server`, the HTTP and WebSocket server, and the page (`assets/`) |
-| `crates/web-render` | the isometric view, compiled to WebAssembly |
+| `crates/web-render` | the pixel-art view, compiled to WebAssembly |
 | `docs/` | the guides below |
 | `scripts/` | `build-wasm.sh`, `pty-enter-check.py`, `browser-smoke.mjs`, `check-scenarios.sh` |
 

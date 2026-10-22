@@ -99,8 +99,8 @@ When the page and the server share an origin (the normal case) there is nothing 
 |------|------|
 | [`index.html`](../crates/web/assets/index.html) | structure: join form, lobby list, canvas, HUD, notices; no inline script |
 | [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard tracking, DOM updates, and painting of the draw commands on the canvas |
-| [`style.css`](../crates/web/assets/style.css) | layout and the four player colours |
-| [`bomberust_render.wasm`](../crates/web/assets/bomberust_render.wasm) | the isometric view, built from `crates/web-render` |
+| [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
+| [`bomberust_render.wasm`](../crates/web/assets/bomberust_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
 
 The page never evaluates game rules. It sends the keys currently held as `Input` messages every
 50 ms and draws the `Snapshot`s it receives. Keys: arrows or WASD to move, Space or E for a bomb;
@@ -123,6 +123,7 @@ JSON) into its memory, asks for a frame and paints what comes back:
 | `bomberust_output_ptr() -> ptr` | where the commands are |
 | `bomberust_stride() -> 16` | floats per command |
 | `bomberust_pick_tile(x, y) -> index` | the tile under a canvas point, or `-1` |
+| `bomberust_portrait(slot, width, height, rows) -> count` | commands of one character for the lobby cards and the menu: the whole figure for `rows` 0, otherwise its first `rows` rows zoomed |
 
 A command is 16 `f32`: `[kind, r, g, b, a, x0, y0, x1, y1, x2, y2, x3, y3, size, text, layer]`
 with kind `0` quad, `1` circle, `2` one character of text, `3` triangle. Commands arrive sorted
@@ -157,6 +158,6 @@ artifact still builds.
 
 ```sh
 cargo test -p bomberust-web            # routes, origin policy, WebSocket, mixed matches, docs
-cargo test -p bomberust-web-render     # projection, depth order, cubes, commands, FFI
+cargo test -p bomberust-web-render     # view fitting, sprites, draw order, commands, FFI
 cd crates/web/js-tests && node --test  # helpers of app.js and the compiled wasm module
 ```

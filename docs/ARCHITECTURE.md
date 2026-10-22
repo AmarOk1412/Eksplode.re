@@ -25,7 +25,7 @@ where to change things.
 ```mermaid
 flowchart LR
   subgraph Browser
-    JS["app.js: lobby, keys, canvas"] <--> WASM["bomberust_render.wasm: isometric view"]
+    JS["app.js: lobby, keys, canvas"] <--> WASM["bomberust_render.wasm: pixel-art view"]
   end
   subgraph Server["bomberust-server (one process)"]
     HTTP["HTTP: page, app.js, wasm"] --- WS["WebSocket /ws + Origin check"]
@@ -49,7 +49,7 @@ flowchart LR
 | [`net`](#net) | `core`, `bots` | wire protocol, authoritative host, client |
 | [`cli`](#cli) | `core`, `bots`, `net`, `web` | terminal game, `host` and `join` |
 | [`web`](#web) | `core`, `net`, `bots` | HTTP and WebSocket server, `bomberust-server` |
-| [`web-render`](#web-render) | `core` | isometric view compiled to WebAssembly |
+| [`web-render`](#web-render) | `core` | pixel-art view compiled to WebAssembly |
 
 ### `core`
 
@@ -123,9 +123,10 @@ The page itself is in `crates/web/assets`; see [WEB.md](WEB.md).
 ### `web-render`
 
 [`crates/web-render`](../crates/web-render) holds every graphics decision as safe, natively
-testable Rust: `iso` (tile to screen projection), `depth` (painter's-algorithm order), `cube`
-(three-face boxes and brightness), `interp` (smooth motion between ticks), `commands` (the flat
-draw list). Only `ffi.rs` uses `unsafe` (allocate, free, expose the buffer) so the module can
+testable Rust: `view` (fitting the board to the canvas on whole pixels), `sprites` (pixel-art
+characters, bomb and colour palette), `depth` (draw order: layer, then row), `interp` (smooth
+motion between ticks), `commands` (the flat draw list and the character portraits). Only
+`ffi.rs` uses `unsafe` (allocate, free, expose the buffer) so the module can
 exchange memory with JavaScript without generated glue. It compiles to
 `bomberust_render.wasm`, which is committed so that nobody needs a WebAssembly toolchain to play.
 
@@ -169,7 +170,7 @@ it. With the headless server nobody sits at the host, so the first person to joi
 | `crates/net/tests` | codec, lobby rules, loopback matches, latency and agreement on the result |
 | `crates/cli/tests` | arguments, key mapping, lobby, online sessions, join errors, a real pseudo-terminal check of Enter |
 | `crates/web/tests` | routes and headers, origin policy, WebSocket flows, mixed browser and terminal matches, shutdown, documentation |
-| `crates/web-render/tests` | projection, depth order, cubes, interpolation, commands, the FFI |
+| `crates/web-render/tests` | view fitting, sprites, draw order, commands, portraits, interpolation, the FFI |
 | `crates/web/js-tests` | `node --test`: helpers of `app.js` and the compiled wasm module |
 | `scripts/browser-smoke.mjs` | a real headless browser joins, starts and plays |
 

@@ -87,7 +87,7 @@ crates/bots         computer players
 crates/net          protocol, host, client
 crates/cli          terminal front end
 crates/web          server, page (assets/), JS tests (js-tests/)
-crates/web-render   isometric view compiled to WebAssembly
+crates/web-render   pixel-art view compiled to WebAssembly
 ```
 
 ## How to add things
