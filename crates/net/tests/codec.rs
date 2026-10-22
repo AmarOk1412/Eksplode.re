@@ -38,6 +38,9 @@ fn every_client_message_round_trips() {
         mv: None,
         bomb: false,
     });
+    roundtrip(ClientMsg::Start);
+    roundtrip(ClientMsg::AddBot);
+    roundtrip(ClientMsg::RemoveBot);
     roundtrip(ClientMsg::Leave);
     roundtrip(ClientMsg::Ping { nonce: 99 });
 }
@@ -161,4 +164,22 @@ fn names_are_one_to_sixteen_printable_characters() {
     assert!(!valid_name(&"x".repeat(17)));
     assert!(!valid_name("bad\nname"));
     assert!(!valid_name("tab\tname"));
+}
+
+#[test]
+fn owner_commands_use_plain_tagged_json() {
+    for (msg, text) in [
+        (ClientMsg::Start, "{\"type\":\"Start\"}\n"),
+        (ClientMsg::AddBot, "{\"type\":\"AddBot\"}\n"),
+        (ClientMsg::RemoveBot, "{\"type\":\"RemoveBot\"}\n"),
+    ] {
+        assert_eq!(std::str::from_utf8(&encode(&msg).unwrap()).unwrap(), text);
+    }
+}
+
+#[test]
+fn refusal_codes_round_trip_as_errors() {
+    for code in ["NotOwner", "CannotStart", "WrongPhase", "NoSlot"] {
+        roundtrip(ServerMsg::error(code, "why"));
+    }
 }

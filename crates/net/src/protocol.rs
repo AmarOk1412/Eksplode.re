@@ -30,6 +30,12 @@ pub enum ClientMsg {
     Ping {
         nonce: u64,
     },
+    /// Lobby owner only: start the match.
+    Start,
+    /// Lobby owner only: put a bot into the first free slot.
+    AddBot,
+    /// Lobby owner only: free the highest bot slot.
+    RemoveBot,
 }
 
 /// Why a join was refused.

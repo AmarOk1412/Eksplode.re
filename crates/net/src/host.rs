@@ -112,20 +112,18 @@ impl Host {
         self.addr
     }
 
-    /// An in-process client for the person running the host; it takes a `Local` slot.
-    pub fn local_client(&self, name: &str) -> Result<Client, NetError> {
+    /// An in-process connection that has not joined yet: the caller sends `Join` itself.
+    ///
+    /// `local` marks the connection as the person running the host (slot controller `Local`).
+    pub fn connect(&self, local: bool) -> Result<Client, NetError> {
         let id = self.next_id.fetch_add(1, Ordering::SeqCst);
         let (stx, srx) = mpsc::channel();
         self.tx
-            .send(Ev::New {
-                id,
-                tx: stx,
-                local: true,
-            })
+            .send(Ev::New { id, tx: stx, local })
             .map_err(|_| NetError::Closed)?;
         let to_host = self.tx.clone();
         let on_drop = self.tx.clone();
-        let client = Client::from_parts(
+        Ok(Client::from_parts(
             Box::new(move |msg| {
                 to_host
                     .send(Ev::Msg { id, msg })
@@ -135,7 +133,12 @@ impl Host {
             Box::new(move || {
                 let _ = on_drop.send(Ev::Gone { id });
             }),
-        );
+        ))
+    }
+
+    /// An in-process client for the person running the host; it takes a `Local` slot.
+    pub fn local_client(&self, name: &str) -> Result<Client, NetError> {
+        let client = self.connect(true)?;
         client.send(ClientMsg::Join {
             version: PROTOCOL_VERSION,
             name: name.to_string(),
@@ -243,6 +246,13 @@ fn spawn_connection(stream: TcpStream, id: u64, events: &Sender<Ev>) -> Result<(
         let _ = events.send(Ev::Gone { id });
     });
     Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum OwnerCommand {
+    Start,
+    AddBot,
+    RemoveBot,
 }
 
 struct Conn {
@@ -363,6 +373,48 @@ impl Server {
             ClientMsg::Leave => self.remove(id),
             ClientMsg::SetReady { ready } => self.set_ready(id, ready),
             ClientMsg::Input { tick, mv, bomb } => self.input(id, tick, PlayerInput { mv, bomb }),
+            ClientMsg::Start => self.owner_command(id, OwnerCommand::Start),
+            ClientMsg::AddBot => self.owner_command(id, OwnerCommand::AddBot),
+            ClientMsg::RemoveBot => self.owner_command(id, OwnerCommand::RemoveBot),
+        }
+    }
+
+    /// Lobby commands that only the owner (lowest human slot) may give; every refusal is
+    /// answered with an `Error` so the user always sees why nothing happened.
+    fn owner_command(&mut self, id: u64, command: OwnerCommand) {
+        let Some(slot) = self.conns.get(&id).and_then(|c| c.slot) else {
+            return;
+        };
+        match self.lobby.owner() {
+            Some(owner) if owner == slot => {}
+            Some(owner) => {
+                let what = match command {
+                    OwnerCommand::Start => "start the match",
+                    OwnerCommand::AddBot | OwnerCommand::RemoveBot => "change the bots",
+                };
+                let message = format!("Only {} can {what}", self.lobby.slots[owner].name);
+                return self.error(id, "NotOwner", &message);
+            }
+            None => return,
+        }
+        match command {
+            OwnerCommand::Start if self.game.is_some() => {
+                self.error(id, "CannotStart", "a match is already running")
+            }
+            OwnerCommand::Start => self.start(),
+            _ if self.game.is_some() => {
+                self.error(id, "WrongPhase", "bots can only be changed in the lobby")
+            }
+            OwnerCommand::AddBot => match self.lobby.add_bot() {
+                Ok(_) => self.broadcast_lobby(),
+                Err(_) => self.error(id, "NoSlot", "all slots are taken"),
+            },
+            OwnerCommand::RemoveBot => {
+                if let Some(bot) = self.lobby.last_bot() {
+                    let _ = self.lobby.clear(bot);
+                    self.broadcast_lobby();
+                }
+            }
         }
     }
 

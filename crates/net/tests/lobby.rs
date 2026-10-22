@@ -191,3 +191,116 @@ fn ping_gets_a_pong_even_before_joining() {
     raw.send(&ClientMsg::Ping { nonce: 77 });
     assert_eq!(raw.recv(), Some(ServerMsg::Pong { nonce: 77 }));
 }
+
+fn error_code(raw: &mut Raw) -> Option<String> {
+    match raw.recv_until(|m| matches!(m, ServerMsg::Error { .. })) {
+        Some(ServerMsg::Error { code, .. }) => Some(code),
+        _ => None,
+    }
+}
+
+fn joined_raw(host: &bomberust_net::Host, name: &str) -> Raw {
+    let mut raw = Raw::connect(host.addr());
+    raw.send(&join_msg(name));
+    assert!(raw
+        .recv_until(|m| matches!(m, ServerMsg::Welcome { .. }))
+        .is_some());
+    raw
+}
+
+#[test]
+fn the_owner_can_start_and_add_or_remove_bots() {
+    let host = host();
+    let mut owner = joined_raw(&host, "Ann");
+    owner.send(&ClientMsg::AddBot);
+    let lobby = owner.recv_until(
+        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Bot),
+    );
+    assert!(lobby.is_some());
+    owner.send(&ClientMsg::RemoveBot);
+    let lobby = owner.recv_until(
+        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Empty),
+    );
+    assert!(lobby.is_some());
+    owner.send(&ClientMsg::Start);
+    assert!(owner
+        .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
+        .is_some());
+}
+
+#[test]
+fn a_non_owner_gets_notowner_and_nothing_changes() {
+    let host = host();
+    let mut owner = joined_raw(&host, "Ann");
+    let mut other = joined_raw(&host, "Bob");
+    for msg in [ClientMsg::Start, ClientMsg::AddBot, ClientMsg::RemoveBot] {
+        other.send(&msg);
+        assert_eq!(
+            error_code(&mut other).as_deref(),
+            Some("NotOwner"),
+            "{msg:?}"
+        );
+    }
+    // the owner never saw a Start
+    owner.send(&ClientMsg::Ping { nonce: 1 });
+    let seen = owner.recv_until(|m| matches!(m, ServerMsg::Start { .. } | ServerMsg::Pong { .. }));
+    assert!(matches!(seen, Some(ServerMsg::Pong { .. })));
+}
+
+#[test]
+fn start_during_a_match_is_cannotstart_and_bot_commands_are_wrongphase() {
+    let host = host();
+    let mut owner = joined_raw(&host, "Ann");
+    owner.send(&ClientMsg::Start);
+    assert!(owner
+        .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
+        .is_some());
+    owner.send(&ClientMsg::Start);
+    assert_eq!(error_code(&mut owner).as_deref(), Some("CannotStart"));
+    owner.send(&ClientMsg::AddBot);
+    assert_eq!(error_code(&mut owner).as_deref(), Some("WrongPhase"));
+    owner.send(&ClientMsg::RemoveBot);
+    assert_eq!(error_code(&mut owner).as_deref(), Some("WrongPhase"));
+}
+
+#[test]
+fn adding_a_bot_to_a_full_lobby_is_noslot() {
+    let host = host();
+    let mut owner = joined_raw(&host, "Ann");
+    for _ in 0..3 {
+        owner.send(&ClientMsg::AddBot);
+    }
+    owner.send(&ClientMsg::AddBot);
+    assert_eq!(error_code(&mut owner).as_deref(), Some("NoSlot"));
+}
+
+#[test]
+fn ownership_moves_when_the_owner_leaves() {
+    let host = host();
+    let mut first = joined_raw(&host, "Ann");
+    let mut second = joined_raw(&host, "Bob");
+    second.send(&ClientMsg::Start);
+    assert_eq!(error_code(&mut second).as_deref(), Some("NotOwner"));
+    first.send(&ClientMsg::Leave);
+    // wait until the lobby shows slot 0 as empty
+    assert!(second
+        .recv_until(|m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[0].controller == Controller::Empty))
+        .is_some());
+    second.send(&ClientMsg::Start);
+    assert!(second
+        .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
+        .is_some());
+}
+
+#[test]
+fn an_in_process_connection_has_not_joined_until_it_says_so() {
+    let host = host();
+    let c = host.connect(false).unwrap();
+    c.send(ClientMsg::Start).unwrap();
+    let got = wait_for(&c, |m| matches!(m, ServerMsg::Error { .. }));
+    assert!(matches!(got, Some(ServerMsg::Error { code, .. }) if code == "NotJoined"));
+
+    let c = host.connect(false).unwrap();
+    c.send(join_msg("Ann")).unwrap();
+    assert_eq!(welcome_slot(&c), 0);
+}
