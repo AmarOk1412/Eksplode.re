@@ -44,19 +44,15 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
             }
             done[idx] = true;
             progressed = true;
-            let mut reached = BTreeSet::new();
-            cast(
-                &state.arena,
-                &state.bombs[idx],
-                &mut reached,
-                &mut destroyed,
-            );
+            let b = &state.bombs[idx];
+            let hit = blast(&state.arena, b.pos, b.range);
             for (j, other) in state.bombs.iter().enumerate() {
-                if reached.contains(&other.pos) {
+                if hit.tiles.contains(&other.pos) {
                     exploding[j] = true;
                 }
             }
-            tiles.extend(reached);
+            tiles.extend(hit.tiles);
+            destroyed.extend(hit.destroyed);
         }
         if !progressed {
             break;
@@ -114,27 +110,37 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
     }
 }
 
-/// Blast of one bomb: its own tile plus four rays that stop at walls and at the first block.
-fn cast(arena: &Arena, bomb: &Bomb, tiles: &mut BTreeSet<Pos>, destroyed: &mut BTreeSet<Pos>) {
-    tiles.insert(bomb.pos);
+/// The tiles a bomb burns and the blocks it destroys.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Blast {
+    pub tiles: BTreeSet<Pos>,
+    pub destroyed: BTreeSet<Pos>,
+}
+
+/// Blast of a bomb at `pos`: its own tile plus four rays that stop at walls and at the
+/// first block. Rays pass over other bombs, which then detonate too.
+pub fn blast(arena: &Arena, pos: Pos, range: u8) -> Blast {
+    let mut out = Blast::default();
+    out.tiles.insert(pos);
     for dir in Dir::ALL {
-        let mut cur = bomb.pos;
-        for _ in 0..bomb.range {
+        let mut cur = pos;
+        for _ in 0..range {
             let Some(next) = cur.step(dir, arena.width(), arena.height()) else {
                 break;
             };
             match arena.tile(next) {
                 Tile::Wall => break,
                 Tile::Block => {
-                    tiles.insert(next);
-                    destroyed.insert(next);
+                    out.tiles.insert(next);
+                    out.destroyed.insert(next);
                     break;
                 }
                 Tile::Floor => {
-                    tiles.insert(next);
+                    out.tiles.insert(next);
                     cur = next;
                 }
             }
         }
     }
+    out
 }
