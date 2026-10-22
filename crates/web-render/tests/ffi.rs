@@ -125,3 +125,23 @@ fn picking_a_tile_finds_the_tile_under_a_point() {
     assert!(t >= 0, "{t}");
     assert_eq!(bomberust_pick_tile(-100.0, -100.0), -1);
 }
+
+#[test]
+fn portraits_work_without_a_loaded_game() {
+    let n = bomberust_portrait(1, 160.0, 226.0, 8);
+    assert!(n > 10, "{n}");
+    let ptr = bomberust_output_ptr();
+    assert!(!ptr.is_null());
+    let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
+    assert_eq!(first[0], 0.0, "a portrait is made of quads");
+    assert!(
+        bomberust_portrait(0, 160.0, 226.0, 0) > n,
+        "the whole figure has more pixels"
+    );
+    assert_eq!(bomberust_portrait(0, 0.0, 10.0, 0), 0);
+    assert_eq!(bomberust_portrait(u32::MAX, f32::NAN, 10.0, u32::MAX), 0);
+    assert!(
+        bomberust_portrait(7, 50.0, 50.0, u32::MAX) > 0,
+        "slot and rows are clamped"
+    );
+}

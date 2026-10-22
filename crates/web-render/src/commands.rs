@@ -2,13 +2,14 @@
 
 use bomberust_core::{Observation, PowerUpKind};
 
-use crate::cube::{
-    badge_char, box_faces, player_color, shade, Faces, BLOCK_LEFT, BLOCK_RIGHT, BLOCK_TOP,
-    FACE_LEFT, FACE_RIGHT, FACE_TOP, FLOOR_A, FLOOR_B, WALL_LEFT, WALL_RIGHT, WALL_TOP,
-};
 use crate::depth::{draw_list, Item, Sprite};
 use crate::interp::Interp;
-use crate::iso::{fit, View, WALL_H};
+use crate::sprites::{
+    bomb_colour, hex, player_skin, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE, BRICK_LINE,
+    FLAME_CORE, FLAME_MID, FLAME_OUTER, PLAYER, WALL_BASE, WALL_SHADE, WALL_WINDOW,
+    WALL_WINDOW_EDGE, WHITE,
+};
+use crate::view::{fit, View, EDGE};
 
 /// What a command draws.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,10 +64,6 @@ pub fn flatten(list: &[Command]) -> Vec<f32> {
     list.iter().flat_map(Command::to_array).collect()
 }
 
-fn opaque(c: [f32; 3]) -> [f32; 4] {
-    [c[0], c[1], c[2], 1.0]
-}
-
 fn quad(color: [f32; 4], p: [(f32, f32); 4], layer: f32) -> Command {
     Command {
         kind: Kind::Quad,
@@ -91,118 +88,183 @@ fn text(color: [f32; 4], at: (f32, f32), size: f32, ch: char, layer: f32) -> Com
     }
 }
 
+fn solid(c: Rgb) -> [f32; 4] {
+    [c[0], c[1], c[2], 1.0]
+}
+
+/// Draws rectangles in tile coordinates of one frame.
+struct Pen<'a> {
+    view: &'a View,
+    out: &'a mut Vec<Command>,
+    layer: f32,
+}
+
+impl Pen<'_> {
+    fn rect(&mut self, c: Rgb, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let p = self.view.rect(x0, y0, x1, y1);
+        self.out.push(quad(solid(c), p, self.layer));
+    }
+
+    fn shadow(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let p = self.view.rect(x0, y0, x1, y1);
+        self.out.push(quad([0.0, 0.0, 0.0, 0.14], p, self.layer));
+    }
+
+    /// Pixels of a sprite: `ps` canvas pixels per sprite pixel, top-left at `(x, y)` in pixels.
+    fn sprite(&mut self, list: &[Run], ps: f32, x: f32, y: f32) {
+        for r in list {
+            let (x0, y0) = (x + r.col as f32 * ps, y + r.row as f32 * ps);
+            let p = [
+                (x0, y0),
+                (x0 + r.len as f32 * ps, y0),
+                (x0 + r.len as f32 * ps, y0 + ps),
+                (x0, y0 + ps),
+            ];
+            self.out.push(quad(solid(r.color), p, self.layer));
+        }
+    }
+}
+
 /// Builds the commands for one frame. `alpha` (0.0-1.0) is the progress between two ticks.
 pub fn build(obs: &Observation, interp: &Interp, alpha: f32, canvas: (f32, f32)) -> Vec<Command> {
-    let view = fit(obs.arena.width(), obs.arena.height(), canvas);
+    let (w, h) = (obs.arena.width(), obs.arena.height());
+    let view = fit(w, h, canvas);
     let phase = obs.tick as f32 + if alpha.is_finite() { alpha } else { 0.0 };
     let mut out = Vec::new();
+    let (wf, hf) = (f32::from(w), f32::from(h));
+    {
+        let mut pen = Pen {
+            view: &view,
+            out: &mut out,
+            layer: -1.0,
+        };
+        pen.rect(BOARD_EDGE, 0.0, hf, wf, hf + EDGE);
+        pen.rect(BOARD, 0.0, 0.0, wf, hf);
+    }
     for it in draw_list(obs, interp, alpha, phase) {
         emit(&mut out, &view, &it);
     }
     out
 }
 
-fn map_quad(view: &View, p: [(f32, f32); 4]) -> [(f32, f32); 4] {
-    [
-        view.apply(p[0]),
-        view.apply(p[1]),
-        view.apply(p[2]),
-        view.apply(p[3]),
-    ]
-}
-
-fn diamond(view: &View, c: (f32, f32), footprint: f32, z: f32) -> [(f32, f32); 4] {
-    map_quad(view, box_faces(c.0, c.1, footprint, z, 0.0).top)
-}
-
-fn faces(out: &mut Vec<Command>, view: &View, f: Faces, colors: [[f32; 3]; 3], layer: f32) {
-    out.push(quad(opaque(colors[0]), map_quad(view, f.left), layer));
-    out.push(quad(opaque(colors[1]), map_quad(view, f.right), layer));
-    out.push(quad(opaque(colors[2]), map_quad(view, f.top), layer));
-}
-
 fn emit(out: &mut Vec<Command>, view: &View, it: &Item) {
     let (cx, cy) = it.pos;
-    let layer = it.key();
+    let (tx, ty) = (cx - 0.5, cy - 0.5);
+    let mut pen = Pen {
+        view,
+        out,
+        layer: it.key(),
+    };
     match it.sprite {
-        Sprite::Floor { dark } => {
-            let c = if dark { FLOOR_B } else { FLOOR_A };
-            out.push(quad(opaque(c), diamond(view, it.pos, 1.0, 0.0), -1.0));
-        }
         Sprite::Wall => {
-            let f = box_faces(cx, cy, 1.0, 0.0, WALL_H);
-            faces(out, view, f, [WALL_LEFT, WALL_RIGHT, WALL_TOP], layer);
+            pen.rect(WALL_BASE, tx, ty, tx + 1.0, ty + 1.0);
+            pen.rect(WALL_SHADE, tx, ty + 0.88, tx + 1.0, ty + 1.0);
+            pen.rect(WALL_WINDOW_EDGE, tx + 0.30, ty + 0.56, tx + 0.70, ty + 0.60);
+            pen.rect(WALL_WINDOW, tx + 0.30, ty + 0.60, tx + 0.70, ty + 0.78);
         }
         Sprite::Block => {
-            let f = box_faces(cx, cy, 0.94, 0.0, 18.0);
-            faces(out, view, f, [BLOCK_LEFT, BLOCK_RIGHT, BLOCK_TOP], layer);
+            pen.rect(BRICK_BASE, tx, ty, tx + 1.0, ty + 1.0);
+            let courses = [0.0, 0.33, 0.66, 0.99];
+            for b in courses {
+                pen.rect(
+                    BRICK_LINE,
+                    tx,
+                    ty + (b - 0.035_f32).max(0.0),
+                    tx + 1.0,
+                    ty + (b + 0.035_f32).min(1.0),
+                );
+            }
+            for (k, pair) in courses.windows(2).enumerate() {
+                let joints: &[f32] = if k % 2 == 0 { &[0.5] } else { &[0.22, 0.78] };
+                for x in joints {
+                    pen.rect(
+                        BRICK_LINE,
+                        tx + x - 0.035,
+                        ty + pair[0],
+                        tx + x + 0.035,
+                        ty + pair[1],
+                    );
+                }
+            }
         }
         Sprite::Flame => {
-            out.push(quad(
-                [1.0, 0.45, 0.1, 0.75],
-                diamond(view, it.pos, 1.0, 1.0),
-                layer,
-            ));
-            out.push(quad(
-                [1.0, 0.9, 0.3, 0.85],
-                diamond(view, it.pos, 0.5, 2.0),
-                layer,
-            ));
+            pen.rect(FLAME_OUTER, tx, ty, tx + 1.0, ty + 1.0);
+            pen.rect(FLAME_MID, tx + 0.18, ty + 0.18, tx + 0.82, ty + 0.82);
+            pen.rect(FLAME_CORE, tx + 0.36, ty + 0.36, tx + 0.64, ty + 0.64);
         }
         Sprite::PowerUp(kind) => {
-            let lift = it.lift;
-            out.push(quad(
-                [0.2, 0.8, 0.9, 1.0],
-                diamond(view, it.pos, 0.4, 4.0 + lift),
-                layer,
-            ));
-            let letter = match kind {
-                PowerUpKind::ExtraBomb => 'B',
-                PowerUpKind::Range => 'R',
-                PowerUpKind::Speed => 'S',
+            let (color, letter) = match kind {
+                PowerUpKind::ExtraBomb => (hex(0x3b4cc0), 'B'),
+                PowerUpKind::Range => (hex(0xe8661a), 'R'),
+                PowerUpKind::Speed => (hex(0x2fa84f), 'S'),
             };
-            let at = view.project(cx, cy, 22.0 + lift);
-            out.push(text(
-                [1.0, 1.0, 1.0, 1.0],
-                at,
-                14.0 * view.scale,
-                letter,
-                layer,
-            ));
+            let dy = it.lift;
+            pen.rect(WHITE, tx + 0.2, ty + 0.2 + dy, tx + 0.8, ty + 0.8 + dy);
+            pen.rect(color, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
+            let at = view.project(cx, cy + dy);
+            pen.out
+                .push(text([1.0; 4], at, 0.4 * view.scale, letter, it.key()));
         }
         Sprite::Bomb { ticks_left } => {
             let pulse = 0.5 * (1.0 + (ticks_left as f32 * 0.8).sin());
-            let radius = 10.0 * view.scale * (1.0 + 0.2 * pulse);
-            let mut points = [(0.0, 0.0); 4];
-            points[0] = view.project(cx, cy, 12.0);
-            out.push(Command {
-                kind: Kind::Circle,
-                color: [0.08, 0.08, 0.1, 1.0],
-                points,
-                size: radius,
-                text: 0.0,
-                layer,
-            });
+            let ps = (0.8 * view.scale / 10.0 * (1.0 + 0.15 * pulse))
+                .round()
+                .max(1.0);
+            let blink = ticks_left % 4 < 2;
+            let list = runs(&BOMB, BOMB.len(), |c| bomb_colour(c, blink));
+            let (px, py) = view.project(cx, cy);
+            pen.sprite(
+                &list,
+                ps,
+                (px - 5.0 * ps).round(),
+                (py - 5.0 * ps + 0.05 * view.scale).round(),
+            );
         }
         Sprite::Player { slot } => {
-            let c = player_color(slot);
-            let f = box_faces(cx, cy, 0.6, 0.0, 26.0);
-            let colors = [
-                shade(c, FACE_LEFT),
-                shade(c, FACE_RIGHT),
-                shade(c, FACE_TOP),
-            ];
-            faces(out, view, f, colors, layer);
-            let top = view.apply(f.top[0]);
-            let bottom = view.apply(f.top[2]);
-            let mid = ((top.0 + bottom.0) / 2.0, (top.1 + bottom.1) / 2.0);
-            out.push(text(
-                [1.0, 1.0, 1.0, 1.0],
-                mid,
-                16.0 * view.scale,
-                badge_char(slot),
-                layer,
-            ));
+            let skin = player_skin(slot);
+            let list = runs(&PLAYER, PLAYER.len(), |c| skin.colour_of(c));
+            let ps = (1.2 * view.scale / PLAYER.len() as f32).round().max(1.0);
+            let (px, py) = view.project(cx, cy);
+            pen.shadow(cx - 0.3, cy + 0.34, cx + 0.3, cy + 0.44);
+            let top = py + 0.5 * view.scale - PLAYER.len() as f32 * ps - 0.02 * view.scale;
+            pen.sprite(&list, ps, (px - 6.0 * ps).round(), top.round());
         }
     }
+}
+
+/// The character of `slot` fitted into a canvas of `size` pixels: the whole figure for
+/// `rows == 0`, otherwise its first `rows` rows (head and shoulders), zoomed and cropped at the sides.
+pub fn portrait(slot: u8, size: (f32, f32), rows: usize) -> Vec<Command> {
+    let (w, h) = size;
+    if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
+        return Vec::new();
+    }
+    let rows = if rows == 0 {
+        PLAYER.len()
+    } else {
+        rows.min(PLAYER.len())
+    };
+    let skin = player_skin(slot);
+    let list = runs(&PLAYER, rows, |c| skin.colour_of(c));
+    // a crop is zoomed so the head fills the card and the arms run off its sides
+    let wide = if rows < PLAYER.len() { 1.5 } else { 0.9 };
+    let ps = (wide * w / 12.0)
+        .min(0.9 * h / rows as f32)
+        .floor()
+        .max(1.0);
+    let x = ((w - 12.0 * ps) / 2.0).round();
+    let y = ((h - rows as f32 * ps) / 2.0).round();
+    let mut out = Vec::new();
+    let view = View {
+        scale: 1.0,
+        offset_x: 0.0,
+        offset_y: 0.0,
+    };
+    Pen {
+        view: &view,
+        out: &mut out,
+        layer: 0.0,
+    }
+    .sprite(&list, ps, x, y);
+    out
 }

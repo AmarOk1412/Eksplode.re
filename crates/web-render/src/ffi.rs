@@ -9,9 +9,9 @@ use std::cell::RefCell;
 
 use bomberust_core::Observation;
 
-use crate::commands::{build, flatten, Command};
+use crate::commands::{build, flatten, portrait, Command};
 use crate::interp::Interp;
-use crate::iso::fit;
+use crate::view::fit;
 
 const MAX_ALLOC: usize = 1 << 20;
 const MAX_ARENA: u8 = 64;
@@ -103,7 +103,19 @@ pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize 
     })
 }
 
-/// Pointer to the command buffer, valid until the next [`bomberust_frame`].
+/// Builds the commands of a character card: slot `slot` fitted into `width` x `height` pixels,
+/// the whole figure for `rows == 0`, otherwise its first `rows` rows. Returns how many.
+#[no_mangle]
+pub extern "C" fn bomberust_portrait(slot: u32, width: f32, height: f32, rows: u32) -> usize {
+    let list = portrait((slot % 4) as u8, (width, height), rows as usize);
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        s.out = flatten(&list);
+        list.len()
+    })
+}
+
+/// Pointer to the command buffer, valid until the next [`bomberust_frame`] or portrait call.
 #[no_mangle]
 pub extern "C" fn bomberust_output_ptr() -> *const f32 {
     STATE.with(|s| s.borrow().out.as_ptr())

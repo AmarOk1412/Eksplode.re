@@ -1,11 +1,11 @@
 mod common;
 
 use bomberust_core::PowerUpKind;
-use bomberust_web_render::depth::{draw_list, Layer, Sprite};
+use bomberust_web_render::depth::{draw_list, Item, Layer, Sprite};
 use bomberust_web_render::interp::Interp;
 use common::*;
 
-fn items(s: &bomberust_core::GameState) -> Vec<bomberust_web_render::depth::Item> {
+fn items(s: &bomberust_core::GameState) -> Vec<Item> {
     let o = obs(s);
     let mut i = Interp::default();
     i.update(&o);
@@ -13,44 +13,26 @@ fn items(s: &bomberust_core::GameState) -> Vec<bomberust_web_render::depth::Item
 }
 
 #[test]
-fn us1_as3_floors_come_first() {
+fn us1_as3_layers_are_sorted_back_to_front_and_rows_top_to_bottom() {
     let list = items(&standard());
-    let first_object = list.iter().position(|i| i.layer != Layer::Floor).unwrap();
-    assert!(first_object > 0);
-    assert!(list[..first_object].iter().all(|i| i.layer == Layer::Floor));
-    assert!(list[first_object..].iter().all(|i| i.layer != Layer::Floor));
-}
-
-#[test]
-fn us1_as3_objects_are_sorted_back_to_front() {
-    let list = items(&standard());
-    let keys: Vec<f32> = list
-        .iter()
-        .filter(|i| i.layer != Layer::Floor)
-        .map(|i| i.pos.0 + i.pos.1)
-        .collect();
     assert!(
-        keys.windows(2).all(|w| w[0] <= w[1]),
-        "objects must be sorted by x + y"
+        list.windows(2).all(|w| w[0].key() <= w[1].key()),
+        "objects must be sorted by layer, then row"
     );
+    let layers: Vec<Layer> = list.iter().map(|i| i.layer).collect();
+    assert!(layers.windows(2).all(|w| w[0] <= w[1]));
 }
 
 #[test]
-fn us1_as3_a_player_behind_a_block_is_drawn_before_it() {
-    let rows = [
-        "#######", "#.....#", "#.....#", "#..+..#", "#.....#", "#.....#", "#######",
-    ];
-    let s = small(&rows, (2, 2), (4, 4));
+fn us1_as3_a_player_lower_on_the_screen_covers_one_above() {
+    let s = small(&OPEN, (2, 1), (2, 4));
     let list = items(&s);
-    let at = |pred: &dyn Fn(&Sprite) -> bool| list.iter().position(|i| pred(&i.sprite)).unwrap();
-    let block = at(&|s| matches!(s, Sprite::Block));
-    let behind = at(&|s| matches!(s, Sprite::Player { slot: 0 }));
-    let front = at(&|s| matches!(s, Sprite::Player { slot: 1 }));
-    assert!(
-        behind < block,
-        "player at (2,2) is behind the block at (3,3)"
-    );
-    assert!(front > block, "player at (4,4) is in front of the block");
+    let at = |slot: u8| {
+        list.iter()
+            .position(|i| i.sprite == Sprite::Player { slot })
+            .unwrap()
+    };
+    assert!(at(0) < at(1), "the player in row 1 is drawn before row 4");
 }
 
 #[test]
@@ -65,33 +47,27 @@ fn on_one_tile_the_layers_are_stacked_in_order() {
         .filter(|i| i.pos == (3.5, 3.5))
         .map(|i| i.layer)
         .collect();
-    assert_eq!(
-        layers,
-        vec![Layer::Floor, Layer::Flame, Layer::PowerUp, Layer::Bomb]
-    );
+    assert_eq!(layers, vec![Layer::Flame, Layer::PowerUp, Layer::Bomb]);
 }
 
 #[test]
-fn ties_keep_the_generation_order() {
+fn equal_rows_are_drawn_left_to_right() {
     let mut s = small(&OPEN, (1, 1), (5, 5));
-    powerup(&mut s, 1, 3, PowerUpKind::Speed);
-    powerup(&mut s, 3, 1, PowerUpKind::Speed);
-    let list = items(&s);
-    let spots: Vec<(f32, f32)> = list
+    powerup(&mut s, 4, 3, PowerUpKind::Speed);
+    powerup(&mut s, 2, 3, PowerUpKind::Speed);
+    let spots: Vec<(f32, f32)> = items(&s)
         .iter()
         .filter(|i| i.layer == Layer::PowerUp)
         .map(|i| i.pos)
         .collect();
-    // equal x + y: the order of the observation (insertion order) is kept
-    assert_eq!(spots, vec![(1.5, 3.5), (3.5, 1.5)]);
+    assert_eq!(spots, vec![(2.5, 3.5), (4.5, 3.5)]);
 }
 
 #[test]
 fn eliminated_players_are_not_listed() {
     let mut s = small(&OPEN, (1, 1), (5, 5));
     s.players[1].alive = false;
-    let list = items(&s);
-    let players = list
+    let players = items(&s)
         .iter()
         .filter(|i| matches!(i.sprite, Sprite::Player { .. }))
         .count();
@@ -99,17 +75,26 @@ fn eliminated_players_are_not_listed() {
 }
 
 #[test]
-fn walls_are_boxes_and_the_floor_has_no_wall_tiles() {
-    let s = small(&OPEN, (1, 1), (5, 5));
-    let list = items(&s);
-    let walls = list
-        .iter()
-        .filter(|i| matches!(i.sprite, Sprite::Wall))
-        .count();
-    assert_eq!(walls, 24, "7x7 border");
-    let floors = list
-        .iter()
-        .filter(|i| matches!(i.sprite, Sprite::Floor { .. }))
-        .count();
-    assert_eq!(floors, 25);
+fn walls_and_blocks_are_listed_and_the_floor_is_not() {
+    let rows = [
+        "#######", "#.....#", "#..+..#", "#.....#", "#.....#", "#.....#", "#######",
+    ];
+    let list = items(&small(&rows, (1, 1), (5, 5)));
+    let count = |f: fn(&Sprite) -> bool| list.iter().filter(|i| f(&i.sprite)).count();
+    assert_eq!(count(|s| matches!(s, Sprite::Wall)), 24, "7x7 border");
+    assert_eq!(count(|s| matches!(s, Sprite::Block)), 1);
+}
+
+#[test]
+fn power_ups_bob_by_less_than_a_tile() {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    powerup(&mut s, 3, 3, PowerUpKind::Speed);
+    let o = obs(&s);
+    let mut i = Interp::default();
+    i.update(&o);
+    for phase in 0..40 {
+        let list = draw_list(&o, &i, 1.0, phase as f32);
+        let p = list.iter().find(|i| i.layer == Layer::PowerUp).unwrap();
+        assert!(p.lift.abs() <= 0.06, "{}", p.lift);
+    }
 }
