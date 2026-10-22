@@ -1,0 +1,21 @@
+[package]
+name = "bomberust-cli"
+description = "Terminal version of Bomberust."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "bomberust_cli"
+
+[[bin]]
+name = "bomberust-cli"
+path = "src/main.rs"
+
+[dependencies]
+bomberust-core = { path = "../core" }
+ratatui = "0.29"
+
+[lints]
+workspace = true
