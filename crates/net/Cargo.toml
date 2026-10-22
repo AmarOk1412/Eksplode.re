@@ -1,0 +1,19 @@
+[package]
+name = "bomberust-net"
+description = "Network play for Bomberust: protocol, authoritative host and client."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "bomberust_net"
+
+[dependencies]
+bomberust-core = { path = "../core", features = ["serde"] }
+bomberust-bots = { path = "../bots" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true
