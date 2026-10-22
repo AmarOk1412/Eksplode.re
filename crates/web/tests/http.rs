@@ -15,6 +15,8 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/", "text/html; charset=utf-8"),
         ("/index.html", "text/html; charset=utf-8"),
         ("/app.js", "text/javascript; charset=utf-8"),
+        ("/look.js", "text/javascript; charset=utf-8"),
+        ("/audio.js", "text/javascript; charset=utf-8"),
         ("/style.css", "text/css; charset=utf-8"),
         ("/bomberust_render.wasm", "application/wasm"),
     ] {
@@ -198,10 +200,17 @@ fn random_bytes_do_not_hurt_the_server() {
 
 #[test]
 fn sc005_the_whole_page_stays_small() {
-    let total: usize = ["/", "/app.js", "/style.css", "/bomberust_render.wasm"]
-        .iter()
-        .map(|p| bomberust_web::assets::lookup(p).unwrap().body.len())
-        .sum();
+    let total: usize = [
+        "/",
+        "/app.js",
+        "/look.js",
+        "/audio.js",
+        "/style.css",
+        "/bomberust_render.wasm",
+    ]
+    .iter()
+    .map(|p| bomberust_web::assets::lookup(p).unwrap().body.len())
+    .sum();
     let wasm = bomberust_web::assets::lookup("/bomberust_render.wasm")
         .unwrap()
         .body

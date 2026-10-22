@@ -30,7 +30,32 @@ export async function loadModule() {
     return { count, stride, data: Float32Array.from(view) };
   }
 
-  return { ex, loadJson, frame };
+  /** Optional exports of feature 003 may be missing from an older module. */
+  function setLooks(looks) {
+    if (!ex.bomberust_set_looks) return -1;
+    return loadWith(ex.bomberust_set_looks, JSON.stringify(looks));
+  }
+
+  function loadWith(fn, text) {
+    const bytes = new TextEncoder().encode(text);
+    const size = Math.max(bytes.length, 1);
+    const ptr = ex.bomberust_alloc(size);
+    if (ptr === 0) return -1;
+    new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
+    const code = fn(ptr, bytes.length);
+    ex.bomberust_free(ptr, size);
+    return code;
+  }
+
+  function portrait3d(slot, width, height, phase) {
+    if (!ex.bomberust_portrait3d) return { count: 0, stride: 16, data: new Float32Array(0) };
+    const count = ex.bomberust_portrait3d(slot, width, height, phase);
+    const stride = ex.bomberust_stride();
+    const view = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+    return { count, stride, data: Float32Array.from(view) };
+  }
+
+  return { ex, loadJson, frame, setLooks, portrait3d };
 }
 
 export function fixtureText() {

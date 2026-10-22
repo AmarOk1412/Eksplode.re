@@ -1,4 +1,4 @@
-//! A small HTTP/1.1 layer: five fixed routes, strict limits, one WebSocket endpoint.
+//! A small HTTP/1.1 layer: seven fixed routes, strict limits, one WebSocket endpoint.
 
 use std::io::{Read, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};

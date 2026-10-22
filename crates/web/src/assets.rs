@@ -14,11 +14,13 @@ const JS: &str = "text/javascript; charset=utf-8";
 const CSS: &str = "text/css; charset=utf-8";
 const WASM: &str = "application/wasm";
 
-/// The five fixed routes; anything else is `None`.
+/// The seven fixed routes; anything else is `None`.
 pub fn lookup(path: &str) -> Option<Asset> {
     let (content_type, body): (&'static str, &'static [u8]) = match path {
         "/" | "/index.html" => (HTML, include_bytes!("../assets/index.html")),
         "/app.js" => (JS, include_bytes!("../assets/app.js")),
+        "/look.js" => (JS, include_bytes!("../assets/look.js")),
+        "/audio.js" => (JS, include_bytes!("../assets/audio.js")),
         "/style.css" => (CSS, include_bytes!("../assets/style.css")),
         "/bomberust_render.wasm" => (WASM, include_bytes!("../assets/bomberust_render.wasm")),
         _ => return None,

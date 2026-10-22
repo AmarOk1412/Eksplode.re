@@ -72,7 +72,7 @@ page on another port: start the server with `--allow-origin http://localhost:300
 | Malformed messages | 10, then the connection is closed |
 | Silence during a match | 10 s, then a bot takes over |
 
-The server serves only its four embedded files on five fixed routes; it never reads a path from the request, so there
+The server serves only its six embedded files on seven fixed routes; it never reads a path from the request, so there
 is no directory traversal. The page runs with a strict Content Security Policy
 (`default-src 'self'`, no inline scripts) and sets `X-Content-Type-Options: nosniff` and
 `Referrer-Policy: no-referrer`.

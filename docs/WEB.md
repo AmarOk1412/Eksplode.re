@@ -67,6 +67,8 @@ bomberust-cli join http://192.168.1.20:8080/     # web addresses work too; only 
 |---------|--------|
 | `GET /`, `GET /index.html` | `200 text/html` - the page |
 | `GET /app.js` | `200 text/javascript` - the page logic (ES module) |
+| `GET /look.js` | `200 text/javascript` - the character looks: options, editor state and storage |
+| `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
 | `GET /style.css` | `200 text/css` |
 | `GET /bomberust_render.wasm` | `200 application/wasm` - the graphics module |
 | `GET /ws` with `Upgrade: websocket` | `101` - see [PROTOCOL.md](PROTOCOL.md) |
@@ -98,6 +100,7 @@ When the page and the server share an origin (the normal case) there is nothing 
 | File | Role |
 |------|------|
 | [`index.html`](../crates/web/assets/index.html) | structure: join form, lobby list, canvas, HUD, notices; no inline script |
+| [`look.js`](../crates/web/assets/look.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the generated sound and settings |
 | [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard tracking, DOM updates, and painting of the draw commands on the canvas |
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`bomberust_render.wasm`](../crates/web/assets/bomberust_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |

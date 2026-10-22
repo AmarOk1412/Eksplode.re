@@ -111,7 +111,7 @@ tells the others (`PlayerLeft`). In the lobby the slot is freed.
 | Module | Role |
 |--------|------|
 | `args`, `options` | command-line options and the `ServerOptions` they produce |
-| `http` | a small HTTP/1.1 server with strict limits; routes the five fixed paths |
+| `http` | a small HTTP/1.1 server with strict limits; routes the seven fixed paths |
 | `assets` | the page files embedded in the binary |
 | `origin` | the `Origin` check and the start-up warnings |
 | `ws` | the WebSocket bridge: one browser tab is one in-process client of the host |
