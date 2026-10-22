@@ -1,0 +1,97 @@
+:root {
+  --bg: #14161a;
+  --panel: #1d2026;
+  --text: #e6e8ec;
+  --muted: #9aa1ad;
+  --accent: #268bd2;
+  --slot0: #dc322f;
+  --slot1: #268bd2;
+  --slot2: #3cb44b;
+  --slot3: #e6be1e;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+#app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+
+h1, h2 { margin: 0 0 8px; }
+
+#notice {
+  min-height: 1.5em;
+  margin: 0;
+  color: var(--muted);
+}
+
+section {
+  background: var(--panel);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+input {
+  font: inherit;
+  padding: 8px 10px;
+  margin: 0 8px;
+  border-radius: 6px;
+  border: 1px solid #3a3f49;
+  background: #101216;
+  color: var(--text);
+}
+
+button {
+  font: inherit;
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+
+.hint { color: var(--muted); font-size: 0.9em; }
+
+.slots { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.slots li { display: flex; align-items: center; gap: 10px; }
+.slots li.dead { opacity: 0.5; text-decoration: line-through; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #101216;
+  font-weight: 700;
+}
+.slot-0 { background: var(--slot0); }
+.slot-1 { background: var(--slot1); }
+.slot-2 { background: var(--slot2); }
+.slot-3 { background: var(--slot3); }
+
+#game-panel { display: grid; gap: 12px; }
+
+canvas {
+  width: 100%;
+  height: min(70vh, 640px);
+  background: #0e1014;
+  border-radius: 6px;
+  display: block;
+}

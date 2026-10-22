@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bomberust</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main id="app">
+    <header>
+      <h1>Bomberust</h1>
+      <p id="notice" role="status" aria-live="polite">Loading...</p>
+    </header>
+
+    <section id="join-panel">
+      <label for="name">Your name</label>
+      <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
+      <button id="join" type="button">Join</button>
+      <button id="retry" type="button" hidden>Retry</button>
+    </section>
+
+    <section id="lobby-panel" hidden>
+      <h2>Lobby</h2>
+      <ul id="slots" class="slots"></ul>
+      <div class="buttons">
+        <button id="start" type="button">Start (Enter)</button>
+        <button id="add-bot" type="button">Add bot</button>
+        <button id="remove-bot" type="button">Remove bot</button>
+        <button id="ready" type="button">Ready</button>
+      </div>
+      <p class="hint">The first human player is the owner and starts the match. Controls: arrow keys or WASD to move, Space or E for a bomb.</p>
+    </section>
+
+    <section id="game-panel" hidden>
+      <canvas id="view" aria-label="Game arena"></canvas>
+      <ul id="hud" class="slots"></ul>
+    </section>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
