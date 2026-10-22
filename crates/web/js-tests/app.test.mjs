@@ -122,9 +122,27 @@ test("the hud lists the participants with their stats", () => {
   const s = run([welcome(1, lobby("Remote", "Remote", "Bot")), { type: "Snapshot", tick: 1, state: { players, config: { base_move_cooldown: 4 } }, events: [] }]);
   const rows = hudRows(s);
   assert.equal(rows.length, 3, "empty slots are not listed");
-  assert.deepEqual(rows[1], { slot: 1, label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, you: true });
+  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, you: true });
   assert.equal(rows[2].label, "Bot");
+  assert.equal(rows[2].kind, "bot");
   assert.equal(rows[2].alive, false);
+});
+
+test("us2_as3_other_human_players_are_listed_by_name_and_kind", () => {
+  const players = [0, 1].map(() => ({ alive: true, bombs_active: 0, bombs_max: 1, range: 2, move_cooldown: 4 }));
+  const s = run([welcome(1, lobby("Remote", "Remote")), { type: "Snapshot", tick: 1, state: { players }, events: [] }]);
+  const rows = hudRows(s);
+  assert.equal(rows[0].kind, "player");
+  assert.equal(rows[0].label, "p0 (player)");
+});
+
+test("us2_as4_a_full_match_is_explained_and_not_owner_names_the_owner", () => {
+  const s = run([{ type: "connecting" }, { type: "socket-open" }, { type: "Rejected", reason: "Full" }]);
+  assert.match(s.notice, /full/i);
+  const l = lobby("Remote", "Remote");
+  l.slots[0].name = "Ann";
+  const msg = `Only ${l.slots[lobbyOwner(l)].name} can start the match`;
+  assert.equal(run([welcome(1, l), { type: "Error", code: "NotOwner", message: msg }]).notice, msg);
 });
 
 test("input messages carry the latest tick and the key state", () => {

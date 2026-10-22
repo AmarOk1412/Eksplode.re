@@ -132,9 +132,11 @@ export function hudRows(state) {
     if (slot.controller === "Empty" || !players[i]) return;
     const p = players[i];
     const you = i === state.slot;
-    const label = you ? "You" : slot.controller === "Bot" ? "Bot" : slot.name || `Player ${i + 1}`;
+    const kind = you ? "you" : slot.controller === "Bot" ? "bot" : "player";
+    const label = you ? "You" : kind === "bot" ? "Bot" : `${slot.name || `Player ${i + 1}`} (player)`;
     rows.push({
       slot: i,
+      kind,
       label,
       alive: p.alive,
       bombs: `${p.bombs_active}/${p.bombs_max}`,
