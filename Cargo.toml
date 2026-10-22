@@ -14,3 +14,10 @@ unsafe_code = "forbid"
 [workspace.lints.clippy]
 unwrap_used = "warn"
 expect_used = "warn"
+
+# Bot soak tests simulate thousands of matches; keep the hot crates optimised in dev and test builds.
+[profile.dev.package.bomberust-core]
+opt-level = 3
+
+[profile.dev.package.bomberust-bots]
+opt-level = 3

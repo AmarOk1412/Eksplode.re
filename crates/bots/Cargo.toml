@@ -1,0 +1,16 @@
+[package]
+name = "bomberust-bots"
+description = "Computer-controlled Bomberust players that only use the public observation."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "bomberust_bots"
+
+[dependencies]
+bomberust-core = { path = "../core" }
+
+[lints]
+workspace = true
