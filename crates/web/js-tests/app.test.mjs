@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage } from "../assets/app.js";
+import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage, timerText } from "../assets/app.js";
 
 const lobby = (...controllers) => ({
   slots: Array.from({ length: 4 }, (_, i) => ({
@@ -149,4 +149,19 @@ test("input messages carry the latest tick and the key state", () => {
   const s = { tick: 12 };
   assert.deepEqual(inputMessage(s, { mv: "Left", bomb: true }), { type: "Input", tick: 12, mv: "Left", bomb: true });
   assert.deepEqual(inputMessage(s, { mv: null, bomb: false }), { type: "Input", tick: 12, mv: null, bomb: false });
+});
+
+test("the timer shows the time left as minutes and seconds", () => {
+  const obs = (tick) => ({ tick, config: { round_limit_ticks: 3600, tick_hz: 20 } });
+  assert.equal(timerText(obs(0)), "03:00");
+  assert.equal(timerText(obs(60)), "02:57");
+  assert.equal(timerText(obs(3599)), "00:01");
+  assert.equal(timerText(obs(3600)), "00:00");
+  assert.equal(timerText(obs(9999)), "00:00");
+});
+
+test("the timer is empty without a snapshot or a limit", () => {
+  assert.equal(timerText(null), "");
+  assert.equal(timerText({ tick: 1, config: {} }), "");
+  assert.equal(timerText({ config: { round_limit_ticks: 10, tick_hz: 20 } }), "");
 });

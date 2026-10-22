@@ -57,7 +57,8 @@ test("painting draws every command kind", async () => {
   paintCommands(ctx, f);
   const count = (name) => ctx.ops.filter((o) => o[0] === name).length;
   assert.equal(count("fill"), f.count - count("fillText"), "every non-text command is filled");
-  assert.equal(count("fillText"), 4, "four badges");
+  const texts = Array.from({ length: f.count }, (_, i) => f.data[i * f.stride]).filter((k) => k === 2).length;
+  assert.equal(count("fillText"), texts, "text only for power-up letters");
   assert.equal(count("closePath"), f.count - count("fillText") - count("arc"));
   assert.ok(ctx.ops.filter((o) => o[0] === "fill").every((o) => /^rgba\(/.test(o[1])));
 });
@@ -81,4 +82,14 @@ test("a circle command is an arc and a text command is centred text", () => {
   const t = ctx.ops.find((o) => o[0] === "fillText");
   assert.equal(t[1], "B");
   assert.equal(ctx.textAlign, "center");
+});
+
+test("the glue paints character portraits", async () => {
+  const r = createRenderer(await exportsOfModule());
+  const p = r.portrait(2, 160, 226, 8);
+  assert.ok(p.count > 10);
+  assert.equal(p.data.length, p.count * 16);
+  const ctx = new FakeCtx();
+  paintCommands(ctx, p);
+  assert.equal(ctx.ops.filter((o) => o[0] === "fill").length, p.count);
 });

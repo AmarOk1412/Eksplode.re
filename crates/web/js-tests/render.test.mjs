@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { loadModule, fixtureText, commands, KIND, shaded, near } from "./wasm-helper.mjs";
+import { loadModule, fixtureText, commands, KIND, HELMETS, near } from "./wasm-helper.mjs";
 
 const CANVAS = [800, 600];
 
@@ -15,25 +15,33 @@ test("exports the documented functions", async () => {
     "bomberust_output_ptr",
     "bomberust_stride",
     "bomberust_pick_tile",
+    "bomberust_portrait",
   ]) {
     assert.ok(name in ex, `missing export ${name}`);
   }
   assert.equal(ex.bomberust_stride(), 16);
 });
 
-test("us1_as3_four_distinct_coloured_cubes with badges", async () => {
+test("us1_as3_four_characters_in_their_own_colours", async () => {
   const m = await loadModule();
   assert.equal(m.loadJson(fixtureText()), 0);
   const list = commands(m.frame(...CANVAS, 1));
   const quads = list.filter((c) => c.kind === KIND.quad && c.color[3] === 1);
-  for (let slot = 0; slot < 4; slot += 1) {
-    for (const f of [1.0, 0.8, 0.6]) {
-      const n = quads.filter((c) => near(c.color.slice(0, 3), shaded(slot, f))).length;
-      assert.equal(n, 1, `slot ${slot} face ${f}`);
-    }
-  }
-  const badges = list.filter((c) => c.kind === KIND.text).map((c) => String.fromCharCode(c.text));
-  assert.deepEqual(badges.sort(), ["1", "2", "3", "4"]);
+  HELMETS.forEach((helmet, slot) => {
+    const n = quads.filter((c) => near(c.color.slice(0, 3), helmet)).length;
+    assert.ok(n >= 1, `slot ${slot} has no helmet pixels`);
+  });
+  assert.equal(new Set(HELMETS.map((h) => h.join())).size, 4);
+});
+
+test("a portrait fills the command buffer without a loaded game", async () => {
+  const { ex } = await loadModule();
+  const head = ex.bomberust_portrait(1, 160, 226, 8);
+  assert.ok(head > 10);
+  const full = ex.bomberust_portrait(1, 160, 226, 0);
+  assert.ok(full > head);
+  assert.equal(ex.bomberust_portrait(0, 0, 10, 0), 0);
+  assert.equal(ex.bomberust_portrait(0, NaN, 10, 0), 0);
 });
 
 test("us1_as3_commands are ordered back to front", async () => {

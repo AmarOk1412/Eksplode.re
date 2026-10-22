@@ -39,17 +39,13 @@ export function fixtureText() {
 
 export const KIND = { quad: 0, circle: 1, text: 2, triangle: 3 };
 
-/** Player colours as the Rust palette defines them (hex of the contract). */
-export const PALETTE = [
-  [0xdc, 0x32, 0x2f],
-  [0x26, 0x8b, 0xd2],
-  [0x3c, 0xb4, 0x4b],
-  [0xe6, 0xbe, 0x1e],
-];
-
-export function shaded(slot, factor) {
-  return PALETTE[slot].map((v) => (v / 255) * factor);
-}
+/** Helmet colour of each character as the Rust palette defines it. */
+export const HELMETS = [
+  [0xd9, 0xd9, 0xde],
+  [0x0b, 0x0b, 0x0b],
+  [0xb0, 0x34, 0x34],
+  [0xc7, 0x7a, 0xe6],
+].map((c) => c.map((v) => v / 255));
 
 export function near(a, b) {
   return a.every((v, i) => Math.abs(v - b[i]) < 1e-4);

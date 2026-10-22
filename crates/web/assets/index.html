@@ -13,26 +13,29 @@
       <p id="notice" role="status" aria-live="polite">Loading...</p>
     </header>
 
-    <section id="join-panel">
+    <section id="join-panel" class="menu">
+      <canvas id="logo" aria-hidden="true"></canvas>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
-      <button id="join" type="button">Join</button>
+      <button id="join" type="button">Join Game</button>
       <button id="retry" type="button" hidden>Retry</button>
     </section>
 
-    <section id="lobby-panel" hidden>
+    <section id="lobby-panel" class="dialog" hidden>
       <h2>Lobby</h2>
-      <ul id="slots" class="slots"></ul>
+      <ul id="slots" class="cards"></ul>
       <div class="buttons">
         <button id="start" type="button">Start (Enter)</button>
         <button id="add-bot" type="button">Add bot</button>
         <button id="remove-bot" type="button">Remove bot</button>
         <button id="ready" type="button">Ready</button>
       </div>
-      <p class="hint">The first human player is the owner and starts the match. Controls: arrow keys or WASD to move, Space or E for a bomb.</p>
+      <p class="hint">The first human player is the owner and starts the match.
+Controls: arrow keys or WASD to move, Space or E for a bomb.</p>
     </section>
 
     <section id="game-panel" hidden>
+      <div id="timer" aria-label="Time left"></div>
       <canvas id="view" aria-label="Game arena"></canvas>
       <ul id="hud" class="slots"></ul>
     </section>

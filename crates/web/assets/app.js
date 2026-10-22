@@ -152,6 +152,19 @@ export function inputMessage(state, keys) {
   return { type: "Input", tick: state.tick, mv: keys.mv, bomb: keys.bomb };
 }
 
+/** Time left in the round as `MM:SS`, or an empty string when the snapshot has no limit. */
+export function timerText(obs) {
+  const limit = obs?.config?.round_limit_ticks;
+  const hz = obs?.config?.tick_hz;
+  if (!(limit > 0) || !(hz > 0) || typeof obs.tick !== "number") return "";
+  const left = Math.max(0, Math.ceil((limit - obs.tick) / hz));
+  const two = (n) => String(n).padStart(2, "0");
+  return `${two(Math.floor(left / 60))}:${two(left % 60)}`;
+}
+
+/** Rows of a character shown on its card: head and shoulders. */
+export const CARD_ROWS = 7;
+
 const LOAD_ERRORS = { 0: "ok", 1: "invalid text", 2: "invalid game data", 3: "arena too large", 4: "out of memory" };
 
 /** Wraps the exports of the WebAssembly module (see contracts/wasm-render-api.md). */
@@ -183,6 +196,12 @@ export function createRenderer(ex) {
     pick(x, y) {
       return ex.bomberust_pick_tile(x, y);
     },
+    /** Commands of a character fitted into width x height pixels; `rows` 0 is the whole figure. */
+    portrait(slot, width, height, rows) {
+      const count = ex.bomberust_portrait(slot, width, height, rows);
+      const data = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+      return { count, stride, data };
+    },
   };
 }
 
@@ -209,7 +228,7 @@ export function paintCommands(ctx, { count, stride, data }) {
       ctx.arc(data[o + 5], data[o + 6], data[o + 13], 0, Math.PI * 2);
       ctx.fill();
     } else if (kind === 2) {
-      ctx.font = `bold ${Math.max(8, Math.round(data[o + 13]))}px system-ui, sans-serif`;
+      ctx.font = `bold ${Math.max(8, Math.round(data[o + 13]))}px "Courier New", monospace`;
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String.fromCharCode(data[o + 14]), data[o + 5], data[o + 6]);
@@ -237,6 +256,8 @@ function start() {
     ready: $("ready"),
     canvas: $("view"),
     hud: $("hud"),
+    timer: $("timer"),
+    logo: $("logo"),
   };
   const ctx = el.canvas.getContext("2d");
   const keys = new KeyTracker();
@@ -244,6 +265,20 @@ function start() {
   let socket = null;
   let renderer = null;
   let lastSnapshotAt = 0;
+  let logoPainted = false;
+  const pendingPortraits = [];
+
+  /** Paints a character into a canvas whose CSS size is set by the stylesheet. */
+  function paintPortrait(canvas, slot, rows) {
+    if (!renderer) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(16, Math.round((rect.width || canvas.width) * dpr));
+    const h = Math.max(16, Math.round((rect.height || canvas.height) * dpr));
+    canvas.width = w;
+    canvas.height = h;
+    paintCommands(canvas.getContext("2d"), renderer.portrait(slot, w, h, rows));
+  }
 
   el.name.value = `Player${1 + Math.floor(Math.random() * 99)}`;
 
@@ -281,10 +316,20 @@ function start() {
     el.slots.replaceChildren(
       ...(state.lobby?.slots ?? []).map((slot, i) => {
         const li = document.createElement("li");
-        const chip = document.createElement("span");
-        chip.className = `chip slot-${i}`;
-        chip.textContent = String(i + 1);
-        const text = document.createElement("span");
+        li.className = "slot";
+        const card = document.createElement("div");
+        card.className = `card slot-${i}${slot.controller === "Empty" ? " empty" : ""}`;
+        const portrait = document.createElement("canvas");
+        portrait.className = "portrait";
+        card.append(portrait);
+        const banner = document.createElement("div");
+        banner.className = "banner";
+        banner.textContent = slot.controller === "Empty" ? "EMPTY" : `PLAYER ${i + 1}`;
+        card.append(banner);
+        li.append(card);
+        if (slot.controller !== "Empty") pendingPortraits.push([portrait, i]);
+        const caption = document.createElement("span");
+        caption.className = "caption";
         const who =
           slot.controller === "Empty"
             ? "empty"
@@ -294,11 +339,18 @@ function start() {
         const tags = [i === state.slot ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : ""]
           .filter(Boolean)
           .join(", ");
-        text.textContent = tags ? `${who} (${tags})` : who;
-        li.append(chip, text);
+        caption.textContent = tags ? `${who} (${tags})` : who;
+        li.append(caption);
         return li;
       }),
     );
+    // canvases need a layout before their size is known, so paint once they are in the page
+    for (const [canvas, slot] of pendingPortraits.splice(0)) paintPortrait(canvas, slot, CARD_ROWS);
+    el.timer.textContent = timerText(state.observation);
+    if (renderer && !logoPainted && !el.joinPanel.hidden) {
+      paintPortrait(el.logo, 0, 0);
+      logoPainted = true;
+    }
     el.hud.replaceChildren(
       ...hudRows(state).map((row) => {
         const li = document.createElement("li");
