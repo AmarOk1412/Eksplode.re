@@ -6,14 +6,14 @@ use std::sync::mpsc::TryRecvError;
 use bomberust_core::{Controller, Lobby, Observation, Outcome};
 use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg};
 use bomberust_net::{Client, Host};
-use ratatui::crossterm::event::KeyCode;
+use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
-use crate::input::{map_key, InputState, KeyAction};
+use crate::input::{map_key, normalize, InputState, KeyAction};
 use crate::view::{self, player_color, ViewContext};
 
 /// Where an online session is.
@@ -164,24 +164,29 @@ impl Online {
         }
     }
 
+    /// Reacts to a raw terminal key event (Enter in all its forms, modifiers dropped).
+    pub fn handle_event(&mut self, ev: KeyEvent) {
+        if let Some(code) = normalize(ev) {
+            self.handle_key(code);
+        }
+    }
+
+    /// Lobby commands go to the host as messages; the host decides who may do what and
+    /// answers refusals with an `Error` that ends up in the notice.
     fn lobby_key(&mut self, code: KeyCode, action: Option<KeyAction>) {
-        if let Some(host) = &self.host {
-            match code {
-                KeyCode::Char('b') => host.add_bot(),
-                KeyCode::Char('x') => {
-                    if let Some(i) = (0..4)
-                        .rev()
-                        .find(|i| self.lobby.slots[*i].controller == Controller::Bot)
-                    {
-                        host.clear_slot(i);
-                    }
-                }
-                KeyCode::Enter => host.start_match(),
-                _ => {}
+        let msg = match code {
+            KeyCode::Char('b') => ClientMsg::AddBot,
+            KeyCode::Char('x') => ClientMsg::RemoveBot,
+            KeyCode::Enter => ClientMsg::Start,
+            _ if action == Some(KeyAction::Rematch) => {
+                let ready = self.slot.is_some_and(|s| self.lobby.slots[s].ready);
+                ClientMsg::SetReady { ready: !ready }
             }
-        } else if action == Some(KeyAction::Rematch) {
-            let ready = self.slot.is_some_and(|s| self.lobby.slots[s].ready);
-            let _ = self.client.send(ClientMsg::SetReady { ready: !ready });
+            _ => return,
+        };
+        self.notice = None;
+        if self.client.send(msg).is_err() {
+            self.close("connection lost");
         }
     }
 
@@ -265,8 +270,7 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
     lines.push(Line::from(match (online.stage, online.is_host()) {
         (Stage::Connecting, _) => "Connecting...   q quit",
         (Stage::Closed, _) => "q quit",
-        (_, true) => "b add bot   x remove bot   Enter start   q quit",
-        (_, false) => "r ready   q quit   (waiting for the host to start)",
+        _ => "Enter start (owner)   b add bot   x remove bot   r ready   q quit",
     }));
     let height = (lines.len() as u16 + 2).min(area.height);
     frame.render_widget(

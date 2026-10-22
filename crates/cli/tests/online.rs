@@ -6,7 +6,7 @@ use bomberust_cli::online::{render, Online, Stage};
 use bomberust_core::{Config, Controller};
 use bomberust_net::{Client, Host, HostConfig};
 use ratatui::backend::TestBackend;
-use ratatui::crossterm::event::KeyCode;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Terminal;
 
 fn host_with(game: Config) -> Host {
@@ -199,4 +199,86 @@ fn q_quits_in_every_stage() {
     let mut a = joined(&host, "Ann");
     a.handle_key(KeyCode::Char('q'));
     assert!(a.quit);
+}
+
+fn headless() -> Host {
+    host_with(open_game(10_000))
+}
+
+fn ctrl(c: char) -> KeyEvent {
+    KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+}
+
+#[test]
+fn us3_as4_enter_starts_for_the_owner_client() {
+    let host = headless();
+    let mut a = joined(&host, "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(0) && o.stage == Stage::Lobby));
+    a.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut a, |o| o.stage == Stage::Playing
+        && o.observation.is_some()));
+}
+
+#[test]
+fn us3_as4_enter_by_a_non_owner_shows_a_notice() {
+    let host = host_with(open_game(10_000));
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let mut a = joined_at(h.host_addr().unwrap(), "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    a.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut a, |o| o
+        .notice
+        .as_deref()
+        .is_some_and(|n| n.contains("Only Hosty"))));
+    assert_eq!(a.stage, Stage::Lobby);
+}
+
+#[test]
+fn us3_as4_lf_and_ctrl_j_start_the_match() {
+    for ev in [
+        KeyEvent::new(KeyCode::Char('\n'), KeyModifiers::NONE),
+        ctrl('j'),
+        ctrl('m'),
+        KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE),
+    ] {
+        let host = headless();
+        let mut a = joined(&host, "Ann");
+        assert!(pump_until(&mut a, |o| o.slot == Some(0)));
+        a.handle_event(ev);
+        assert!(pump_until(&mut a, |o| o.stage == Stage::Playing), "{ev:?}");
+    }
+}
+
+#[test]
+fn a_refused_command_is_shown_to_the_user() {
+    let host = host_with(open_game(10_000));
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let mut a = joined_at(h.host_addr().unwrap(), "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    a.handle_key(KeyCode::Char('b'));
+    assert!(pump_until(&mut a, |o| o.notice.is_some()));
+    assert!(screen(&a).contains("Only Hosty"), "{}", screen(&a));
+    assert_eq!(h.lobby.slots[2].controller, Controller::Empty);
+}
+
+#[test]
+fn b_and_x_work_for_a_joined_owner() {
+    let host = headless();
+    let mut a = joined(&host, "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(0)));
+    a.handle_key(KeyCode::Char('b'));
+    assert!(pump_until(&mut a, |o| o.lobby.slots[1].controller == Controller::Bot));
+    a.handle_key(KeyCode::Char('x'));
+    assert!(pump_until(&mut a, |o| o.lobby.slots[1].controller == Controller::Empty));
+}
+
+#[test]
+fn control_c_is_not_a_game_key() {
+    let host = headless();
+    let mut a = joined(&host, "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(0)));
+    a.handle_event(ctrl('c'));
+    assert!(!a.quit);
 }

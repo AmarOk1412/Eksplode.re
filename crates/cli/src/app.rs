@@ -10,11 +10,11 @@ use bomberust_core::{
     MAX_PLAYERS,
 };
 use bomberust_net::{Client, Host, HostConfig, NetError};
-use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind};
+use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode};
 use ratatui::DefaultTerminal;
 
 use crate::args::{HostOptions, JoinOptions, LocalOptions};
-use crate::input::{map_key, InputState, KeyAction};
+use crate::input::{map_key, normalize, InputState, KeyAction};
 use crate::lobby::{self, LobbyScreen};
 use crate::online::{self, Online};
 use crate::view::{self, ViewContext};
@@ -205,8 +205,8 @@ fn lobby_loop(terminal: &mut DefaultTerminal, lobby: Lobby) -> Result<Option<Lob
     while !screen.start && !screen.quit {
         terminal.draw(|f| lobby::render(f, &screen))?;
         if let TermEvent::Key(key) = event::read()? {
-            if key.kind != KeyEventKind::Release {
-                screen.handle_key(key.code);
+            if let Some(code) = normalize(key) {
+                screen.handle_key(code);
             }
         }
     }
@@ -224,8 +224,8 @@ fn game_loop(terminal: &mut DefaultTerminal, mut session: Session) -> Result<(),
         let timeout = next.saturating_duration_since(Instant::now());
         if event::poll(timeout)? {
             if let TermEvent::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Release {
-                    session.handle_key(key.code);
+                if let Some(code) = normalize(key) {
+                    session.handle_key(code);
                 }
             }
         }
@@ -268,9 +268,7 @@ fn online_loop(mut online: Online) -> Result<(), AppError> {
         let timeout = next.saturating_duration_since(Instant::now());
         if event::poll(timeout)? {
             if let TermEvent::Key(key) = event::read()? {
-                if key.kind != KeyEventKind::Release {
-                    online.handle_key(key.code);
-                }
+                online.handle_event(key);
             }
         }
         if Instant::now() >= next {

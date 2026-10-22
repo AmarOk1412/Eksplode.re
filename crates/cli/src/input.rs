@@ -1,7 +1,7 @@
 //! Key mapping for up to four players sharing one keyboard.
 
 use bomberust_core::{Dir, PlayerInput};
-use ratatui::crossterm::event::KeyCode;
+use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// What a player key does.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -25,6 +25,28 @@ const KEYS: [[char; 5]; 3] = [
     ['i', 'k', 'j', 'l', 'o'],
     ['t', 'g', 'f', 'h', 'y'],
 ];
+
+/// Turns a raw terminal key event into the key the game should react to.
+///
+/// Enter arrives in several forms (CR, LF, Ctrl+J, Ctrl+M) depending on the terminal; all of
+/// them become [`KeyCode::Enter`]. Other Ctrl/Alt combinations are dropped so they are never
+/// mistaken for plain letters, and key releases are ignored.
+pub fn normalize(ev: KeyEvent) -> Option<KeyCode> {
+    if ev.kind == KeyEventKind::Release {
+        return None;
+    }
+    let modified = ev
+        .modifiers
+        .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT);
+    match ev.code {
+        KeyCode::Enter | KeyCode::Char('\r' | '\n') => Some(KeyCode::Enter),
+        KeyCode::Char(c) if modified && matches!(c.to_ascii_lowercase(), 'j' | 'm') => {
+            Some(KeyCode::Enter)
+        }
+        KeyCode::Char(_) if modified => None,
+        code => Some(code),
+    }
+}
 
 /// Translates a key code; unknown keys give `None`.
 pub fn map_key(code: KeyCode) -> Option<KeyAction> {
