@@ -55,7 +55,30 @@ round is a practice round that ends when that player dies.
 
 ## Host / join
 
-(added with network play)
+Up to four participants (humans and bots) can play over a network. One person hosts, the others
+join by address. The host is authoritative: it runs the simulation, validates every message and
+sends each client its own view 20 times per second.
+
+```sh
+cargo run -p bomberust-cli -- host --bots 1          # listens on port 7878
+cargo run -p bomberust-cli -- join 192.168.1.20      # default port 7878
+cargo run -p bomberust-cli -- join 192.168.1.20:9000 --name Ann
+```
+
+Host options: `--port N`, `--bots N` (0-3), `--name NAME`, `--seed N`. Names are 1 to 16 printable
+characters. In the lobby the host uses `b` (add bot), `x` (remove a bot) and `Enter` (start);
+clients toggle `r` (ready). In a match the keys are the P1 keys (arrows + Space) or P2 keys
+(WASD + E). If a player disconnects or stays silent for 10 s, a bot takes the slot and the match
+goes on; if the host leaves, everybody is told. After a round the lobby returns for a rematch.
+
+The wire protocol (newline-delimited JSON, port 7878, version 1) is described in
+`specs/001-bomberman-multiplayer/contracts/network-protocol.md` of the planning workspace.
+There is no encryption or authentication: play on a trusted network. Malformed or oversized
+messages are rejected and a connection that sends ten bad messages is closed.
+
+```sh
+cargo test -p bomberust-net      # codec, lobby rules, loopback matches, latency and agreement
+```
 
 ## Contributing
 

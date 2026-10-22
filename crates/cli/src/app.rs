@@ -9,12 +9,14 @@ use bomberust_core::{
     Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase, PlayerId,
     MAX_PLAYERS,
 };
+use bomberust_net::{Client, Host, HostConfig, NetError};
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode, KeyEventKind};
 use ratatui::DefaultTerminal;
 
-use crate::args::LocalOptions;
+use crate::args::{HostOptions, JoinOptions, LocalOptions};
 use crate::input::{map_key, InputState, KeyAction};
 use crate::lobby::{self, LobbyScreen};
+use crate::online::{self, Online};
 use crate::view::{self, ViewContext};
 
 /// Errors that end the program with exit code 1.
@@ -22,6 +24,7 @@ use crate::view::{self, ViewContext};
 pub enum AppError {
     Core(CoreError),
     Lobby(LobbyError),
+    Net(NetError),
     Io(io::Error),
 }
 
@@ -30,6 +33,7 @@ impl fmt::Display for AppError {
         match self {
             AppError::Core(e) => write!(f, "{e}"),
             AppError::Lobby(e) => write!(f, "{e}"),
+            AppError::Net(e) => write!(f, "{e}"),
             AppError::Io(e) => write!(f, "terminal error: {e}"),
         }
     }
@@ -46,6 +50,12 @@ impl From<CoreError> for AppError {
 impl From<LobbyError> for AppError {
     fn from(e: LobbyError) -> Self {
         AppError::Lobby(e)
+    }
+}
+
+impl From<NetError> for AppError {
+    fn from(e: NetError) -> Self {
+        AppError::Net(e)
     }
 }
 
@@ -141,6 +151,7 @@ impl Session {
         ViewContext {
             paused: self.paused,
             tags,
+            notice: None,
         }
     }
 
@@ -207,7 +218,8 @@ fn game_loop(terminal: &mut DefaultTerminal, mut session: Session) -> Result<(),
     let mut next = Instant::now() + tick;
     while !session.quit {
         let ctx = session.context();
-        terminal.draw(|f| view::render(f, &session.state, &ctx))?;
+        let obs = session.state.observe(PlayerId::all()[0]);
+        terminal.draw(|f| view::render(f, &obs, &ctx))?;
 
         let timeout = next.saturating_duration_since(Instant::now());
         if event::poll(timeout)? {
@@ -219,6 +231,50 @@ fn game_loop(terminal: &mut DefaultTerminal, mut session: Session) -> Result<(),
         }
         if Instant::now() >= next {
             session.tick();
+            next += tick;
+        }
+    }
+    Ok(())
+}
+
+/// Hosts a match: listens on the port and plays as the first participant.
+pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
+    let host = Host::start(HostConfig {
+        bind: format!("0.0.0.0:{}", opts.port),
+        seed: opts.seed,
+        ..HostConfig::default()
+    })?;
+    for _ in 0..opts.bots {
+        host.add_bot();
+    }
+    let client = host.local_client(&opts.name)?;
+    online_loop(Online::hosting(host, client))
+}
+
+/// Joins a match hosted elsewhere.
+pub fn run_join(opts: &JoinOptions) -> Result<(), AppError> {
+    let client = Client::connect(&opts.addr, &opts.name)?;
+    online_loop(Online::new(client))
+}
+
+fn online_loop(mut online: Online) -> Result<(), AppError> {
+    let mut terminal = ratatui::try_init()?;
+    let _guard = TerminalGuard;
+    let tick = Duration::from_secs(1) / Config::default().tick_hz;
+    let mut next = Instant::now() + tick;
+    while !online.quit {
+        online.pump();
+        terminal.draw(|f| online::render(f, &online))?;
+        let timeout = next.saturating_duration_since(Instant::now());
+        if event::poll(timeout)? {
+            if let TermEvent::Key(key) = event::read()? {
+                if key.kind != KeyEventKind::Release {
+                    online.handle_key(key.code);
+                }
+            }
+        }
+        if Instant::now() >= next {
+            online.send_input();
             next += tick;
         }
     }

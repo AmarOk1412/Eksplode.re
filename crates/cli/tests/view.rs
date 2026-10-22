@@ -25,12 +25,14 @@ fn ctx() -> ViewContext {
     ViewContext {
         paused: false,
         tags: [Some("human".into()), Some("bot".into()), None, None],
+        notice: None,
     }
 }
 
 fn draw(state: &GameState, ctx: &ViewContext, w: u16, h: u16) -> Vec<String> {
     let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
-    terminal.draw(|f| render(f, state, ctx)).unwrap();
+    let obs = state.observe(pid(0));
+    terminal.draw(|f| render(f, &obs, ctx)).unwrap();
     let buf = terminal.backend().buffer().clone();
     (0..h)
         .map(|y| {
@@ -125,7 +127,7 @@ fn pause_message() {
 #[test]
 fn too_small_terminal_shows_the_needed_size() {
     let st = base();
-    let (w, h) = required_size(&st);
+    let (w, h) = required_size(&st.observe(pid(0)));
     assert_eq!((w, h), (40, 20));
     let s = draw(&st, &ctx(), 30, 10).join("\n");
     assert!(s.contains("too small"));
@@ -142,5 +144,5 @@ fn minimum_size_is_enough() {
 #[test]
 fn default_arena_fits_the_minimum_size() {
     let st = GameState::new(Config::default(), 1, [true; 4]).unwrap();
-    assert_eq!(required_size(&st), (40, 20));
+    assert_eq!(required_size(&st.observe(pid(0))), (40, 20));
 }

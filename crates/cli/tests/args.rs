@@ -94,3 +94,90 @@ fn an_empty_start_is_fine_with_the_lobby() {
         opts(0, 0, None, true)
     );
 }
+
+mod network {
+    use super::*;
+    use bomberust_cli::args::{HostOptions, JoinOptions};
+
+    fn host(port: u16, bots: u8, name: &str, seed: Option<u64>) -> Result<Command, UsageError> {
+        Ok(Command::Host(HostOptions {
+            port,
+            bots,
+            name: name.into(),
+            seed,
+        }))
+    }
+
+    fn join(addr: &str, name: &str) -> Result<Command, UsageError> {
+        Ok(Command::Join(JoinOptions {
+            addr: addr.into(),
+            name: name.into(),
+        }))
+    }
+
+    #[test]
+    fn host_defaults() {
+        assert_eq!(args(&["host"]), host(7878, 0, "Host", None));
+    }
+
+    #[test]
+    fn host_options() {
+        assert_eq!(
+            args(&["host", "--port", "9000", "--bots", "2", "--name", "Ann", "--seed", "5"]),
+            host(9000, 2, "Ann", Some(5))
+        );
+    }
+
+    #[test]
+    fn host_rejects_bad_values() {
+        assert!(matches!(
+            args(&["host", "--port", "70000"]),
+            Err(UsageError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            args(&["host", "--bots", "4"]),
+            Err(UsageError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            args(&["host", "--name", ""]),
+            Err(UsageError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            args(&["host", "--name", "this name is much too long"]),
+            Err(UsageError::InvalidValue { .. })
+        ));
+        assert!(matches!(
+            args(&["host", "--players", "2"]),
+            Err(UsageError::UnknownOption(_))
+        ));
+    }
+
+    #[test]
+    fn join_needs_an_address_and_adds_the_default_port() {
+        assert_eq!(args(&["join"]), Err(UsageError::MissingAddress));
+        assert_eq!(
+            args(&["join", "192.168.1.5"]),
+            join("192.168.1.5:7878", "Player")
+        );
+        assert_eq!(
+            args(&["join", "host.lan:9000", "--name", "Bob"]),
+            join("host.lan:9000", "Bob")
+        );
+        assert_eq!(
+            args(&["join", "--name", "Bob", "1.2.3.4:1"]),
+            join("1.2.3.4:1", "Bob")
+        );
+    }
+
+    #[test]
+    fn join_rejects_extra_arguments() {
+        assert!(matches!(
+            args(&["join", "a", "b"]),
+            Err(UsageError::UnknownOption(_))
+        ));
+        assert!(matches!(
+            args(&["join", "a", "--bots", "1"]),
+            Err(UsageError::UnknownOption(_))
+        ));
+    }
+}

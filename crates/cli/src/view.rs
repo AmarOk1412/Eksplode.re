@@ -1,6 +1,6 @@
 //! Rendering of a game to a ratatui frame.
 
-use bomberust_core::{GameState, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
+use bomberust_core::{Observation, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -11,23 +11,25 @@ pub const MIN_WIDTH: u16 = 40;
 pub const MIN_HEIGHT: u16 = 20;
 const STATUS_LINES: u16 = 4;
 
-/// Extra information the view needs besides the game state.
+/// Extra information the view needs besides the observation.
 #[derive(Clone, Debug, Default)]
 pub struct ViewContext {
     pub paused: bool,
     /// Short description of each slot's controller; `None` for unused slots.
     pub tags: [Option<String>; 4],
+    /// Replaces the hint line, e.g. a network message.
+    pub notice: Option<String>,
 }
 
-/// Terminal size needed to draw `state`.
-pub fn required_size(state: &GameState) -> (u16, u16) {
+/// Terminal size needed to draw the observation.
+pub fn required_size(state: &Observation) -> (u16, u16) {
     let w = u16::from(state.arena.width()) * 2 + 2;
     let h = u16::from(state.arena.height()) + 2 + STATUS_LINES + 1;
     (w.max(MIN_WIDTH), h.max(MIN_HEIGHT))
 }
 
 /// Glyph and style of one tile. Priority: player, flame, bomb, power-up, terrain.
-pub fn cell(state: &GameState, pos: Pos) -> (String, Style) {
+pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
     if let Some(p) = state.players.iter().find(|p| p.alive && p.pos == pos) {
         let style = Style::default()
             .fg(player_color(p.id))
@@ -75,7 +77,7 @@ pub fn player_color(id: PlayerId) -> Color {
 }
 
 /// Draws the arena, one status line per participant and a message line.
-pub fn render(frame: &mut Frame, state: &GameState, ctx: &ViewContext) {
+pub fn render(frame: &mut Frame, state: &Observation, ctx: &ViewContext) {
     let area = frame.area();
     let (need_w, need_h) = required_size(state);
     if area.width < need_w || area.height < need_h {
@@ -114,7 +116,7 @@ pub fn render(frame: &mut Frame, state: &GameState, ctx: &ViewContext) {
     frame.render_widget(Paragraph::new(message(state, ctx)), msg_rect);
 }
 
-fn status_lines<'a>(state: &GameState, ctx: &ViewContext) -> Vec<Line<'a>> {
+fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
     let mut lines = Vec::new();
     for p in &state.players {
         let Some(tag) = &ctx.tags[p.id.index()] else {
@@ -140,14 +142,15 @@ fn status_lines<'a>(state: &GameState, ctx: &ViewContext) -> Vec<Line<'a>> {
     lines
 }
 
-fn message(state: &GameState, ctx: &ViewContext) -> Line<'static> {
-    let text = match state.phase {
-        Phase::Ended(Outcome::Winner(id)) => {
+fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
+    let text = match (&ctx.notice, state.phase) {
+        (Some(n), _) => n.clone(),
+        (None, Phase::Ended(Outcome::Winner(id))) => {
             format!("Player {} wins!  r: rematch  q: quit", id.index() + 1)
         }
-        Phase::Ended(Outcome::Draw) => "Draw!  r: rematch  q: quit".to_string(),
-        Phase::Playing if ctx.paused => "PAUSED  p: resume  q: quit".to_string(),
-        Phase::Playing => "p: pause  q: quit".to_string(),
+        (None, Phase::Ended(Outcome::Draw)) => "Draw!  r: rematch  q: quit".to_string(),
+        (None, Phase::Playing) if ctx.paused => "PAUSED  p: resume  q: quit".to_string(),
+        (None, Phase::Playing) => "p: pause  q: quit".to_string(),
     };
     Line::from(Span::styled(
         text,

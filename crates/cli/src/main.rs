@@ -14,15 +14,11 @@ fn main() -> ExitCode {
             println!("bomberust-cli {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
+        Ok(Command::Host(opts)) => finish(app::run_host(&opts)),
+        Ok(Command::Join(opts)) => finish(app::run_join(&opts)),
         Ok(Command::Run(opts)) => {
             let seed = opts.seed.unwrap_or_else(time_seed);
-            match app::run(&opts, seed) {
-                Ok(()) => ExitCode::SUCCESS,
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    ExitCode::from(1)
-                }
-            }
+            finish(app::run(&opts, seed))
         }
         Err(e) => {
             eprintln!("error: {e}\n\n{USAGE}");
@@ -36,4 +32,14 @@ fn time_seed() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_nanos() as u64)
         .unwrap_or(0)
+}
+
+fn finish(result: Result<(), app::AppError>) -> ExitCode {
+    match result {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("error: {e}");
+            ExitCode::from(1)
+        }
+    }
 }

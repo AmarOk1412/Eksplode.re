@@ -16,6 +16,7 @@ path = "src/main.rs"
 [dependencies]
 bomberust-bots = { path = "../bots" }
 bomberust-core = { path = "../core" }
+bomberust-net = { path = "../net" }
 ratatui = "0.29"
 
 [lints]
