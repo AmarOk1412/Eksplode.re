@@ -64,3 +64,28 @@ fn an_empty_lobby_cannot_start() {
     l.add_bot().unwrap();
     assert!(l.can_start());
 }
+
+#[test]
+fn the_owner_is_the_lowest_human_slot() {
+    let mut l = Lobby::new();
+    assert_eq!(l.owner(), None);
+    l.add_bot().unwrap();
+    assert_eq!(l.owner(), None, "bots never own the lobby");
+    l.assign(2, Controller::Remote, "Bob").unwrap();
+    l.assign(3, Controller::Local, "Ann").unwrap();
+    assert_eq!(l.owner(), Some(2));
+    l.clear(2).unwrap();
+    assert_eq!(l.owner(), Some(3), "ownership moves to the next human");
+}
+
+#[test]
+fn last_bot_is_the_highest_bot_slot() {
+    let mut l = Lobby::new();
+    assert_eq!(l.last_bot(), None);
+    l.assign(0, Controller::Local, "Ann").unwrap();
+    l.add_bot().unwrap();
+    l.add_bot().unwrap();
+    assert_eq!(l.last_bot(), Some(2));
+    l.clear(2).unwrap();
+    assert_eq!(l.last_bot(), Some(1));
+}

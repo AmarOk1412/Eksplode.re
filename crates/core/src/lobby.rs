@@ -137,4 +137,18 @@ impl Lobby {
     pub fn can_start(&self) -> bool {
         self.participants() > 0
     }
+
+    /// The lobby owner: the lowest slot held by a human. Only the owner may start the match.
+    pub fn owner(&self) -> Option<usize> {
+        self.slots
+            .iter()
+            .position(|s| matches!(s.controller, Controller::Local | Controller::Remote))
+    }
+
+    /// The highest slot held by a bot.
+    pub fn last_bot(&self) -> Option<usize> {
+        self.slots
+            .iter()
+            .rposition(|s| s.controller == Controller::Bot)
+    }
 }
