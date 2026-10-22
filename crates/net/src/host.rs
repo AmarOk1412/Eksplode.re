@@ -71,6 +71,37 @@ enum Ev {
     Shutdown,
 }
 
+/// Attaches in-process clients to a running host; stays valid while the host lives.
+#[derive(Clone)]
+pub struct HostHandle {
+    tx: Sender<Ev>,
+    next_id: Arc<AtomicU64>,
+}
+
+impl HostHandle {
+    /// See [`Host::connect`]. Fails with `Closed` once the host is gone.
+    pub fn connect(&self, local: bool) -> Result<Client, NetError> {
+        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
+        let (stx, srx) = mpsc::channel();
+        self.tx
+            .send(Ev::New { id, tx: stx, local })
+            .map_err(|_| NetError::Closed)?;
+        let to_host = self.tx.clone();
+        let on_drop = self.tx.clone();
+        Ok(Client::from_parts(
+            Box::new(move |msg| {
+                to_host
+                    .send(Ev::Msg { id, msg })
+                    .map_err(|_| NetError::Closed)
+            }),
+            srx,
+            Box::new(move || {
+                let _ = on_drop.send(Ev::Gone { id });
+            }),
+        ))
+    }
+}
+
 /// A running host. Dropping it ends the match and disconnects everybody.
 pub struct Host {
     addr: SocketAddr,
@@ -112,28 +143,19 @@ impl Host {
         self.addr
     }
 
+    /// A cloneable connector other threads can use to attach in-process clients.
+    pub fn handle(&self) -> HostHandle {
+        HostHandle {
+            tx: self.tx.clone(),
+            next_id: self.next_id.clone(),
+        }
+    }
+
     /// An in-process connection that has not joined yet: the caller sends `Join` itself.
     ///
     /// `local` marks the connection as the person running the host (slot controller `Local`).
     pub fn connect(&self, local: bool) -> Result<Client, NetError> {
-        let id = self.next_id.fetch_add(1, Ordering::SeqCst);
-        let (stx, srx) = mpsc::channel();
-        self.tx
-            .send(Ev::New { id, tx: stx, local })
-            .map_err(|_| NetError::Closed)?;
-        let to_host = self.tx.clone();
-        let on_drop = self.tx.clone();
-        Ok(Client::from_parts(
-            Box::new(move |msg| {
-                to_host
-                    .send(Ev::Msg { id, msg })
-                    .map_err(|_| NetError::Closed)
-            }),
-            srx,
-            Box::new(move || {
-                let _ = on_drop.send(Ev::Gone { id });
-            }),
-        ))
+        self.handle().connect(local)
     }
 
     /// An in-process client for the person running the host; it takes a `Local` slot.
