@@ -2,6 +2,7 @@
 
 use std::fmt;
 use std::io;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
 use bomberust_bots::{Bot, DefaultBot};
@@ -9,7 +10,9 @@ use bomberust_core::{
     Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase, PlayerId,
     MAX_PLAYERS,
 };
+use bomberust_net::protocol::RejectReason;
 use bomberust_net::{Client, Host, HostConfig, NetError};
+use bomberust_web::{Server, ServerError, ServerOptions};
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode};
 use ratatui::DefaultTerminal;
 
@@ -25,6 +28,9 @@ pub enum AppError {
     Core(CoreError),
     Lobby(LobbyError),
     Net(NetError),
+    Web(ServerError),
+    /// A join that failed; the text is the whole explanation.
+    Join(String),
     Io(io::Error),
 }
 
@@ -34,6 +40,8 @@ impl fmt::Display for AppError {
             AppError::Core(e) => write!(f, "{e}"),
             AppError::Lobby(e) => write!(f, "{e}"),
             AppError::Net(e) => write!(f, "{e}"),
+            AppError::Web(e) => write!(f, "{e}"),
+            AppError::Join(m) => write!(f, "{m}"),
             AppError::Io(e) => write!(f, "terminal error: {e}"),
         }
     }
@@ -56,6 +64,12 @@ impl From<LobbyError> for AppError {
 impl From<NetError> for AppError {
     fn from(e: NetError) -> Self {
         AppError::Net(e)
+    }
+}
+
+impl From<ServerError> for AppError {
+    fn from(e: ServerError) -> Self {
+        AppError::Web(e)
     }
 }
 
@@ -237,23 +251,110 @@ fn game_loop(terminal: &mut DefaultTerminal, mut session: Session) -> Result<(),
     Ok(())
 }
 
-/// Hosts a match: listens on the port and plays as the first participant.
+/// How long a refusal stays on screen before the program exits with an error.
+const REJECTION_PAUSE: Duration = Duration::from_secs(2);
+
+/// Lines printed to stderr before the terminal switches screens when the host exposes the game.
+pub fn host_warnings(opts: &HostOptions) -> Vec<String> {
+    let game_ip = opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+    let web_ip = opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST));
+    let mut ports = format!("port {}", opts.port);
+    if let (Some(web), false) = (opts.web_port, web_ip.is_loopback()) {
+        ports.push_str(&format!(" and web port {web}"));
+    }
+    let mut out = Vec::new();
+    if !game_ip.is_loopback() {
+        out.push(format!(
+            "WARNING: listening on {game_ip}: the game has no encryption and no authentication, \
+             so anyone who can reach this machine on {ports} can play. Use --bind 127.0.0.1 to \
+             play only on this machine, or a firewall or tunnel to restrict access."
+        ));
+    }
+    out
+}
+
+/// The address browsers use for a web server listening on `addr`.
+pub fn web_url(addr: SocketAddr) -> String {
+    let ip = match addr.ip() {
+        IpAddr::V4(v4) if v4.is_unspecified() => IpAddr::V4(Ipv4Addr::LOCALHOST),
+        IpAddr::V6(v6) if v6.is_unspecified() => IpAddr::V6(std::net::Ipv6Addr::LOCALHOST),
+        ip => ip,
+    };
+    match ip {
+        IpAddr::V4(v4) => format!("http://{v4}:{}/", addr.port()),
+        IpAddr::V6(v6) => format!("http://[{v6}]:{}/", addr.port()),
+    }
+}
+
+/// The one-line explanation of a refused join.
+pub fn join_failure(reason: RejectReason) -> AppError {
+    AppError::Join(
+        match reason {
+            RejectReason::Full => "the match is full (4 players); try again when someone leaves",
+            RejectReason::BadVersion => {
+                "the host runs an incompatible version; update both to the same release"
+            }
+            RejectReason::BadName => "the host refused the name; use 1 to 16 printable characters",
+            RejectReason::InMatch => "a match is running; wait for it to finish, then join",
+        }
+        .to_string(),
+    )
+}
+
+fn connect_failure(addr: &str, e: NetError) -> AppError {
+    let reason = match &e {
+        NetError::Io(io) if io.kind() == io::ErrorKind::ConnectionRefused => {
+            "connection refused; check that the host is running and the address and port are right"
+                .to_string()
+        }
+        NetError::Io(io) => io.to_string().replace('\n', " "),
+        other => other.to_string().replace('\n', " "),
+    };
+    AppError::Join(format!("cannot reach {addr}: {reason}"))
+}
+
+/// Hosts a match: listens on the port and plays as the first participant, optionally also
+/// serving the web page for browsers.
 pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
+    let game_ip = opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     let host = Host::start(HostConfig {
-        bind: format!("0.0.0.0:{}", opts.port),
+        bind: SocketAddr::new(game_ip, opts.port).to_string(),
         seed: opts.seed,
         ..HostConfig::default()
     })?;
     for _ in 0..opts.bots {
         host.add_bot();
     }
+    let web = match opts.web_port {
+        Some(port) => Some(Server::attach(
+            host.handle(),
+            host.addr(),
+            ServerOptions {
+                bind: opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+                http_port: port,
+                game_port: host.addr().port(),
+                seed: opts.seed,
+                ..ServerOptions::default()
+            },
+        )?),
+        None => None,
+    };
+    for line in host_warnings(opts) {
+        eprintln!("{line}");
+    }
     let client = host.local_client(&opts.name)?;
-    online_loop(Online::hosting(host, client))
+    let mut online = Online::hosting(host, client);
+    online.web_url = web.as_ref().map(|s| web_url(s.http_addr()));
+    let result = online_loop(online);
+    // the match host is gone by now, so every browser has been told before the page stops
+    drop(web);
+    result
 }
 
 /// Joins a match hosted elsewhere.
 pub fn run_join(opts: &JoinOptions) -> Result<(), AppError> {
-    let client = Client::connect(&opts.addr, &opts.name)?;
+    let client =
+        Client::connect(&opts.addr, &opts.name).map_err(|e| connect_failure(&opts.addr, e))?;
     online_loop(Online::new(client))
 }
 
@@ -264,6 +365,9 @@ fn online_loop(mut online: Online) -> Result<(), AppError> {
     let mut next = Instant::now() + tick;
     while !online.quit {
         online.pump();
+        if let Some(reason) = online.rejection_shown(REJECTION_PAUSE) {
+            return Err(join_failure(reason));
+        }
         terminal.draw(|f| online::render(f, &online))?;
         let timeout = next.saturating_duration_since(Instant::now());
         if event::poll(timeout)? {

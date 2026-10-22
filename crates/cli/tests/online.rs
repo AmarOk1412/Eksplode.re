@@ -282,3 +282,159 @@ fn control_c_is_not_a_game_key() {
     a.handle_event(ctrl('c'));
     assert!(!a.quit);
 }
+
+// ---- feature 002, US3: hosting with the web page and clearer join errors ----
+
+use bomberust_cli::app::{self, AppError};
+use bomberust_cli::args::{HostOptions, JoinOptions};
+use bomberust_net::protocol::RejectReason;
+
+fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
+    HostOptions {
+        port: 7878,
+        bots: 0,
+        name: "Host".into(),
+        seed: None,
+        web_port,
+        bind: bind.map(|b| b.parse().unwrap()),
+    }
+}
+
+#[test]
+fn us3_as1_the_lobby_shows_the_web_page_only_when_there_is_one() {
+    let host = host_with(open_game(1000));
+    let port = host.addr().port();
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let s = screen(&h);
+    assert!(!s.contains("Web page"), "{s}");
+    assert!(
+        s.contains(&format!("bomberust-cli join <your-ip>:{port}")),
+        "{s}"
+    );
+    assert!(s.contains("q quit"), "{s}");
+
+    h.web_url = Some("http://127.0.0.1:8080/".into());
+    let s = screen(&h);
+    assert!(s.contains("Web page: http://127.0.0.1:8080/"), "{s}");
+}
+
+#[test]
+fn us3_as1_the_web_page_address_uses_loopback_for_wildcards() {
+    assert_eq!(
+        app::web_url("0.0.0.0:8080".parse().unwrap()),
+        "http://127.0.0.1:8080/"
+    );
+    assert_eq!(
+        app::web_url("127.0.0.1:9000".parse().unwrap()),
+        "http://127.0.0.1:9000/"
+    );
+    assert_eq!(
+        app::web_url("[::1]:80".parse().unwrap()),
+        "http://[::1]:80/"
+    );
+    assert_eq!(
+        app::web_url("192.168.1.5:8080".parse().unwrap()),
+        "http://192.168.1.5:8080/"
+    );
+}
+
+#[test]
+fn us3_as1_non_loopback_binds_print_the_exposure_warning() {
+    let w = app::host_warnings(&host_opts(Some("192.168.1.10"), Some(8080)));
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(w[0].starts_with("WARNING:"), "{w:?}");
+    assert!(
+        w[0].contains("192.168.1.10") && w[0].contains("no encryption"),
+        "{w:?}"
+    );
+    // the default game port listens on every interface
+    let w = app::host_warnings(&host_opts(None, None));
+    assert!(w.len() == 1 && w[0].contains("0.0.0.0"), "{w:?}");
+    // loopback is quiet
+    assert!(app::host_warnings(&host_opts(Some("127.0.0.1"), Some(8080))).is_empty());
+    assert!(app::host_warnings(&host_opts(Some("::1"), None)).is_empty());
+}
+
+fn one_line(e: &AppError) -> String {
+    let text = e.to_string();
+    assert!(!text.contains('\n'), "{text:?}");
+    assert!(!text.is_empty());
+    text
+}
+
+#[test]
+fn us3_as3_a_refused_connection_is_explained_in_one_line() {
+    let port = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    let err = app::run_join(&JoinOptions {
+        addr: format!("127.0.0.1:{port}"),
+        name: "Ann".into(),
+    })
+    .expect_err("nobody listens there");
+    let text = one_line(&err);
+    assert!(text.contains(&format!("127.0.0.1:{port}")), "{text}");
+    assert!(text.to_lowercase().contains("refused"), "{text}");
+    assert!(text.contains("host"), "{text}");
+}
+
+#[test]
+fn us3_as3_every_refusal_has_its_own_explanation() {
+    let texts: Vec<String> = [
+        RejectReason::Full,
+        RejectReason::BadVersion,
+        RejectReason::BadName,
+        RejectReason::InMatch,
+    ]
+    .into_iter()
+    .map(|r| one_line(&app::join_failure(r)))
+    .collect();
+    for (text, word) in texts.iter().zip(["full", "version", "name", "running"]) {
+        assert!(text.to_lowercase().contains(word), "{text}");
+    }
+    let mut unique = texts.clone();
+    unique.dedup();
+    assert_eq!(unique.len(), 4);
+}
+
+#[test]
+fn us3_as3_a_rejection_is_remembered_so_the_notice_can_stay_visible() {
+    let host = host_with(open_game(1000));
+    let mut firsts: Vec<Online> = (0..4).map(|i| joined(&host, &format!("p{i}"))).collect();
+    for f in &mut firsts {
+        assert!(pump_until(f, |o| o.slot.is_some()));
+    }
+    let mut late = joined(&host, "late");
+    assert!(late.rejection_shown(Duration::ZERO).is_none());
+    assert!(pump_until(&mut late, |o| o.stage == Stage::Closed));
+    assert_eq!(
+        late.rejection_shown(Duration::ZERO),
+        Some(RejectReason::Full)
+    );
+    assert_eq!(late.rejection_shown(Duration::from_secs(60)), None);
+    assert!(firsts[0].rejection_shown(Duration::ZERO).is_none());
+}
+
+#[test]
+fn us3_as3_names_and_running_matches_are_refused_with_a_reason() {
+    let host = host_with(open_game(10_000));
+    let mut bad = joined(&host, "");
+    assert!(pump_until(&mut bad, |o| o.stage == Stage::Closed));
+    assert_eq!(
+        bad.rejection_shown(Duration::ZERO),
+        Some(RejectReason::BadName)
+    );
+
+    let mut a = joined(&host, "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(0)));
+    a.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut a, |o| o.stage == Stage::Playing));
+    let mut late = joined(&host, "Late");
+    assert!(pump_until(&mut late, |o| o.stage == Stage::Closed));
+    assert_eq!(
+        late.rejection_shown(Duration::ZERO),
+        Some(RejectReason::InMatch)
+    );
+}

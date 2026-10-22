@@ -78,7 +78,7 @@ fn bots_are_pre_added_to_the_lobby() {
 }
 
 #[test]
-fn the_binary_reports_a_busy_port_and_exits_with_status_1() {
+fn us3_as2_the_binary_reports_a_busy_port_and_exits_with_status_1() {
     let busy = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = busy.local_addr().unwrap().port();
     let free = {
@@ -111,4 +111,40 @@ fn the_binary_rejects_bad_usage_with_status_2() {
         .unwrap();
     assert_eq!(out.status.code(), Some(0));
     assert!(String::from_utf8_lossy(&out.stdout).contains("--allow-origin"));
+}
+
+#[test]
+fn us3_as1_attach_shares_a_match_host_that_someone_else_owns() {
+    let host = bomberust_net::Host::start(bomberust_net::HostConfig {
+        bind: "127.0.0.1:0".into(),
+        tick: std::time::Duration::from_millis(4),
+        seed: Some(5),
+        game: options().game,
+        ..bomberust_net::HostConfig::default()
+    })
+    .unwrap();
+    let web = Server::attach(host.handle(), host.addr(), options()).unwrap();
+    assert_eq!(web.game_addr(), host.addr());
+
+    let mut ws = Ws::open(web.http_addr());
+    ws.join("Web");
+    assert_eq!(ws.welcome_slot(), 0);
+    let tcp = bomberust_net::Client::connect(&host.addr().to_string(), "Term").unwrap();
+    let joined = tcp.recv_timeout(WAIT).unwrap();
+    assert!(
+        matches!(joined, ServerMsg::Welcome { slot: 1, .. }),
+        "{joined:?}"
+    );
+
+    // stopping the page leaves the match host running for the terminal player
+    drop(web);
+    host.start_match();
+    let mut ticks = false;
+    while let Ok(m) = tcp.recv_timeout(WAIT) {
+        if matches!(m, ServerMsg::Snapshot { .. }) {
+            ticks = true;
+            break;
+        }
+    }
+    assert!(ticks, "the host keeps playing after the web server stops");
 }

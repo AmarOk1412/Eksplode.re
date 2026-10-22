@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
 use bomberust_cli::args::{parse, Command, LocalOptions, UsageError};
 
 fn args(list: &[&str]) -> Result<Command, UsageError> {
@@ -105,6 +107,8 @@ mod network {
             bots,
             name: name.into(),
             seed,
+            web_port: None,
+            bind: None,
         }))
     }
 
@@ -126,6 +130,54 @@ mod network {
             args(&["host", "--port", "9000", "--bots", "2", "--name", "Ann", "--seed", "5"]),
             host(9000, 2, "Ann", Some(5))
         );
+    }
+
+    #[test]
+    fn us3_as1_host_accepts_a_web_port_and_a_bind_address() {
+        let Ok(Command::Host(o)) = args(&["host", "--web-port", "8080", "--bind", "127.0.0.1"])
+        else {
+            panic!("must parse");
+        };
+        assert_eq!(o.web_port, Some(8080));
+        assert_eq!(o.bind, Some("127.0.0.1".parse().unwrap()));
+        assert_eq!((o.port, o.bots, o.name.as_str()), (7878, 0, "Host"));
+        let Ok(Command::Host(o)) = args(&["host", "--bind", "::1"]) else {
+            panic!("must parse");
+        };
+        assert_eq!(o.bind, Some("::1".parse().unwrap()));
+    }
+
+    #[test]
+    fn invalid_web_ports_and_addresses_are_usage_errors() {
+        for bad in [
+            ["host", "--web-port", "0"],
+            ["host", "--web-port", "70000"],
+            ["host", "--web-port", "x"],
+            ["host", "--bind", "nope"],
+            ["host", "--bind", "300.1.1.1"],
+        ] {
+            assert!(
+                matches!(args(&bad), Err(UsageError::InvalidValue { .. })),
+                "{bad:?}"
+            );
+        }
+        assert!(matches!(
+            args(&["host", "--web-port"]),
+            Err(UsageError::MissingValue(_))
+        ));
+    }
+
+    #[test]
+    fn join_accepts_web_style_addresses_and_keeps_only_the_host() {
+        // the port of a web address is the web port, not the game port
+        for (given, want) in [
+            ("http://192.168.1.5:8080/", "192.168.1.5:7878"),
+            ("https://play.example", "play.example:7878"),
+            ("ws://host.lan/ws", "host.lan:7878"),
+            ("http://[::1]:8080/", "[::1]:7878"),
+        ] {
+            assert_eq!(args(&["join", given]), join(want, "Player"), "{given}");
+        }
     }
 
     #[test]

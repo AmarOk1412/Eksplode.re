@@ -1,13 +1,14 @@
 //! Command-line argument parsing; see specs/001-bomberman-multiplayer/contracts/cli-interface.md.
 
 use std::fmt;
+use std::net::IpAddr;
 
 use bomberust_net::protocol::{valid_name, DEFAULT_PORT};
 
 pub const USAGE: &str = "\
 Usage:
   bomberust-cli [OPTIONS]                          play on this machine
-  bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N]
+  bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP]
   bomberust-cli join <ADDR[:PORT]> [--name NAME]
 
 Local options:
@@ -18,7 +19,13 @@ Local options:
   -h, --help      show this help
   -V, --version   show the version
 
+Host options:
+  --web-port <N>  also serve the web page on this port so browsers can join
+  --bind <IP>     address to listen on (default: game port on all interfaces,
+                  web page on 127.0.0.1)
+
 Network play: the host listens on port 7878 by default; up to 4 participants (humans and bots).
+Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
 Lobby keys: host b add bot, x remove bot, Enter start; clients r ready. Anyone: q quit.
 Keys: P1 arrows+Space, P2 WASD+E, P3 IJKL+O, P4 TFGH+Y; q quit, p pause, r rematch.";
 
@@ -39,6 +46,10 @@ pub struct HostOptions {
     pub bots: u8,
     pub name: String,
     pub seed: Option<u64>,
+    /// Also serve the web page on this port (1-65535).
+    pub web_port: Option<u16>,
+    /// Listening address; `None` keeps the defaults (game port on every interface, web page on loopback).
+    pub bind: Option<IpAddr>,
 }
 
 /// Options of `join`.
@@ -143,6 +154,8 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         bots: 0,
         name: "Host".to_string(),
         seed: None,
+        web_port: None,
+        bind: None,
     };
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -151,6 +164,8 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
             "--bots" => opts.bots = count(&arg, it.next(), 3)?,
             "--name" => opts.name = name(&arg, it.next())?,
             "--seed" => opts.seed = Some(number(&arg, it.next())?),
+            "--web-port" => opts.web_port = Some(web_port(&arg, it.next())?),
+            "--bind" => opts.bind = Some(number(&arg, it.next())?),
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }
@@ -170,12 +185,34 @@ fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         }
     }
     let addr = addr.ok_or(UsageError::MissingAddress)?;
-    let addr = if addr.contains(':') {
-        addr
-    } else {
-        format!("{addr}:{DEFAULT_PORT}")
+    let addr = match strip_scheme(&addr) {
+        Some(host) => format!("{host}:{DEFAULT_PORT}"),
+        None if addr.contains(':') => addr,
+        None => format!("{addr}:{DEFAULT_PORT}"),
     };
     Ok(Command::Join(JoinOptions { addr, name: player }))
+}
+
+/// For a web address (`http://host:8080/page`) the host alone: its port is the web port, not
+/// the game port. `None` when the address has no scheme.
+fn strip_scheme(addr: &str) -> Option<&str> {
+    let rest = ["http://", "https://", "ws://", "wss://"]
+        .iter()
+        .find_map(|s| addr.strip_prefix(s))?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or(rest);
+    if authority.starts_with('[') {
+        let end = authority.find(']')?;
+        return Some(&authority[..=end]);
+    }
+    Some(authority.split(':').next().unwrap_or(authority))
+}
+
+fn web_port(option: &str, v: Option<String>) -> Result<u16, UsageError> {
+    let v = value(option, v)?;
+    match v.parse::<u16>() {
+        Ok(p) if p > 0 => Ok(p),
+        _ => Err(invalid(option, v)),
+    }
 }
 
 fn value(option: &str, v: Option<String>) -> Result<String, UsageError> {

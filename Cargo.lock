@@ -46,6 +46,7 @@ dependencies = [
  "bomberust-bots",
  "bomberust-core",
  "bomberust-net",
+ "bomberust-web",
  "ratatui",
 ]
 

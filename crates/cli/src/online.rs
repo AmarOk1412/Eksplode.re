@@ -2,6 +2,7 @@
 
 use std::net::SocketAddr;
 use std::sync::mpsc::TryRecvError;
+use std::time::{Duration, Instant};
 
 use bomberust_core::{Controller, Lobby, Observation, Outcome};
 use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg};
@@ -36,6 +37,9 @@ pub struct Online {
     pub observation: Option<Observation>,
     pub notice: Option<String>,
     pub quit: bool,
+    /// Where browsers can join, when the host also serves the web page.
+    pub web_url: Option<String>,
+    rejection: Option<(RejectReason, Instant)>,
     input: InputState,
     tick: u32,
 }
@@ -52,6 +56,8 @@ impl Online {
             observation: None,
             notice: None,
             quit: false,
+            web_url: None,
+            rejection: None,
             input: InputState::new(4),
             tick: 0,
         }
@@ -70,6 +76,13 @@ impl Online {
 
     pub fn host_addr(&self) -> Option<SocketAddr> {
         self.host.as_ref().map(Host::addr)
+    }
+
+    /// The reason the host refused this join, once it has been on screen for `shown_for`.
+    pub fn rejection_shown(&self, shown_for: Duration) -> Option<RejectReason> {
+        self.rejection
+            .filter(|(_, since)| since.elapsed() >= shown_for)
+            .map(|(reason, _)| reason)
     }
 
     /// Applies every message that has arrived.
@@ -100,12 +113,15 @@ impl Online {
                 self.lobby = lobby;
                 self.stage = Stage::Lobby;
             }
-            ServerMsg::Rejected { reason } => self.close(match reason {
-                RejectReason::Full => "join refused: the match is full",
-                RejectReason::BadVersion => "join refused: incompatible version",
-                RejectReason::BadName => "join refused: invalid name",
-                RejectReason::InMatch => "join refused: a match is running",
-            }),
+            ServerMsg::Rejected { reason } => {
+                self.rejection = Some((reason, Instant::now()));
+                self.close(match reason {
+                    RejectReason::Full => "join refused: the match is full",
+                    RejectReason::BadVersion => "join refused: incompatible version",
+                    RejectReason::BadName => "join refused: invalid name",
+                    RejectReason::InMatch => "join refused: a match is running",
+                });
+            }
             ServerMsg::Lobby { lobby } => {
                 self.lobby = lobby;
                 if self.stage != Stage::Closed && self.stage != Stage::Playing {
@@ -238,6 +254,9 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
             "Others join with: bomberust-cli join <your-ip>:{}",
             addr.port()
         )));
+        if let Some(url) = &online.web_url {
+            lines.push(Line::from(format!("Web page: {url}")));
+        }
         lines.push(Line::default());
     }
     for (i, slot) in online.lobby.slots.iter().enumerate() {

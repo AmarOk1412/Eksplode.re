@@ -12,11 +12,14 @@ import re
 import select
 import socket
 import struct
+import subprocess
 import sys
 import termios
 import time
+import urllib.request
 
 BIN = os.environ.get("BOMBERUST_CLI", "target/debug/bomberust-cli")
+SERVER = os.environ.get("BOMBERUST_SERVER", "target/debug/bomberust-server")
 ENTERS = {
     "CR": b"\r",
     "LF": b"\n",
@@ -93,6 +96,57 @@ def check_host_enter(label, seq):
     return ok
 
 
+def start_server():
+    """A headless bomberust-server; returns (process, game_port, http_port)."""
+    game, http = free_port(), free_port()
+    proc = subprocess.Popen(
+        [SERVER, "--game-port", str(game), "--http-port", str(http)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    end = time.time() + 5
+    while time.time() < end:
+        try:
+            socket.create_connection(("127.0.0.1", game), timeout=0.2).close()
+            return proc, game, http
+        except OSError:
+            time.sleep(0.05)
+    proc.kill()
+    raise RuntimeError("bomberust-server did not start")
+
+
+def check_owner_through_server(seq):
+    """The first terminal player of a headless server is the owner and can start."""
+    proc, game, _ = start_server()
+    try:
+        client = spawn(["join", f"127.0.0.1:{game}", "--name", "Own"])
+        ok = wait_for([client[1]], client[1], "Slot 1")
+        if ok:
+            os.write(client[1], seq)
+            ok = wait_for([client[1]], client[1], "bombs")
+        stop(client)
+        return ok
+    finally:
+        proc.terminate()
+        proc.wait()
+
+
+def check_host_serves_the_page():
+    """host --web-port shows the page address and really serves the page."""
+    web = free_port()
+    host = spawn(["host", "--port", str(free_port()), "--web-port", str(web), "--bind", "127.0.0.1"])
+    url = f"http://127.0.0.1:{web}/"
+    ok = wait_for([host[1]], host[1], url)
+    if ok:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as r:
+                ok = r.status == 200 and b"Bomberust" in r.read()
+        except OSError:
+            ok = False
+    stop(host)
+    return ok
+
+
 def check_joined_non_owner():
     port = free_port()
     host = spawn(["host", "--port", str(port), "--name", "Host"])
@@ -123,6 +177,17 @@ def main():
     good = check_joined_non_owner()
     failures += 0 if good else 1
     print(f"joined non-owner sees 'Only Host ...': {'ok' if good else 'FAILED'}")
+    if os.path.exists(SERVER):
+        for label, seq in ENTERS.items():
+            results = [check_owner_through_server(seq) for _ in range(attempts)]
+            good = all(results)
+            failures += 0 if good else 1
+            print(f"joined owner on bomberust-server, {label}: {'ok' if good else 'FAILED'} ({sum(results)}/{attempts})")
+    else:
+        print(f"skipped the bomberust-server checks: {SERVER} is not built")
+    good = check_host_serves_the_page()
+    failures += 0 if good else 1
+    print(f"host --web-port serves the page: {'ok' if good else 'FAILED'}")
     return 1 if failures else 0
 
 

@@ -3,12 +3,15 @@ use std::process::Command;
 
 /// Runs scripts/pty-enter-check.py against the freshly built CLI (skipped without python3).
 #[test]
-fn every_enter_variant_starts_the_match_in_a_real_terminal() {
+fn us3_as4_every_enter_variant_starts_the_match_in_a_real_terminal() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let bin = PathBuf::from(env!("CARGO_BIN_EXE_bomberust-cli"));
+    // `cargo test --workspace` builds the server too; the script skips its checks otherwise
+    let server = bin.with_file_name("bomberust-server");
     let Ok(out) = Command::new("python3")
-        .arg("scripts/pty-enter-check.py")
+        .args(["scripts/pty-enter-check.py", "--attempts", "3"])
         .env("BOMBERUST_CLI", &bin)
+        .env("BOMBERUST_SERVER", &server)
         .current_dir(&root)
         .output()
     else {
