@@ -20,4 +20,4 @@ jobs:
       - run: ./scripts/build-wasm.sh
       - run: cd crates/web/js-tests && node --test
       - run: python3 scripts/pty-enter-check.py
-      - run: scripts/check-scenarios.sh
+      - run: F3_ONLY="f3_us0" scripts/check-scenarios.sh  # list the built 003 stages here

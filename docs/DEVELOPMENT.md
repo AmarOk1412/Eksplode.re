@@ -35,6 +35,12 @@ Run `node --test` from inside `crates/web/js-tests`; passing the directory from 
 root does not work with Node 22. Net and web tests join their clients one after another because
 slots are handed out in arrival order.
 
+Acceptance scenarios are named in test names: `us1_as3_...` for the web client and `f3_us1_as3_...`
+for customization, powers, sound and developer mode (the `f3_` prefix keeps the two numberings
+apart). Scenarios that need eyes or ears are ticked in a manual checklist next to the specs
+(`- [x] f3_us1_as3 ...`); `F3_ONLY="f3_us1 f3_us2" scripts/check-scenarios.sh` checks only the stages
+that are already built.
+
 ## Gates
 
 Everything below must pass before a change is merged (CI runs the same):
