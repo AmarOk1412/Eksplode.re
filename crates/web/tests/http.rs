@@ -195,3 +195,18 @@ fn random_bytes_do_not_hurt_the_server() {
     }
     assert_eq!(get(addr, "/").status, 200, "still serving");
 }
+
+#[test]
+fn sc005_the_whole_page_stays_small() {
+    let total: usize = ["/", "/app.js", "/style.css", "/bomberust_render.wasm"]
+        .iter()
+        .map(|p| bomberust_web::assets::lookup(p).unwrap().body.len())
+        .sum();
+    let wasm = bomberust_web::assets::lookup("/bomberust_render.wasm")
+        .unwrap()
+        .body
+        .len();
+    println!("page total {total} bytes, wasm {wasm} bytes");
+    assert!(wasm <= 300 * 1024, "wasm is {wasm} bytes");
+    assert!(total <= 500 * 1024, "page is {total} bytes");
+}

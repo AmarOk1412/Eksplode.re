@@ -272,3 +272,113 @@ fn us3_as3_cli_join_sees_browser_player() {
         other => panic!("{other:?}"),
     }
 }
+
+/// A browser or a terminal participant seen as a message channel.
+enum Endpoint {
+    Web(Box<Ws>),
+    Term(Client),
+}
+
+impl Endpoint {
+    fn send(&mut self, msg: ClientMsg) {
+        match self {
+            Endpoint::Web(ws) => ws.send(&msg),
+            Endpoint::Term(c) => {
+                let _ = c.send(msg);
+            }
+        }
+    }
+
+    fn recv(&mut self) -> Option<ServerMsg> {
+        match self {
+            Endpoint::Web(ws) => ws.recv(),
+            Endpoint::Term(c) => c.recv_timeout(WAIT).ok(),
+        }
+    }
+}
+
+/// Walks a column and back, timing how long each step takes to show up in a snapshot.
+fn drive(mut end: Endpoint, slot: usize) -> Vec<Duration> {
+    use bomberust_core::{Dir, Event};
+    use std::time::Instant;
+
+    let (first, back) = if slot < 2 {
+        (Dir::Down, Dir::Up)
+    } else {
+        (Dir::Up, Dir::Down)
+    };
+    let dirs: Vec<Dir> = [first; 5].into_iter().chain([back; 5]).collect();
+    let (mut latencies, mut idx, mut sent_at) = (Vec::new(), 0, None::<Instant>);
+    while let Some(m) = end.recv() {
+        match m {
+            ServerMsg::Snapshot { tick, events, .. } => {
+                let moved = events
+                    .iter()
+                    .any(|e| matches!(e, Event::Moved { player, .. } if player.index() == slot));
+                if let (true, Some(t0)) = (moved, sent_at) {
+                    latencies.push(t0.elapsed());
+                    sent_at = None;
+                    idx += 1;
+                }
+                let mv = dirs.get(idx).copied();
+                if mv.is_none() {
+                    return latencies;
+                }
+                if sent_at.is_none() {
+                    sent_at = Some(Instant::now());
+                }
+                end.send(ClientMsg::Input {
+                    tick,
+                    mv,
+                    bomb: false,
+                });
+            }
+            ServerMsg::Ended { .. } => break,
+            _ => {}
+        }
+    }
+    latencies
+}
+
+#[test]
+fn sc003_key_to_snapshot_latency_with_two_browsers_and_two_terminals() {
+    // the real 20 Hz tick; a one-tick move cooldown so a step does not wait for the cooldown
+    let s = server(|o| {
+        o.tick = Duration::from_millis(50);
+        o.game.block_density = 0.0;
+        o.game.base_move_cooldown = 1;
+        o.game.min_move_cooldown = 1;
+    });
+    let mut ws0 = Ws::open(s.http_addr());
+    ws0.join("w0");
+    assert_eq!(ws0.welcome_slot(), 0);
+    let (t1, slot) = tcp(&s, "t1");
+    assert_eq!(slot, 1);
+    let mut ws2 = Ws::open(s.http_addr());
+    ws2.join("w2");
+    assert_eq!(ws2.welcome_slot(), 2);
+    let (t3, slot) = tcp(&s, "t3");
+    assert_eq!(slot, 3);
+
+    ws0.send(&ClientMsg::Start);
+    let endpoints = vec![
+        Endpoint::Web(Box::new(ws0)),
+        Endpoint::Term(t1),
+        Endpoint::Web(Box::new(ws2)),
+        Endpoint::Term(t3),
+    ];
+    let handles: Vec<_> = endpoints
+        .into_iter()
+        .enumerate()
+        .map(|(slot, e)| std::thread::spawn(move || drive(e, slot)))
+        .collect();
+    let mut all: Vec<Duration> = handles
+        .into_iter()
+        .flat_map(|h| h.join().unwrap())
+        .collect();
+    assert!(all.len() >= 30, "only {} moves were observed", all.len());
+    all.sort();
+    let p95 = all[(all.len() * 95 / 100).min(all.len() - 1)];
+    println!("{} samples, p95 latency {:?}", all.len(), p95);
+    assert!(p95 < Duration::from_millis(200), "p95 latency {p95:?}");
+}
