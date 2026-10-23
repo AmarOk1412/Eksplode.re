@@ -134,8 +134,23 @@ export function rejectText(reason) {
   }
 }
 
-function outcomeText(outcome, slot) {
+const TEAM_LETTERS = ["A", "B"];
+
+/** The name shown for a slot in messages. */
+function slotName(lobby, i) {
+  const s = lobby?.slots?.[i];
+  if (s?.controller === "Bot") return `Bot ${i + 1}`;
+  return s?.name || `Player ${i + 1}`;
+}
+
+function outcomeText(outcome, slot, lobby) {
   if (outcome === "Draw") return "Draw";
+  if (outcome !== null && typeof outcome === "object" && "TeamWin" in outcome) {
+    const team = outcome.TeamWin === 1 ? 1 : 0;
+    const members = [0, 1, 2, 3].filter((i) => i >> 1 === team).map((i) => slotName(lobby, i));
+    const mine = slot !== null && slot >> 1 === team ? " - your team!" : "";
+    return `Team ${TEAM_LETTERS[team]} wins (${members.join(", ")})${mine}`;
+  }
   const winner = outcome?.Winner;
   if (winner === slot) return "You won!";
   return `Player ${winner + 1} won`;
@@ -181,7 +196,7 @@ export function reduce(state, event) {
     case "PlayerLeft":
       return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
     case "Ended":
-      return { ...state, stage: "lobby", notice: outcomeText(event.outcome, state.slot) };
+      return { ...state, stage: "lobby", notice: outcomeText(event.outcome, state.slot, state.lobby) };
     case "Error":
       if (event.code === "HostLeft") {
         return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
@@ -248,9 +263,11 @@ export function lobbyCards(lobby, you) {
   return (lobby?.slots ?? []).map((slot, i) => {
     const empty = slot.controller === "Empty";
     const name = empty ? "empty" : slot.controller === "Bot" ? "bot" : slot.name || `player ${i + 1}`;
-    const marks = [i === you ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : ""].filter(Boolean);
+    const team = lobby?.settings?.mode === "team" ? TEAM_LETTERS[i >> 1] : null;
+    const marks = [i === you ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : "", team ? `team ${team}` : ""].filter(Boolean);
     return {
       slot: i,
+      team,
       empty,
       banner: empty ? "EMPTY" : `PLAYER ${i + 1}`,
       name,
@@ -315,6 +332,7 @@ export function hudRows(state) {
       range: p.range,
       speed: base + 1 - p.move_cooldown,
       effects: effectsOf(p, hz),
+      team: typeof p.team === "number" ? TEAM_LETTERS[p.team] ?? null : null,
       you,
     });
   });
@@ -662,7 +680,7 @@ function start() {
         const li = document.createElement("li");
         li.className = "slot";
         const card = document.createElement("div");
-        card.className = `card slot-${c.slot}${c.empty ? " empty" : ""}`;
+        card.className = `card slot-${c.slot}${c.empty ? " empty" : ""}${c.team ? ` team-${c.team}` : ""}`;
         const portrait = document.createElement("canvas");
         portrait.className = "portrait";
         card.append(portrait);
@@ -671,7 +689,7 @@ function start() {
           marks.className = "marks";
           for (const m of c.marks) {
             const mark = document.createElement("span");
-            mark.className = `mark mark-${m}`;
+            mark.className = `mark mark-${m.replace(" ", "-")}`;
             mark.textContent = m;
             marks.append(mark);
           }
@@ -709,8 +727,9 @@ function start() {
         chip.textContent = String(row.slot + 1);
         const text = document.createElement("span");
         text.textContent = row.alive
-          ? `${row.label}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
-          : `${row.label}: eliminated`;
+          ? `${row.label}${row.team ? ` [team ${row.team}]` : ""}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
+          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}: eliminated`;
+        if (row.team) li.classList.add(`team-${row.team}`);
         li.append(chip, text);
         return li;
       }),

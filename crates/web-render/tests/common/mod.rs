@@ -17,6 +17,11 @@ pub fn standard() -> GameState {
     GameState::new(Config::default(), 7, [true; 4]).unwrap()
 }
 
+/// A fresh four-player game with the given configuration.
+pub fn with_config(config: Config) -> GameState {
+    GameState::new(config, 7, [true; 4]).unwrap()
+}
+
 /// A small custom arena with the given start positions for players 0 and 1.
 pub fn small(rows: &[&str], p0: (u8, u8), p1: (u8, u8)) -> GameState {
     let arena = Arena::from_rows(rows).unwrap();

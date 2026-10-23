@@ -7,6 +7,7 @@ use crate::closing;
 use crate::kick;
 use crate::punch;
 use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind};
+use crate::team;
 
 /// Advances the round by one tick and returns what happened.
 ///
@@ -148,7 +149,11 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
 fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
     for i in 0..MAX_PLAYERS {
         let p = &state.players[i];
-        if p.alive && state.flames.iter().any(|f| f.pos == p.pos) {
+        let burning = state
+            .flames
+            .iter()
+            .any(|f| f.pos == p.pos && team::hurts(&state.config, &state.players, f, p));
+        if p.alive && burning {
             events.push(Event::PlayerEliminated { player: p.id });
             state.players[i].alive = false;
             state.players[i].malus = None;
@@ -159,9 +164,11 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
 /// A single starting participant plays a practice round that only ends by death or time.
 fn outcome(state: &GameState) -> Option<Outcome> {
     let alive: Vec<_> = state.players.iter().filter(|p| p.alive).collect();
+    let team_round = state.started_teams.count_ones() >= 2;
     match alive.as_slice() {
         [] => Some(Outcome::Draw),
-        [only] if state.started > 1 => Some(Outcome::Winner(only.id)),
+        _ if team::outcome(state).is_some() => team::outcome(state),
+        [only] if state.started > 1 && !team_round => Some(Outcome::Winner(only.id)),
         // with the end pattern the round ends when at most one is left, however long it takes
         _ if closing::enabled(state) => None,
         _ if state.tick >= state.config.round_limit_ticks => Some(Outcome::Draw),

@@ -29,6 +29,9 @@ pub const BOMB_FUSE: Rgb = [0.55, 0.36, 0.2];
 pub const SPARK_A: Rgb = [1.0, 0.6, 0.1];
 pub const SPARK_B: Rgb = [1.0, 0.9, 0.3];
 pub const WHITE: Rgb = [1.0, 1.0, 1.0];
+/// The ring under the players of team A and team B.
+pub const TEAM_A_RING: Rgb = [0.2, 0.45, 0.95];
+pub const TEAM_B_RING: Rgb = [0.95, 0.55, 0.1];
 /// The frame and the block shadow of a square the end pattern is about to cover.
 pub const WARNING_FRAME: Rgb = [0.86, 0.12, 0.12];
 pub const WARNING_SHADOW: Rgb = [0.08, 0.08, 0.1];

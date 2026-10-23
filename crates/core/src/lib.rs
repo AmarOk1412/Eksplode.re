@@ -18,6 +18,7 @@ pub mod rng;
 pub mod room;
 pub mod state;
 pub mod step;
+pub mod team;
 
 pub use action::{Color, Dir, PlayerId, PlayerInput, Pos, MAX_PLAYERS};
 pub use arena::{Arena, Tile};

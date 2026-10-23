@@ -251,3 +251,61 @@ fn f4_us2_a_bot_keeps_moving_inward_ahead_of_the_pattern() {
     }
     assert!(s.players[0].alive, "dead at tick {}", s.tick);
 }
+
+fn team_state_of(friendly_fire: bool, starts: [Option<(u8, u8)>; 4]) -> GameState {
+    let config = bomberust_core::Config {
+        mode: bomberust_core::Mode::Team,
+        friendly_fire,
+        ..bomberust_core::Config::default()
+    };
+    state_with(config, &OPEN, starts)
+}
+
+#[test]
+fn f4_us3_as6_a_bot_does_not_target_its_teammate() {
+    // bot 0 and its teammate 1 stand next to each other; the opponents are far away
+    let starts = [Some((3, 3)), Some((3, 2)), Some((1, 5)), Some((5, 5))];
+    let s = team_state_of(true, starts);
+    assert!(!decide(&s).bomb, "a bomb would only hit the teammate");
+    let s = team_state_of(false, starts);
+    assert!(
+        !decide(&s).bomb,
+        "and a teammate is no target even when friendly fire is off"
+    );
+
+    // the same bot bombs an opponent that stands there instead
+    let starts = [Some((3, 3)), Some((5, 1)), Some((3, 2)), Some((5, 5))];
+    assert!(
+        decide(&team_state_of(true, starts)).bomb,
+        "an opponent next to it is a target"
+    );
+}
+
+#[test]
+fn f4_us3_as6_a_bot_does_not_bomb_when_a_teammate_would_be_hit_with_friendly_fire_on() {
+    // an opponent and the teammate are both within reach of a bomb on (3,3)
+    let starts = [Some((3, 3)), Some((3, 4)), Some((3, 2)), Some((5, 5))];
+    assert!(
+        !decide(&team_state_of(true, starts)).bomb,
+        "the teammate would die too"
+    );
+    assert!(
+        decide(&team_state_of(false, starts)).bomb,
+        "with friendly fire off only the opponent is hit"
+    );
+}
+
+#[test]
+fn f4_us3_as6_a_bot_still_flees_the_bomb_of_its_teammate() {
+    let starts = [Some((3, 3)), Some((1, 1)), Some((5, 1)), Some((5, 5))];
+    let mut s = team_state_of(false, starts);
+    add_bomb(&mut s, 1, 3, 2, 20);
+    let mut bot = DefaultBot::new(1);
+    let mut inputs = [PlayerInput::default(); 4];
+    for _ in 0..40 {
+        inputs[0] = bot.decide(&s.observe(pid(0)));
+        step(&mut s, &inputs);
+    }
+    assert!(s.players[0].alive);
+    assert_ne!(s.players[0].pos, pos(3, 3), "it left the line of the bomb");
+}

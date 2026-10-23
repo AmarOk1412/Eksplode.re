@@ -348,6 +348,8 @@ pub struct GameState {
     pub phase: Phase,
     /// Number of participants that started the round.
     pub started: u8,
+    /// Bit `t` is set when team `t` has a participant (Team mode).
+    pub started_teams: u8,
     /// The end pattern (Normal and Team mode).
     pub closing: Closing,
     /// Ticks until the next bonus appears (Chaser mode).
@@ -402,6 +404,10 @@ impl GameState {
             }
         }
         let ids = PlayerId::all();
+        let team_mode = config.mode == crate::room::Mode::Team;
+        let started_teams = (0..MAX_PLAYERS)
+            .filter(|i| team_mode && starts[*i].is_some())
+            .fold(0u8, |mask, i| mask | 1 << crate::team::team_of(i));
         let players = [0, 1, 2, 3].map(|i| Participant {
             id: ids[i],
             pos: starts[i].unwrap_or(Pos::new(0, 0)),
@@ -415,13 +421,14 @@ impl GameState {
             has_punch: false,
             has_kick: false,
             malus: None,
-            team: None,
+            team: team_mode.then(|| crate::team::team_of(i)),
             role: Role::Normal,
             hearts: 1,
             shield_left: 0,
         });
         Ok(GameState {
             bonus_in: config.bonus_every_ticks,
+            started_teams,
             closing: Closing::default(),
             drops: DropTable::defaults(config.powerup_chance),
             config,

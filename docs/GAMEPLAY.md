@@ -19,7 +19,7 @@ stay for the rematch. The room closes when the last person leaves.
 | Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x20, 40x22 and 52x26) | small |
 | Round time | 2, 3, 5 or 10 minutes | 3 |
 | Friendly fire | on or off (Team mode only) | on |
-| Mode | Normal | Normal |
+| Mode | Normal, Team | Normal |
 
 ## Normal mode and the end pattern
 
@@ -36,6 +36,23 @@ The round never ends by time while two players are alive. The page plays a warni
 impact sound and shows "The walls close in!"; the clock then says `CLOSING`.
 
 A round with a single participant (practice) has no end pattern and ends at the time limit.
+
+## Team mode
+
+Four participants (humans and bots) form two teams of two: slots 1 and 2 against slots 3 and 4. The
+lobby cards, the status lines and the board show the teams (page: a blue or orange ring under the
+characters and a team mark on the cards; terminal: `[A]` and `[B]`). The rules are those of Normal
+mode, including the end pattern, but a team wins when at least one of its members is alive and
+nobody of the other team is; if the last members of both teams are eliminated together the round is
+a draw. The result names the winning team and its members.
+
+Friendly fire is a room setting (on by default). With it on, explosions eliminate teammates like
+anybody. With it off, an explosion that only teammates lit does not hurt a player, but a player is
+still eliminated by their own bomb and by any explosion an opponent lit, and chain reactions still
+work. A Team match cannot start with fewer than four participants; the owner adds bots with the
+`Add bot` button (`b` in the terminal). A bot that takes over for a player who left plays for the
+same team and never targets a teammate; it also stays out of every explosion, including those of
+its teammates, and does not place a bomb that would reach a teammate while friendly fire is on.
 
 ## Powers
 

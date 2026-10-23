@@ -15,7 +15,7 @@ use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
 use crate::input::{map_key, normalize, InputState, KeyAction};
-use crate::view::{self, player_color, team_letter, ViewContext};
+use crate::view::{self, player_color, team_letter, team_members, ViewContext};
 
 /// Where an online session is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,7 +148,14 @@ impl Online {
                     Outcome::Winner(id) if Some(id.index()) == self.slot => "You won!".to_string(),
                     Outcome::Winner(id) => format!("Player {} won", id.index() + 1),
                     Outcome::Draw => "Draw".to_string(),
-                    Outcome::TeamWin(t) => format!("Team {} won", team_letter(t)),
+                    Outcome::TeamWin(t) => {
+                        let members = self
+                            .observation
+                            .as_ref()
+                            .map(|o| format!(" ({})", team_members(o, t)))
+                            .unwrap_or_default();
+                        format!("Team {} won{members}", team_letter(t))
+                    }
                     Outcome::ChaserWins => "The chaser wins".to_string(),
                     Outcome::RunnersWin => "The runners win".to_string(),
                 });
@@ -290,6 +297,11 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
             }
         };
         let me = if Some(i) == online.slot { " (you)" } else { "" };
+        let team = if online.lobby.settings.mode == bomberust_core::Mode::Team {
+            format!("  [team {}]", team_letter(bomberust_core::team::team_of(i)))
+        } else {
+            String::new()
+        };
         lines.push(Line::from(vec![
             Span::styled(
                 format!("Slot {}  ", i + 1),
@@ -297,7 +309,7 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
                     .fg(player_color(ids[i]))
                     .add_modifier(Modifier::BOLD),
             ),
-            Span::raw(format!("{who}{me}")),
+            Span::raw(format!("{who}{me}{team}")),
         ]));
     }
     lines.push(Line::default());

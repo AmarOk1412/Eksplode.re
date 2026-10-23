@@ -2,6 +2,7 @@
 // starts a match, plays a few keys and saves screenshots. Optional manual-style check, not part of
 // `cargo test`. Usage:
 //   node scripts/browser-smoke.mjs http://127.0.0.1:8080/ [out-dir]
+// MODE=normal|team picks the mode of the room (default normal).
 // SIZE=small|medium|large picks the board of the room (default medium).
 // CLOSING=1 plays a 2-minute round and saves screenshots of the end pattern (takes about 80 s).
 // Needs a Chromium based browser (BROWSER=/path/to/browser, default chromium-browser).
@@ -108,6 +109,9 @@ async function main() {
       const select = document.getElementById(id);
       select.value = value;
       select.dispatchEvent(new Event('change'));
+    }
+    for (const b of document.querySelectorAll('#room-modes button')) {
+      if (b.textContent.toLowerCase() === '${process.env.MODE ?? 'normal'}') b.click();
     }
     document.getElementById('room-create').click();
     return 1;

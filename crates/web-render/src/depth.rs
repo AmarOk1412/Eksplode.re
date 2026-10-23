@@ -29,6 +29,10 @@ pub enum Sprite {
         lead: u32,
     },
     PowerUp(PowerUpKind),
+    /// The ring under a player of team `0` or `1`.
+    TeamRing {
+        team: u8,
+    },
     /// `flying` bombs are in the air after a punch and cast a shadow on the ground.
     Bomb {
         ticks_left: u32,
@@ -156,6 +160,11 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
     for (slot, p) in obs.players.iter().enumerate() {
         if p.alive {
             let (x, y) = interp.position(slot, alpha);
+            if let Some(team) = p.team {
+                // just above the row of the player so the ring is drawn first
+                let ring = Sprite::TeamRing { team };
+                objects.push(item((x + 0.5, y + 0.5 - 0.01), Layer::Player, ring));
+            }
             let sprite = Sprite::Player { slot: slot as u8 };
             let mut it = item((x + 0.5, y + 0.5), Layer::Player, sprite);
             it.malus = p.malus.map(|m| m.kind);

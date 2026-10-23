@@ -61,7 +61,7 @@ Examples:
 | `Start` | `seed: u64`, `config` | the owner started a match |
 | `Snapshot` | `tick: u32`, `state` (an `Observation` for this slot), `events: [Event]` | every tick of a match (20 Hz) |
 | `PlayerLeft` | `slot: u8`, `replaced_by_bot: bool` | a player disconnected or went silent |
-| `Ended` | `outcome: {"Winner": slot} / "Draw"` | the round is over; the lobby follows |
+| `Ended` | `outcome: {"Winner": slot} / "Draw" / {"TeamWin": 0 or 1}` | the round is over; the lobby follows |
 | `Error` | `code: string`, `message: string` | a message was refused; see below |
 | `Pong` | `nonce: u64` | answer to `Ping` |
 | `DevState` | `paused: bool`, `drops: [f32; 8]` | developer mode: sent to a joiner and to everybody when the pause or the drop table changes |
@@ -85,6 +85,12 @@ null); a bomb in the air carries `flight` (`{"dir":"Right","hop_left":1,"origin"
 The config adds `malus_ticks` and `punch_hop_ticks`; all new fields are optional for older
 peers. Events gain `BombPunched`, `BombHopped`, `BombLanded`, `BombKicked`, `BombSlid`, `BombStopped`,
 `MalusStarted` and `MalusEnded`.
+Rooms add to the observation: `config.mode` (`"normal"`, `"team"`, `"chaser"`), `config.friendly_fire`
+and the end pattern values (`closing_ticks`, `closing_lead_ticks`), `falling` (the announced squares,
+`[{"pos":{"x":1,"y":1},"ticks_left":12}]`), and per player `team` (`0` or `1` in Team mode, else
+null), `role`, `hearts` and `shield_left`; a flame carries `owners`, a bit mask of the slots whose
+bombs lit it. Events gain `PatternStarted`, `BlockWarned`, `BlockLanded`, `HeartLost` and
+`RoleAssigned`. All of them are optional for older peers.
 Rules: [GAMEPLAY.md](GAMEPLAY.md).
 
 ## Rooms

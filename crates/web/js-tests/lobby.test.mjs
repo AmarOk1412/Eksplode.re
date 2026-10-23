@@ -67,3 +67,18 @@ test("f3_us1_as3_the_animation_runs_only_while_the_lobby_is_visible", () => {
   frames.tick(9000);
   assert.deepEqual(seen.slice(2), [0], "a new run starts from zero");
 });
+
+test("f4_us3_as1_in_team_mode_each_card_shows_its_team", () => {
+  const lobby = {
+    slots: [slot("Local", "Ann"), slot("Bot"), slot("Remote", "Cy"), slot("Bot")],
+    settings: { name: "Friday", mode: "team", size: "small", minutes: 3, friendly_fire: true },
+  };
+  const cards = lobbyCards(lobby, 2);
+  assert.deepEqual(cards.map((c) => c.team), ["A", "A", "B", "B"], "slots 1 and 2 against 3 and 4");
+  assert.ok(cards[0].marks.includes("team A") && cards[3].marks.includes("team B"));
+  assert.equal(cards[2].caption, "Cy (you, team B)");
+  // outside Team mode there are no teams
+  const normal = lobbyCards({ ...lobby, settings: { ...lobby.settings, mode: "normal" } }, 2);
+  assert.ok(normal.every((c) => c.team === null && !c.marks.some((m) => m.startsWith("team"))));
+  assert.deepEqual(lobbyCards({ slots: lobby.slots }, 0).map((c) => c.team), [null, null, null, null], "an old host sends no settings");
+});

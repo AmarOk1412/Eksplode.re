@@ -122,7 +122,7 @@ test("the hud lists the participants with their stats", () => {
   const s = run([welcome(1, lobby("Remote", "Remote", "Bot")), { type: "Snapshot", tick: 1, state: { players, config: { base_move_cooldown: 4 } }, events: [] }]);
   const rows = hudRows(s);
   assert.equal(rows.length, 3, "empty slots are not listed");
-  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, effects: [], you: true });
+  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, effects: [], team: null, you: true });
   assert.equal(rows[2].label, "Bot");
   assert.equal(rows[2].kind, "bot");
   assert.equal(rows[2].alive, false);
@@ -199,4 +199,38 @@ test("f4_us2_as6_the_banner_appears_when_the_pattern_starts_and_the_clock_says_c
   assert.equal(timerText({ tick: 5000, config }), "CLOSING", "past the limit while two live");
   assert.equal(timerText({ tick: 2400, config: { ...config, closing_ticks: 0 } }), "01:00", "no pattern, no word");
   assert.equal(timerText({ tick: 2400, config: { ...config, mode: "chaser" } }), "01:00");
+});
+
+test("f4_us3_as5_the_result_names_the_winning_team_and_its_members", () => {
+  const lobby = {
+    slots: [
+      { controller: "Remote", name: "Ann" },
+      { controller: "Bot", name: "" },
+      { controller: "Remote", name: "Cy" },
+      { controller: "Remote", name: "Di" },
+    ],
+    settings: { mode: "team" },
+  };
+  const base = { ...initialState(), stage: "playing", slot: 2, lobby };
+  const a = reduce(base, { type: "Ended", outcome: { TeamWin: 0 } });
+  assert.equal(a.stage, "lobby");
+  assert.equal(a.notice, "Team A wins (Ann, Bot 2)");
+  const b = reduce(base, { type: "Ended", outcome: { TeamWin: 1 } });
+  assert.equal(b.notice, "Team B wins (Cy, Di) - your team!");
+  assert.equal(reduce(base, { type: "Ended", outcome: "Draw" }).notice, "Draw");
+  assert.equal(reduce(base, { type: "Ended", outcome: { Winner: 2 } }).notice, "You won!");
+});
+
+test("f4_us3_as5_status_rows_carry_the_team", () => {
+  const players = [0, 1, 2, 3].map((i) => ({ alive: true, bombs_active: 0, bombs_max: 1, range: 2, move_cooldown: 4, team: i < 2 ? 0 : 1 }));
+  const state = {
+    ...initialState(),
+    slot: 0,
+    lobby: { slots: [0, 1, 2, 3].map((i) => ({ controller: i === 0 ? "Remote" : "Bot", name: "Ann" })) },
+    observation: { players, config: { base_move_cooldown: 4, tick_hz: 20 } },
+  };
+  const rows = hudRows(state);
+  assert.deepEqual(rows.map((r) => r.team), ["A", "A", "B", "B"]);
+  const none = hudRows({ ...state, observation: { ...state.observation, players: players.map((p) => ({ ...p, team: undefined })) } });
+  assert.ok(none.every((r) => r.team === null));
 });

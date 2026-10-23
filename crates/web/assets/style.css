@@ -242,7 +242,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   width: min(270px, 100%);
 }
 
-.banner {
+.pattern-banner {
   margin: 8px auto;
   padding: 6px 16px;
   width: fit-content;
@@ -261,3 +261,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .room-controls input { width: min(200px, 100%); font-size: 1rem; }
 .room-controls select { width: auto; }
 .check input { width: auto; }
+
+.card.team-A { box-shadow: 0 0 0 5px #3373f2; }
+.card.team-B { box-shadow: 0 0 0 5px #f28c1a; }
+.mark-team-A { background: #3373f2; color: #fff; }
+.mark-team-B { background: #f28c1a; color: #fff; }
+#hud li.team-A .chip { outline: 3px solid #3373f2; }
+#hud li.team-B .chip { outline: 3px solid #f28c1a; }

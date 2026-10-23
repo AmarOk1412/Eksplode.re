@@ -318,3 +318,66 @@ fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
     assert!(!fits.contains("terminal too small"), "{fits}");
     assert!(fits.contains("P1") && fits.contains("P4"));
 }
+
+fn team_game() -> GameState {
+    let config = Config {
+        mode: bomberust_core::Mode::Team,
+        ..Config::default()
+    };
+    let arena = Arena::from_rows(&ROWS).unwrap();
+    let starts = [
+        Some(Pos::new(1, 1)),
+        Some(Pos::new(1, 5)),
+        Some(Pos::new(5, 1)),
+        Some(Pos::new(5, 5)),
+    ];
+    GameState::custom(config, arena, starts, 1).unwrap()
+}
+
+fn team_ctx() -> ViewContext {
+    ViewContext {
+        paused: false,
+        tags: [
+            Some("human".into()),
+            Some("bot".into()),
+            Some("bot".into()),
+            Some("bot".into()),
+        ],
+        notice: None,
+    }
+}
+
+#[test]
+fn f4_us3_as5_teams_are_marked_in_the_status_and_the_result_names_the_winning_team() {
+    let mut st = team_game();
+    let s = draw(&st, &team_ctx(), 80, 28).join("\n");
+    let line = |p: &str| {
+        s.lines()
+            .find(|l| l.contains(p) && l.contains("bombs"))
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert!(
+        line("P1 ").contains("[A]") && line("P2 ").contains("[A]"),
+        "{s}"
+    );
+    assert!(
+        line("P3 ").contains("[B]") && line("P4 ").contains("[B]"),
+        "{s}"
+    );
+
+    st.phase = Phase::Ended(Outcome::TeamWin(1));
+    let s = draw(&st, &team_ctx(), 80, 28).join("\n");
+    assert!(s.contains("Team B wins") && s.contains("P3, P4"), "{s}");
+    st.phase = Phase::Ended(Outcome::TeamWin(0));
+    let s = draw(&st, &team_ctx(), 80, 28).join("\n");
+    assert!(s.contains("Team A wins") && s.contains("P1, P2"), "{s}");
+    st.phase = Phase::Ended(Outcome::Draw);
+    assert!(draw(&st, &team_ctx(), 80, 28).join("\n").contains("Draw"));
+}
+
+#[test]
+fn normal_mode_status_lines_have_no_team_marks() {
+    let s = screen(&base(), &ctx());
+    assert!(!s.contains("[A]") && !s.contains("[B]"));
+}

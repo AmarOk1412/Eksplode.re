@@ -211,7 +211,15 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
         } else {
             format!("{tag:<6} eliminated")
         };
-        lines.push(Line::from(vec![name, Span::raw(detail)]));
+        let mut spans = vec![name];
+        if let Some(t) = p.team {
+            spans.push(Span::styled(
+                format!("[{}] ", team_letter(t)),
+                Style::default().add_modifier(Modifier::BOLD),
+            ));
+        }
+        spans.push(Span::raw(detail));
+        lines.push(Line::from(spans));
     }
     lines
 }
@@ -225,6 +233,17 @@ pub fn team_letter(team: u8) -> char {
     }
 }
 
+/// `P1, P2`: the members of a team.
+pub fn team_members(state: &Observation, team: u8) -> String {
+    state
+        .players
+        .iter()
+        .filter(|p| p.team == Some(team))
+        .map(|p| format!("P{}", p.id.index() + 1))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
     let text = match (&ctx.notice, state.phase) {
         (Some(n), _) => n.clone(),
@@ -233,7 +252,11 @@ fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
         }
         (None, Phase::Ended(Outcome::Draw)) => "Draw!  r: rematch  q: quit".to_string(),
         (None, Phase::Ended(Outcome::TeamWin(t))) => {
-            format!("Team {} wins!  r: rematch  q: quit", team_letter(t))
+            format!(
+                "Team {} wins ({})!  r: rematch  q: quit",
+                team_letter(t),
+                team_members(state, t)
+            )
         }
         (None, Phase::Ended(Outcome::ChaserWins)) => {
             "The chaser wins!  r: rematch  q: quit".to_string()

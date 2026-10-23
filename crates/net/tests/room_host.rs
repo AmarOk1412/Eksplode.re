@@ -289,3 +289,63 @@ fn a_change_by_the_owner_before_the_start_is_used() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn a_team_room_is_accepted_and_the_other_modes_follow_their_rules() {
+    let host = host();
+    let (mut a, _, lobby) = join(&host, "Ann", Some(json!({"mode": "team"})));
+    assert_eq!(lobby.settings.mode, Mode::Team);
+    a.send_line(r#"{"type":"SetRoom","settings":{"mode":"team","friendly_fire":false}}"#);
+    let s = lobby_settings(&mut a, |s| !s.friendly_fire);
+    assert_eq!(s.mode, Mode::Team);
+    assert!(!s.friendly_fire);
+}
+
+#[test]
+fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_count() {
+    let host = host();
+    let (mut a, _, _) = join(
+        &host,
+        "Ann",
+        Some(json!({"mode": "team", "friendly_fire": false})),
+    );
+    for (missing, add_bot) in [(3, true), (2, true), (1, false)] {
+        a.send(&ClientMsg::Start);
+        let message = match a.recv_until(is_error("CannotStart")) {
+            Some(ServerMsg::Error { message, .. }) => message,
+            other => panic!("{other:?}"),
+        };
+        assert!(message.contains(&format!("{missing} missing")), "{message}");
+        assert!(
+            message.contains("bots"),
+            "the message says bots can fill the slots: {message}"
+        );
+        if add_bot {
+            a.send(&ClientMsg::AddBot);
+            a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() > 4 - missing as usize))
+                .unwrap();
+        }
+    }
+    // a second human and two bots make four
+    let (_b, _, _) = join(&host, "Bob", None);
+    a.send(&ClientMsg::AddBot);
+    a.send(&ClientMsg::AddBot);
+    a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4))
+        .unwrap();
+    a.send(&ClientMsg::Start);
+    match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
+        Some(ServerMsg::Start { config, .. }) => {
+            assert_eq!(config.mode, Mode::Team);
+            assert!(!config.friendly_fire);
+        }
+        other => panic!("{other:?}"),
+    }
+    // teams reach the observation
+    match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
+        Some(ServerMsg::Snapshot { state, .. }) => {
+            let teams: Vec<_> = state.players.iter().map(|p| p.team).collect();
+            assert_eq!(teams, vec![Some(0), Some(0), Some(1), Some(1)]);
+        }
+        other => panic!("{other:?}"),
+    }
+}

@@ -3,7 +3,7 @@
 
 /** Every mode, by wire name, and the modes whose rules exist (the menu offers only these). */
 export const MODES = ["normal", "team", "chaser"];
-export const PLAYABLE_MODES = ["normal"];
+export const PLAYABLE_MODES = ["normal", "team"];
 export const MODE_LABELS = { normal: "Normal", team: "Team", chaser: "Chaser" };
 export const MODE_HINTS = {
   normal: "Everybody against everybody. The board closes in during the last minute.",

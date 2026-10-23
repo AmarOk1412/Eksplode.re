@@ -414,3 +414,41 @@ fn announced_squares_are_drawn_below_players_and_bombs() {
     let low_player = helmet.iter().map(|c| c.layer).fold(f32::MAX, f32::min);
     assert!(top_frame < low_player, "the warning is under the player");
 }
+
+fn team_state() -> GameState {
+    let config = bomberust_core::Config {
+        mode: bomberust_core::Mode::Team,
+        ..bomberust_core::Config::default()
+    };
+    with_config(config)
+}
+
+#[test]
+fn f4_us3_as5_teammates_stand_on_rings_of_the_same_colour() {
+    let list = commands(&team_state());
+    let blue = quads_with(&list, TEAM_A_RING);
+    let orange = quads_with(&list, TEAM_B_RING);
+    assert_eq!(blue.len(), 2, "two players of team A");
+    assert_eq!(orange.len(), 2, "two players of team B");
+    assert_ne!(TEAM_A_RING, TEAM_B_RING);
+    // a ring lies under its player: the helmet is drawn after it
+    for slot in 0..4u8 {
+        let helmet = quads_with(&list, player_skin(slot).helmet);
+        let ring_layer = if slot < 2 { &blue } else { &orange }
+            .iter()
+            .map(|c| c.layer)
+            .fold(f32::MAX, f32::min);
+        let top = helmet.iter().map(|c| c.layer).fold(f32::MIN, f32::max);
+        assert!(ring_layer <= top, "slot {slot}");
+    }
+}
+
+#[test]
+fn normal_mode_has_no_team_rings_and_dead_players_lose_theirs() {
+    let list = commands(&standard());
+    assert!(quads_with(&list, TEAM_A_RING).is_empty() && quads_with(&list, TEAM_B_RING).is_empty());
+    let mut s = team_state();
+    s.players[0].alive = false;
+    let list = commands(&s);
+    assert_eq!(quads_with(&list, TEAM_A_RING).len(), 1);
+}

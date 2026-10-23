@@ -130,7 +130,7 @@ impl Bot for DefaultBot {
             let enemies: Vec<Pos> = obs
                 .players
                 .iter()
-                .filter(|p| p.alive && p.id != me.id)
+                .filter(|p| is_enemy(me, p))
                 .map(|p| p.pos)
                 .collect();
             let hunt = |t: Pos| {
@@ -198,6 +198,11 @@ fn move_inward(
         .filter(|p| !p.is_empty())
 }
 
+/// Another living participant that is not on the bot's team (everybody is an enemy without teams).
+fn is_enemy(me: &Participant, other: &Participant) -> bool {
+    other.alive && other.id != me.id && (me.team.is_none() || other.team != me.team)
+}
+
 /// A tile with at least two open neighbours is not a dead end.
 fn roomy(obs: &Observation, t: Pos) -> bool {
     Dir::ALL
@@ -214,11 +219,21 @@ fn can_bomb_here(obs: &Observation, me: &Participant) -> bool {
         return false;
     }
     let hit = blast(&obs.arena, me.pos, me.placed_range());
+    // with friendly fire a bomb that reaches a teammate kills the teammate
+    if obs.config.mode == Mode::Team
+        && obs.config.friendly_fire
+        && obs
+            .players
+            .iter()
+            .any(|p| p.alive && p.id != me.id && !is_enemy(me, p) && hit.tiles.contains(&p.pos))
+    {
+        return false;
+    }
     let useful = !hit.destroyed.is_empty()
         || obs
             .players
             .iter()
-            .any(|p| p.alive && p.id != me.id && hit.tiles.contains(&p.pos));
+            .any(|p| is_enemy(me, p) && hit.tiles.contains(&p.pos));
     if !useful {
         return false;
     }

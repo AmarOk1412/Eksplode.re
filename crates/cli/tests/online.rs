@@ -527,14 +527,15 @@ fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
     assert!(pump_until(&mut h, |o| !o.lobby.settings.friendly_fire));
 
     h.handle_key(KeyCode::Char('m'));
-    h.pump();
+    assert!(pump_until(&mut h, |o| o.lobby.settings.mode
+        == bomberust_core::Mode::Team));
     assert!(bomberust_core::PLAYABLE.contains(&h.lobby.settings.mode));
 
-    // a terminal player sees the same line
+    // a terminal player sees the same line, with the friendly-fire choice of Team mode
     let mut a = joined_at(h.host_addr().unwrap(), "Ann");
     assert!(pump_until(&mut a, |o| o.slot == Some(1)));
     assert!(
-        lobby_text_has(&a, "Lab - Normal - 19 x 15 - 5 min"),
+        lobby_text_has(&a, "Lab - Team - 19 x 15 - 5 min - friendly fire off"),
         "{}",
         screen(&a)
     );
@@ -598,5 +599,36 @@ fn the_lobby_shows_the_settings_on_the_smallest_terminal() {
     assert!(
         text.contains("Hosty") && text.contains("Large") || text.contains("25 x"),
         "{text}"
+    );
+}
+
+#[test]
+fn f4_us3_as5_the_terminal_lobby_shows_the_teams_and_the_result_names_the_winner() {
+    use bomberust_core::{Mode, RoomSettings};
+    let host = room_host(RoomSettings {
+        mode: Mode::Team,
+        ..Default::default()
+    });
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    for _ in 0..3 {
+        h.handle_key(KeyCode::Char('b'));
+    }
+    assert!(pump_until(&mut h, |o| o.lobby.participants() == 4));
+    let s = screen(&h);
+    assert!(s.contains("Team"), "{s}");
+    let line = |slot: &str| {
+        s.lines()
+            .find(|l| l.contains(slot))
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert!(
+        line("Slot 1").contains("team A") && line("Slot 2").contains("team A"),
+        "{s}"
+    );
+    assert!(
+        line("Slot 3").contains("team B") && line("Slot 4").contains("team B"),
+        "{s}"
     );
 }

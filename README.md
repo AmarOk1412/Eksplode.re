@@ -7,6 +7,10 @@ pixel-art view are all small, tested crates.
 ## Features
 
 - Four players per match: any mix of people (terminal or browser) and bots.
+- **Rooms and modes:** the owner of a room chooses the mode (Normal, Team), the board size (small,
+  medium, large), the round time (2, 3, 5 or 10 minutes) and, for Team, friendly fire, on a creation
+  menu (page) or setup screen (terminal). In Normal and Team rounds the board closes in during the
+  last minute until one player or team is left; see [docs/GAMEPLAY.md](docs/GAMEPLAY.md).
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
   grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
   animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. Players

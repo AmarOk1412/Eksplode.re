@@ -195,3 +195,36 @@ fn f4_sc010_the_large_board_keeps_the_tick_rate_with_four_bots() {
         "{per_tick:?} per tick"
     );
 }
+
+#[test]
+fn f4_us3_four_bot_team_rounds_always_end_with_a_team_result() {
+    for friendly_fire in [true, false] {
+        let config = Config {
+            mode: bomberust_core::Mode::Team,
+            friendly_fire,
+            round_limit_ticks: 600,
+            closing_ticks: 300,
+            ..Config::default()
+        };
+        let mut team_wins = 0;
+        for seed in 0..50u64 {
+            let mut s = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+            let mut bots: Vec<DefaultBot> = (0..4).map(|i| DefaultBot::new(seed * 4 + i)).collect();
+            while s.phase == Phase::Playing {
+                let mut inputs = [PlayerInput::default(); 4];
+                for (i, bot) in bots.iter_mut().enumerate() {
+                    inputs[i] = bot.decide(&s.observe(pid(i as u8)));
+                }
+                step(&mut s, &inputs);
+                assert!(s.tick <= 600 + 21, "seed {seed} never ended");
+            }
+            match s.phase {
+                Phase::Ended(Outcome::TeamWin(_)) => team_wins += 1,
+                Phase::Ended(Outcome::Draw) => {}
+                other => panic!("seed {seed}: {other:?}"),
+            }
+        }
+        println!("friendly fire {friendly_fire}: {team_wins}/50 rounds with a winning team");
+        assert!(team_wins > 0);
+    }
+}
