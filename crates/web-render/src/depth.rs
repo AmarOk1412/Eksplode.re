@@ -1,8 +1,10 @@
 //! What to draw and in which order.
 
+use bomberust_core::kick::predict_slide_stop;
 use bomberust_core::{Observation, PowerUpKind, Tile};
 
 use crate::interp::Interp;
+use crate::look::{Frame, View};
 
 /// Drawing layers, back to front.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -40,6 +42,9 @@ pub struct Item {
     pub lift: f32,
     /// The malus that tints a player.
     pub malus: Option<PowerUpKind>,
+    /// Which way a player looks and which step of the walk they are in.
+    pub view: View,
+    pub frame: Frame,
 }
 
 impl Item {
@@ -56,6 +61,8 @@ fn item(pos: (f32, f32), layer: Layer, sprite: Sprite) -> Item {
         sprite,
         lift: 0.0,
         malus: None,
+        view: View::Down,
+        frame: Frame::Idle,
     }
 }
 
@@ -87,13 +94,31 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
         it.lift = 0.05 * (phase * 0.3 + i as f32).sin();
         objects.push(it);
     }
-    for b in &obs.bombs {
+    for (i, b) in obs.bombs.iter().enumerate() {
         let mut sprite = Sprite::Bomb {
             ticks_left: b.ticks_left,
             flying: false,
         };
         let mut at = centre(b.pos.x, b.pos.y);
         let mut lift = 0.0;
+        if let Some(slide) = b.slide {
+            // a kicked bomb rolls on towards the next square, but only while there is room
+            let ahead = predict_slide_stop(&obs.arena, &obs.players, &obs.bombs, i) != b.pos;
+            if ahead {
+                let every = obs.config.slide_ticks.max(1) as f32;
+                let a = if alpha.is_finite() {
+                    alpha.clamp(0.0, 1.0)
+                } else {
+                    0.0
+                };
+                let progress = ((every - slide.step_left as f32 + a) / every).clamp(0.0, 1.0);
+                let (dx, dy) = slide.dir.delta();
+                at = (
+                    at.0 + f32::from(dx) * progress,
+                    at.1 + f32::from(dy) * progress,
+                );
+            }
+        }
         if let Some(f) = b.flight {
             // the bomb hops one square per `punch_hop_ticks`: half a hop in, it is half a tile
             // along and at the top of its arc
@@ -120,6 +145,8 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
             let sprite = Sprite::Player { slot: slot as u8 };
             let mut it = item((x + 0.5, y + 0.5), Layer::Player, sprite);
             it.malus = p.malus.map(|m| m.kind);
+            it.view = View::from_dir(p.facing);
+            it.frame = interp.pose(slot, alpha);
             objects.push(it);
         }
     }

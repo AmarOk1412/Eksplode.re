@@ -1,5 +1,7 @@
 //! Pixel-art sprites and the colour palette.
 
+use bomberust_core::PowerUpKind;
+
 pub type Rgb = [f32; 3];
 
 pub fn hex(rgb: u32) -> Rgb {
@@ -220,4 +222,131 @@ pub fn bomb_colour(ch: char, blink: bool) -> Option<Rgb> {
         'o' => Some(if blink { SPARK_A } else { SPARK_B }),
         _ => None,
     }
+}
+
+/// Pixels per side of a power icon template.
+pub const ICON_SIZE: usize = 10;
+
+/// Background of the icon of a bonus and of a malus (the frames are white and dark red).
+pub const ICON_BONUS_FILL: Rgb = [0.176, 0.227, 0.388];
+pub const ICON_MALUS_FILL: Rgb = [0.333, 0.314, 0.376];
+
+/// The pixel picture of a power: extra bomb (a bomb with a plus), roller (a rollerskate), flame,
+/// punch (a boxing glove), kick (a boot), slow (a snail), hyper speed (a lightning bolt) and
+/// small bomb (a tiny bomb with a minus). `.` is transparent.
+pub fn icon(kind: PowerUpKind) -> [&'static str; ICON_SIZE] {
+    match kind {
+        PowerUpKind::ExtraBomb => [
+            "........w.",
+            ".......www",
+            "..kkkk..w.",
+            ".kkkkkk...",
+            "kkwkkkkk..",
+            "kkwkkkkk..",
+            "kkkkkkkk..",
+            "kkkkkkkk..",
+            ".kkkkkk...",
+            "..kkkk....",
+        ],
+        PowerUpKind::Speed => [
+            "..ww......",
+            "..ww......",
+            "..ww......",
+            "..www.....",
+            "..wwwwww..",
+            "..wwwwwww.",
+            ".kkkkkkkk.",
+            "..yy..yy..",
+            "..yy..yy..",
+            "..........",
+        ],
+        PowerUpKind::Range => [
+            "....oo....",
+            "...oooo...",
+            "...oyoo...",
+            "..ooyyoo..",
+            "..oyyyyo..",
+            ".ooyyyyoo.",
+            ".ooyyyyoo.",
+            ".oyywwyyo.",
+            "..oyyyyo..",
+            "...oooo...",
+        ],
+        PowerUpKind::Punch => [
+            "..........",
+            "....rrrr..",
+            "..wwrrrrr.",
+            ".wwwrrwrrr",
+            ".wwwrrrrrr",
+            ".wwwrrrrrr",
+            "..wwrrrrr.",
+            "....rrrr..",
+            "..........",
+            "..........",
+        ],
+        PowerUpKind::Kick => [
+            "..yyyy....",
+            "...nn.....",
+            "...nn.....",
+            "...nn.....",
+            "...nnnn...",
+            "...nnnnnn.",
+            "..nnnnnnnn",
+            "..nnnnnnnn",
+            "..kkkkkkkk",
+            "..........",
+        ],
+        PowerUpKind::Slow => [
+            "k.k.......",
+            "k.k..nnnn.",
+            "ggg.nnppnn",
+            "ggg.npnpnn",
+            "gggnnpppnn",
+            "gggggnnnn.",
+            "gggggggggg",
+            ".gggggggg.",
+            "..........",
+            "..........",
+        ],
+        PowerUpKind::HyperSpeed => [
+            "....yyyy..",
+            "...yyyy...",
+            "..yyyy....",
+            "..yyyyyy..",
+            "....yyy...",
+            "...yyy....",
+            "..yyy.....",
+            "..yy......",
+            ".yy.......",
+            ".y........",
+        ],
+        PowerUpKind::SmallBomb => [
+            "..........",
+            "..........",
+            "...o......",
+            "..f.......",
+            ".kkkk.....",
+            "kwkkkk....",
+            "kkkkkk.www",
+            "kkkkkk....",
+            ".kkkk.....",
+            "..........",
+        ],
+    }
+}
+
+/// The colour of a character of an icon template.
+pub fn icon_colour(_kind: PowerUpKind, ch: char) -> Option<Rgb> {
+    Some(match ch {
+        'k' => hex(0x1c1c22),
+        'w' => hex(0xf4f4f4),
+        'r' => hex(0xe03a3a),
+        'o' => hex(0xf08a1a),
+        'y' => hex(0xf7d12a),
+        'g' => hex(0x4fbf5a),
+        'p' => hex(0x8e5bd6),
+        'n' => hex(0x9a6a35),
+        'f' => hex(0x8c5a2b),
+        _ => return None,
+    })
 }

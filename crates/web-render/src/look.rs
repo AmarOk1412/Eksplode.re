@@ -3,6 +3,7 @@
 //! This mirrors the look of the server (`bomberust_net::look`): the names are the wire names, and
 //! reading a look from JSON is as lenient as the host's, so a bad entry only ever gives a default.
 
+use bomberust_core::Dir;
 use serde_json::Value;
 
 use crate::sprites::{hex, mix, player_skin, runs, Rgb, Run, Skin, PLAYER};
@@ -145,29 +146,167 @@ fn put(grid: &mut [Vec<char>], row: usize, cols: std::ops::RangeInclusive<usize>
     }
 }
 
-/// The picture of a look as characters: `GRID_ROWS` rows of 12, `.` is empty.
-pub fn grid(look: &Look) -> Vec<String> {
-    let mut g: Vec<Vec<char>> = vec![vec!['.'; WIDTH]; GRID_ROWS];
-    for (r, line) in PLAYER.iter().enumerate() {
-        for (c, ch) in line.chars().enumerate().take(WIDTH) {
-            g[r + OVERHEAD][c] = ch;
+/// Which way a character looks: `Right` is `Left` mirrored.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum View {
+    Down,
+    Up,
+    Left,
+    Right,
+}
+
+impl View {
+    /// The view of a character that faces `dir`.
+    pub fn from_dir(dir: Dir) -> View {
+        match dir {
+            Dir::Down => View::Down,
+            Dir::Up => View::Up,
+            Dir::Left => View::Left,
+            Dir::Right => View::Right,
         }
     }
-    if look.gender == Gender::Female {
-        put(&mut g, 4, 10..=10, 'h');
-        put(&mut g, 5, 10..=10, 'h');
-        put(&mut g, 6, 10..=10, 'h');
-        put(&mut g, 7, 10..=10, 'h');
-        put(&mut g, 8, 10..=10, 'h');
-        put(&mut g, 4, 4..=4, 'l');
-        put(&mut g, 4, 7..=7, 'l');
+}
+
+/// The pose of a character: standing, or one of the two steps of the walk (the feet and arms
+/// swap between `StepA` and `StepB`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Frame {
+    Idle,
+    StepA,
+    StepB,
+}
+
+/// The side view, facing left: `n` antenna, `H` helmet, `F` face, `e` eye, `B` body, `K` belt,
+/// `Y` buckle, `S` shoes (the arm `A` is added by the frame).
+const SIDE: [&str; 13] = [
+    ".....nn.....",
+    "...HHHHHH...",
+    "..HFFHHHHH..",
+    "..HFeFHHHH..",
+    "..HFeFHHHH..",
+    "..HFFFHHHH..",
+    "..HHHHHHHH..",
+    "...BBBBBB...",
+    "...BBBBBB...",
+    "...BBBBBB...",
+    "...KYKKKK...",
+    "....BBB.....",
+    "...SSSS.....",
+];
+
+fn rows_into(g: &mut [Vec<char>], at: usize, rows: &[&str]) {
+    for (r, line) in rows.iter().enumerate() {
+        for (c, ch) in line.chars().enumerate().take(WIDTH) {
+            if let Some(cell) = g.get_mut(r + at).and_then(|row| row.get_mut(c)) {
+                *cell = ch;
+            }
+        }
+    }
+}
+
+/// The legs and arms of the front and back views for a frame.
+fn frame_front(g: &mut [Vec<char>], frame: Frame) {
+    let at = |r: usize| r + OVERHEAD;
+    match frame {
+        Frame::Idle => {}
+        Frame::StepA => {
+            for r in 7..=9 {
+                put(g, at(r), 1..=1, '.');
+                put(g, at(r), 10..=10, '.');
+            }
+            put(g, at(8), 1..=1, 'A');
+            put(g, at(9), 1..=1, 'A');
+            put(g, at(10), 1..=1, 'A');
+            put(g, at(7), 10..=10, 'A');
+            put(g, at(8), 10..=10, 'A');
+            rows_into(g, at(11), &["..BBB..BSS..", "..SS........"]);
+        }
+        Frame::StepB => {
+            for r in 7..=9 {
+                put(g, at(r), 1..=1, '.');
+                put(g, at(r), 10..=10, '.');
+            }
+            put(g, at(7), 1..=1, 'A');
+            put(g, at(8), 1..=1, 'A');
+            put(g, at(8), 10..=10, 'A');
+            put(g, at(9), 10..=10, 'A');
+            put(g, at(10), 10..=10, 'A');
+            rows_into(g, at(11), &["..SSB..BBB..", "........SS.."]);
+        }
+    }
+}
+
+/// The legs and the near arm of the side view for a frame.
+fn frame_side(g: &mut [Vec<char>], frame: Frame) {
+    let at = |r: usize| r + OVERHEAD;
+    let arm = match frame {
+        Frame::Idle => 5,
+        Frame::StepA => 4,
+        Frame::StepB => 6,
+    };
+    for r in 7..=9 {
+        put(g, at(r), arm..=arm + 1, 'A');
+    }
+    if frame != Frame::Idle {
+        rows_into(g, at(11), &["...BB..BB...", "..SSS..SSS.."]);
+    }
+}
+
+/// The picture of a look seen from `view` in `frame`, as characters: `GRID_ROWS` rows of 12, `.`
+/// is empty. Colour, gender look and accessories are the same in every view; what changes is what
+/// can be seen (no face from behind, one eye from the side, the cap brim on the side the
+/// character looks to).
+pub fn grid_view(look: &Look, view: View, frame: Frame) -> Vec<String> {
+    if view == View::Right {
+        return grid_view(look, View::Left, frame)
+            .into_iter()
+            .map(|row| row.chars().rev().collect())
+            .collect();
+    }
+    let mut g: Vec<Vec<char>> = vec![vec!['.'; WIDTH]; GRID_ROWS];
+    let side = view == View::Left;
+    if side {
+        rows_into(&mut g, OVERHEAD, &SIDE);
+        frame_side(&mut g, frame);
+    } else {
+        let rows: Vec<&str> = PLAYER.to_vec();
+        rows_into(&mut g, OVERHEAD, &rows);
+        frame_front(&mut g, frame);
+    }
+    let female = look.gender == Gender::Female;
+    if view == View::Up {
+        // the back of the head: hair for the female look, the helmet otherwise; no buckle
+        let back = if female { 'h' } else { 'H' };
+        for cell in g[4..=7].iter_mut().flat_map(|row| row[3..=8].iter_mut()) {
+            if matches!(*cell, 'F' | 'e') {
+                *cell = back;
+            }
+        }
+        put(&mut g, 12, 5..=6, 'K');
+    }
+    if female {
+        for row in 4..=8 {
+            put(&mut g, row, 10..=10, 'h');
+        }
+        match view {
+            View::Down => {
+                put(&mut g, 4, 4..=4, 'l');
+                put(&mut g, 4, 7..=7, 'l');
+            }
+            View::Left => put(&mut g, 4, 4..=4, 'l'),
+            _ => {}
+        }
     }
     match look.head {
         Head::None => {}
         Head::Cap => {
             put(&mut g, 2, 3..=8, 'c');
             put(&mut g, 3, 2..=9, 'c');
-            put(&mut g, 4, 8..=10, 'c');
+            match view {
+                View::Down => put(&mut g, 4, 8..=10, 'c'),
+                View::Left => put(&mut g, 4, 1..=3, 'c'),
+                _ => {}
+            }
         }
         Head::TopHat => {
             put(&mut g, 0, 4..=7, 't');
@@ -185,15 +324,37 @@ pub fn grid(look: &Look) -> Vec<String> {
             put(&mut g, 2, 3..=8, 'p');
             put(&mut g, 3, 2..=2, 'p');
             put(&mut g, 3, 9..=9, 'p');
-            for row in 5..=7 {
-                put(&mut g, row, 1..=1, 'q');
-                put(&mut g, row, 10..=10, 'q');
+            if side {
+                for row in 5..=7 {
+                    put(&mut g, row, 5..=6, 'q');
+                }
+            } else {
+                for row in 5..=7 {
+                    put(&mut g, row, 1..=1, 'q');
+                    put(&mut g, row, 10..=10, 'q');
+                }
             }
         }
     }
-    match look.face {
-        Face::None => {}
-        Face::Glasses => {
+    match (look.face, view) {
+        (_, View::Up) | (Face::None, _) => {}
+        (Face::Glasses, View::Left) => {
+            put(&mut g, 4, 3..=5, 'k');
+            put(&mut g, 7, 3..=5, 'k');
+            put(&mut g, 5, 3..=3, 'k');
+            put(&mut g, 6, 3..=3, 'k');
+            put(&mut g, 5, 5..=9, 'k');
+        }
+        (Face::Sunglasses, View::Left) => {
+            put(&mut g, 5, 3..=9, 's');
+            put(&mut g, 6, 3..=5, 's');
+        }
+        (Face::Moustache, View::Left) => put(&mut g, 7, 3..=4, 'm'),
+        (Face::Mask, View::Left) => {
+            put(&mut g, 7, 3..=5, 'x');
+            put(&mut g, 8, 3..=5, 'x');
+        }
+        (Face::Glasses, _) => {
             put(&mut g, 4, 3..=8, 'k');
             put(&mut g, 7, 3..=8, 'k');
             for row in 5..=6 {
@@ -202,17 +363,22 @@ pub fn grid(look: &Look) -> Vec<String> {
             }
             put(&mut g, 5, 5..=6, 'k');
         }
-        Face::Sunglasses => {
+        (Face::Sunglasses, _) => {
             put(&mut g, 5, 3..=8, 's');
             put(&mut g, 6, 3..=8, 's');
         }
-        Face::Moustache => put(&mut g, 7, 3..=8, 'm'),
-        Face::Mask => {
+        (Face::Moustache, _) => put(&mut g, 7, 3..=8, 'm'),
+        (Face::Mask, _) => {
             put(&mut g, 7, 3..=8, 'x');
             put(&mut g, 8, 3..=8, 'x');
         }
     }
     g.into_iter().map(|row| row.into_iter().collect()).collect()
+}
+
+/// The picture of a look as characters, seen from the front and standing.
+pub fn grid(look: &Look) -> Vec<String> {
+    grid_view(look, View::Down, Frame::Idle)
 }
 
 /// The colour of a grid character for this look.
@@ -243,6 +409,14 @@ pub fn colour_of(look: &Look, skin: &Skin, ch: char) -> Option<Rgb> {
 /// The horizontal runs of pixels of the whole picture of a look.
 pub fn runs_for(look: &Look) -> Vec<Run> {
     runs_of(look, GRID_ROWS)
+}
+
+/// The runs of the first `rows` rows of a look seen from `view` in `frame`.
+pub fn runs_view(look: &Look, view: View, frame: Frame, rows: usize) -> Vec<Run> {
+    let skin = skin(look);
+    runs(&grid_view(look, view, frame), rows, |c| {
+        colour_of(look, &skin, c)
+    })
 }
 
 /// Like [`runs_for`] but only the first `rows` rows of the picture (including the overhead).

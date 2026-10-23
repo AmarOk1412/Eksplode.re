@@ -137,13 +137,16 @@ fn flames_fill_their_tile_in_three_layers() {
 }
 
 #[test]
-fn powerups_show_their_letter() {
+fn powerups_fall_back_to_their_letter_on_a_tiny_board() {
     let mut s = small(&OPEN, (1, 1), (5, 5));
     for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
         powerup(&mut s, 1 + (i as u8 % 5), 2 + (i as u8 / 5), *kind);
     }
-    let t = texts(&commands(&s));
-    for letter in ['B', 'R', 'F', 'P', 'S', 'H', 's'] {
+    let o = obs(&s);
+    let mut interp = Interp::default();
+    interp.update(&o);
+    let t = texts(&build(&o, &interp, 1.0, (130.0, 130.0)));
+    for letter in ['B', 'R', 'F', 'P', 'K', 'S', 'H', 's'] {
         assert!(t.contains(&letter), "{letter}");
     }
 }
@@ -158,7 +161,7 @@ fn icon(kind: PowerUpKind) -> Vec<Command> {
 }
 
 #[test]
-fn the_seven_power_icons_are_distinct_per_kind() {
+fn the_power_icons_are_distinct_per_kind() {
     let mut seen = std::collections::BTreeSet::new();
     for kind in PowerUpKind::ALL {
         let list = icon(kind);
@@ -173,7 +176,7 @@ fn the_seven_power_icons_are_distinct_per_kind() {
             "{kind:?} looks like another kind"
         );
     }
-    assert_eq!(seen.len(), 7);
+    assert_eq!(seen.len(), 8);
 }
 
 #[test]

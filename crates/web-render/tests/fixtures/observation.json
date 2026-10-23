@@ -17,7 +17,8 @@
     "block_density": 0.7,
     "powerup_chance": 0.3,
     "malus_ticks": 200,
-    "punch_hop_ticks": 2
+    "punch_hop_ticks": 2,
+    "slide_ticks": 3
   },
   "arena": {
     "width": 15,
@@ -235,6 +236,7 @@
       "move_cooldown": 4,
       "cooldown_left": 0,
       "has_punch": false,
+      "has_kick": false,
       "malus": null
     },
     {
@@ -251,6 +253,7 @@
       "move_cooldown": 4,
       "cooldown_left": 0,
       "has_punch": false,
+      "has_kick": false,
       "malus": null
     },
     {
@@ -267,6 +270,7 @@
       "move_cooldown": 4,
       "cooldown_left": 0,
       "has_punch": false,
+      "has_kick": false,
       "malus": null
     },
     {
@@ -283,6 +287,7 @@
       "move_cooldown": 4,
       "cooldown_left": 0,
       "has_punch": false,
+      "has_kick": false,
       "malus": null
     }
   ],
