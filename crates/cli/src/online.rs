@@ -158,7 +158,7 @@ impl Online {
                     self.notice = Some(message);
                 }
             }
-            ServerMsg::Pong { .. } => {}
+            ServerMsg::Pong { .. } | ServerMsg::DevState { .. } => {}
         }
     }
 

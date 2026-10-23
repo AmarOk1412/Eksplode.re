@@ -8,7 +8,7 @@ use bomberust_net::protocol::{valid_name, DEFAULT_PORT};
 pub const USAGE: &str = "\
 Usage:
   bomberust-cli [OPTIONS]                          play on this machine
-  bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP]
+  bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
   bomberust-cli join <ADDR[:PORT]> [--name NAME]
 
 Local options:
@@ -23,6 +23,8 @@ Host options:
   --web-port <N>  also serve the web page on this port so browsers can join
   --bind <IP>     address to listen on (default: game port on all interfaces,
                   web page on 127.0.0.1)
+  --dev           developer mode: the owner can pause bots and set drop chances in
+                  the web page (testing only)
 
 Network play: the host listens on port 7878 by default; up to 4 participants (humans and bots).
 Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
@@ -50,6 +52,8 @@ pub struct HostOptions {
     pub web_port: Option<u16>,
     /// Listening address; `None` keeps the defaults (game port on every interface, web page on loopback).
     pub bind: Option<IpAddr>,
+    /// Developer mode: owner-only commands to pause bots and set drop chances.
+    pub dev: bool,
 }
 
 /// Options of `join`.
@@ -156,6 +160,7 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         seed: None,
         web_port: None,
         bind: None,
+        dev: false,
     };
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -166,6 +171,7 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
             "--seed" => opts.seed = Some(number(&arg, it.next())?),
             "--web-port" => opts.web_port = Some(web_port(&arg, it.next())?),
             "--bind" => opts.bind = Some(number(&arg, it.next())?),
+            "--dev" => opts.dev = true,
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }

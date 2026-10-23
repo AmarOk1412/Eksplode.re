@@ -270,6 +270,9 @@ pub fn host_warnings(opts: &HostOptions) -> Vec<String> {
              play only on this machine, or a firewall or tunnel to restrict access."
         ));
     }
+    if opts.dev {
+        out.push(bomberust_net::DEV_WARNING.to_string());
+    }
     out
 }
 
@@ -320,6 +323,7 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
     let host = Host::start(HostConfig {
         bind: SocketAddr::new(game_ip, opts.port).to_string(),
         seed: opts.seed,
+        dev: opts.dev,
         ..HostConfig::default()
     })?;
     for _ in 0..opts.bots {
@@ -334,6 +338,7 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
                 http_port: port,
                 game_port: host.addr().port(),
                 seed: opts.seed,
+                dev: opts.dev,
                 ..ServerOptions::default()
             },
         )?),

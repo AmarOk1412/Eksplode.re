@@ -297,7 +297,22 @@ fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
         seed: None,
         web_port,
         bind: bind.map(|b| b.parse().unwrap()),
+        dev: false,
     }
+}
+
+#[test]
+fn f3_us4_as6_host_dev_prints_the_developer_warning_and_the_default_does_not() {
+    let mut opts = host_opts(Some("127.0.0.1"), Some(8080));
+    assert!(app::host_warnings(&opts).is_empty());
+    opts.dev = true;
+    let w = app::host_warnings(&opts);
+    assert_eq!(w.len(), 1, "{w:?}");
+    assert!(
+        w[0].starts_with("WARNING:") && w[0].contains("developer mode"),
+        "{w:?}"
+    );
+    assert!(w[0].contains("untrusted network"), "{w:?}");
 }
 
 #[test]

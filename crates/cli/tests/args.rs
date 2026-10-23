@@ -109,7 +109,26 @@ mod network {
             seed,
             web_port: None,
             bind: None,
+            dev: false,
         }))
+    }
+
+    #[test]
+    fn f3_us4_as6_host_accepts_dev_and_it_is_off_by_default() {
+        let Ok(Command::Host(o)) = args(&["host", "--dev"]) else {
+            panic!("host --dev must parse");
+        };
+        assert!(o.dev);
+        let Ok(Command::Host(o)) = args(&["host", "--web-port", "8080", "--dev", "--bots", "1"])
+        else {
+            panic!("host --dev with other options must parse");
+        };
+        assert!(o.dev && o.bots == 1 && o.web_port == Some(8080));
+        let Ok(Command::Host(o)) = args(&["host"]) else {
+            panic!();
+        };
+        assert!(!o.dev);
+        assert!(bomberust_cli::args::USAGE.contains("--dev"));
     }
 
     fn join(addr: &str, name: &str) -> Result<Command, UsageError> {
