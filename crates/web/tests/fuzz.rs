@@ -106,8 +106,12 @@ fn the_websocket_bridge_survives_random_frames_and_stays_fair() {
                         "\u{0}",
                         "{\"type\":\"SetLook\",\"look\":{\"colour\":7}}",
                         "{\"type\":\"SetLook\"}",
+                        "{\"type\":\"Input\",\"tick\":1,\"mv\":null,\"bomb\":false,\"punch\":\"yes\"}",
+                        "{\"type\":\"DevSetDrops\",\"chances\":[1e999,-1,null]}",
+                        "{\"type\":\"DevSetDrops\",\"chances\":\"all\"}",
+                        "{\"type\":\"DevPauseBots\"}",
                         "{\"type\":\"Join\",\"version\":1,\"name\":\"F\",\"look\":[[]]}",
-                    ][rng.below(9)],
+                    ][rng.below(13)],
                 ),
             };
             if bad.socket.send(frame).is_err() {
@@ -124,4 +128,48 @@ fn the_websocket_bridge_survives_random_frames_and_stays_fair() {
         .recv_until(|m| matches!(m, ServerMsg::Snapshot { .. }))
         .is_some());
     assert_eq!(get(s.http_addr(), "/").status, 200);
+}
+
+#[test]
+fn f3_random_developer_frames_are_refused_or_ignored_and_never_hurt_the_server() {
+    for dev in [false, true] {
+        let s = server(|o| o.dev = dev);
+        let mut rng = Rng(0x0dd5_eed5_0000_0001 ^ u64::from(dev));
+        let mut owner = Ws::open(s.http_addr());
+        owner.join("Ann");
+        owner.welcome_slot();
+        for _ in 0..200 {
+            let chances: Vec<String> = (0..rng.below(10))
+                .map(|_| match rng.below(5) {
+                    0 => "null".to_string(),
+                    1 => format!("{}", (rng.next() % 300) as f64 / 100.0 - 1.0),
+                    2 => "\"x\"".to_string(),
+                    3 => "1e400".to_string(),
+                    _ => format!("{}", rng.below(2)),
+                })
+                .collect();
+            let text = match rng.below(4) {
+                0 => format!(
+                    "{{\"type\":\"DevSetDrops\",\"chances\":[{}]}}",
+                    chances.join(",")
+                ),
+                1 => format!(
+                    "{{\"type\":\"DevPauseBots\",\"paused\":{}}}",
+                    ["true", "false", "3", "null"][rng.below(4)]
+                ),
+                2 => "{\"type\":\"DevResetDrops\"}".to_string(),
+                _ => String::from_utf8_lossy(&rng.bytes(60)).to_string(),
+            };
+            if owner.socket.send(Message::text(text)).is_err() {
+                break; // refused too often: the host closed the connection
+            }
+        }
+        // whatever happened, the owner (if still connected) and the server are fine
+        let mut fresh = Ws::open(s.http_addr());
+        fresh.join("Bob");
+        assert!(fresh
+            .recv_until(|m| matches!(m, ServerMsg::Welcome { .. } | ServerMsg::Rejected { .. }))
+            .is_some());
+        assert_eq!(get(s.http_addr(), "/").status, 200);
+    }
 }

@@ -224,3 +224,37 @@ fn f3_us1_as3_the_3d_portrait_export_draws_quads_and_rejects_bad_sizes() {
         "slot is clamped and a bad phase is harmless"
     );
 }
+
+/// A small deterministic generator for the random-input tests.
+fn noise(seed: &mut u64) -> u64 {
+    *seed ^= *seed << 13;
+    *seed ^= *seed >> 7;
+    *seed ^= *seed << 17;
+    *seed
+}
+
+#[test]
+fn f3_random_bytes_and_floats_never_break_set_looks_or_portrait3d() {
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    for _ in 0..500 {
+        let len = (noise(&mut seed) % 200) as usize;
+        let bytes: Vec<u8> = (0..len).map(|_| (noise(&mut seed) & 0xff) as u8).collect();
+        let code = set_looks(&bytes);
+        assert!((0..=4).contains(&code), "{code}");
+        let float = |seed: &mut u64| match noise(seed) % 8 {
+            0 => f32::NAN,
+            1 => f32::INFINITY,
+            2 => f32::NEG_INFINITY,
+            3 => f32::MAX,
+            4 => -1.0,
+            5 => 0.0,
+            _ => (noise(seed) % 100_000) as f32 / 7.0,
+        };
+        let slot = noise(&mut seed) as u32;
+        let (w, h, phase) = (float(&mut seed), float(&mut seed), float(&mut seed));
+        let n = bomberust_portrait3d(slot, w, h, phase);
+        let finite_size = w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0;
+        assert_eq!(n > 0, finite_size, "{w} x {h}");
+    }
+    assert_eq!(set_looks(b"[]"), 0);
+}

@@ -384,3 +384,98 @@ fn sc003_key_to_snapshot_latency_with_two_browsers_and_two_terminals() {
     println!("{} samples, p95 latency {:?}", all.len(), p95);
     assert!(p95 < Duration::from_millis(200), "p95 latency {p95:?}");
 }
+
+/// What one client saw of a whole match.
+struct Seen {
+    looks: Vec<bomberust_net::look::Look>,
+    events: Vec<bomberust_core::Event>,
+    last: Observation,
+    outcome: Outcome,
+}
+
+fn watch(mut next: impl FnMut() -> Option<ServerMsg>) -> Seen {
+    let mut looks = Vec::new();
+    let mut events = Vec::new();
+    let mut last = None;
+    while let Some(m) = next() {
+        match m {
+            ServerMsg::Welcome { looks: l, .. } | ServerMsg::Lobby { looks: l, .. }
+                if events.is_empty() =>
+            {
+                looks = l
+            }
+            ServerMsg::Snapshot {
+                state, events: e, ..
+            } => {
+                events.extend(e);
+                last = Some(*state);
+            }
+            ServerMsg::Ended { outcome } => {
+                return Seen {
+                    looks,
+                    events,
+                    last: last.expect("a snapshot"),
+                    outcome,
+                }
+            }
+            _ => {}
+        }
+    }
+    panic!("the match never ended");
+}
+
+#[test]
+fn f3_us2_as9_powers_work_the_same_for_every_client() {
+    use bomberust_core::Event;
+    let s = server(|o| {
+        o.seed = Some(3);
+        o.game.block_density = 1.0;
+        o.game.powerup_chance = 1.0;
+        o.game.round_limit_ticks = 120;
+    });
+    let mut ws = Ws::open(s.http_addr());
+    ws.join_with_look(
+        "Web",
+        serde_json::json!({"colour":"Teal","gender":"Female","head":"Crown","face":"Glasses"}),
+    );
+    assert_eq!(ws.welcome_slot(), 0);
+    let (term, slot) = tcp(&s, "Term");
+    assert_eq!(slot, 1);
+    ws.send(&ClientMsg::AddBot);
+    ws.send(&ClientMsg::Start);
+    // both humans drop a bomb right away so that blocks burn and items appear
+    ws.send(&ClientMsg::Input {
+        tick: 0,
+        mv: None,
+        bomb: true,
+        punch: false,
+    });
+    term.send(ClientMsg::Input {
+        tick: 0,
+        mv: None,
+        bomb: true,
+        punch: false,
+    })
+    .unwrap();
+
+    let web = watch(|| ws.recv());
+    let term = watch(|| term.recv_timeout(WAIT).ok());
+
+    assert_eq!(web.outcome, term.outcome, "the same result");
+    assert_eq!(web.events, term.events, "the same events, drops included");
+    assert_eq!(
+        without_me(web.last),
+        without_me(term.last),
+        "the same final state"
+    );
+    // the match saw items appear (every block drops one) and the same looks everywhere
+    assert!(
+        web.events
+            .iter()
+            .any(|e| matches!(e, Event::PowerUpSpawned { .. })),
+        "no item dropped"
+    );
+    assert_eq!(web.looks.len(), 4);
+    assert_eq!(web.looks, term.looks, "the same looks for everyone");
+    assert_eq!(web.looks[0].colour.name(), "Teal");
+}
