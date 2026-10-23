@@ -7,5 +7,6 @@ pub mod commands;
 pub mod depth;
 pub mod ffi;
 pub mod interp;
+pub mod look;
 pub mod sprites;
 pub mod view;

@@ -4,10 +4,10 @@ use bomberust_core::{Observation, PowerUpKind};
 
 use crate::depth::{draw_list, Item, Sprite};
 use crate::interp::Interp;
+use crate::look::{default_for, runs_for, runs_of, Look, GRID_ROWS, OVERHEAD};
 use crate::sprites::{
-    bomb_colour, hex, player_skin, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE, BRICK_LINE,
-    FLAME_CORE, FLAME_MID, FLAME_OUTER, PLAYER, WALL_BASE, WALL_SHADE, WALL_WINDOW,
-    WALL_WINDOW_EDGE, WHITE,
+    bomb_colour, hex, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE, BRICK_LINE, FLAME_CORE,
+    FLAME_MID, FLAME_OUTER, PLAYER, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -127,6 +127,17 @@ impl Pen<'_> {
 
 /// Builds the commands for one frame. `alpha` (0.0-1.0) is the progress between two ticks.
 pub fn build(obs: &Observation, interp: &Interp, alpha: f32, canvas: (f32, f32)) -> Vec<Command> {
+    build_with_looks(obs, interp, alpha, canvas, &[0, 1, 2, 3].map(default_for))
+}
+
+/// Like [`build`] with the look of each slot.
+pub fn build_with_looks(
+    obs: &Observation,
+    interp: &Interp,
+    alpha: f32,
+    canvas: (f32, f32),
+    looks: &[Look; 4],
+) -> Vec<Command> {
     let (w, h) = (obs.arena.width(), obs.arena.height());
     let view = fit(w, h, canvas);
     let phase = obs.tick as f32 + if alpha.is_finite() { alpha } else { 0.0 };
@@ -142,12 +153,12 @@ pub fn build(obs: &Observation, interp: &Interp, alpha: f32, canvas: (f32, f32))
         pen.rect(BOARD, 0.0, 0.0, wf, hf);
     }
     for it in draw_list(obs, interp, alpha, phase) {
-        emit(&mut out, &view, &it);
+        emit(&mut out, &view, &it, looks);
     }
     out
 }
 
-fn emit(out: &mut Vec<Command>, view: &View, it: &Item) {
+fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4]) {
     let (cx, cy) = it.pos;
     let (tx, ty) = (cx - 0.5, cy - 0.5);
     let mut pen = Pen {
@@ -221,39 +232,43 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item) {
             );
         }
         Sprite::Player { slot } => {
-            let skin = player_skin(slot);
-            let list = runs(&PLAYER, PLAYER.len(), |c| skin.colour_of(c));
+            let list = runs_for(&looks[usize::from(slot) % 4]);
             let ps = (1.2 * view.scale / PLAYER.len() as f32).round().max(1.0);
             let (px, py) = view.project(cx, cy);
             pen.shadow(cx - 0.3, cy + 0.34, cx + 0.3, cy + 0.44);
-            let top = py + 0.5 * view.scale - PLAYER.len() as f32 * ps - 0.02 * view.scale;
+            let top = py + 0.5 * view.scale - GRID_ROWS as f32 * ps - 0.02 * view.scale;
             pen.sprite(&list, ps, (px - 6.0 * ps).round(), top.round());
         }
     }
 }
 
-/// The character of `slot` fitted into a canvas of `size` pixels: the whole figure for
-/// `rows == 0`, otherwise its first `rows` rows (head and shoulders), zoomed and cropped at the sides.
+/// The default character of `slot` fitted into a canvas; see [`portrait_look`].
 pub fn portrait(slot: u8, size: (f32, f32), rows: usize) -> Vec<Command> {
+    portrait_look(&default_for(usize::from(slot)), size, rows)
+}
+
+/// A character fitted into a canvas of `size` pixels: the whole figure for `rows == 0`,
+/// otherwise the head and shoulders of its first `rows` character rows, zoomed and cropped at the
+/// sides.
+pub fn portrait_look(look: &Look, size: (f32, f32), rows: usize) -> Vec<Command> {
     let (w, h) = size;
     if !(w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0) {
         return Vec::new();
     }
-    let rows = if rows == 0 {
-        PLAYER.len()
+    let total = if rows == 0 {
+        GRID_ROWS
     } else {
-        rows.min(PLAYER.len())
+        (rows + OVERHEAD).min(GRID_ROWS)
     };
-    let skin = player_skin(slot);
-    let list = runs(&PLAYER, rows, |c| skin.colour_of(c));
+    let list = runs_of(look, total);
     // a crop is zoomed so the head fills the card and the arms run off its sides
-    let wide = if rows < PLAYER.len() { 1.5 } else { 0.9 };
+    let wide = if total < GRID_ROWS { 1.5 } else { 0.9 };
     let ps = (wide * w / 12.0)
-        .min(0.9 * h / rows as f32)
+        .min(0.9 * h / total as f32)
         .floor()
         .max(1.0);
     let x = ((w - 12.0 * ps) / 2.0).round();
-    let y = ((h - rows as f32 * ps) / 2.0).round();
+    let y = ((h - total as f32 * ps) / 2.0).round();
     let mut out = Vec::new();
     let view = View {
         scale: 1.0,

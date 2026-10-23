@@ -98,8 +98,8 @@ fn eliminated_players_are_not_drawn() {
     let mut s = standard();
     s.players[2].alive = false;
     let dead = commands(&s);
-    let skin = player_skin(2);
-    let sprite = runs(&PLAYER, PLAYER.len(), |c| skin.colour_of(c)).len();
+    let sprite =
+        bomberust_web_render::look::runs_for(&bomberust_web_render::look::default_for(2)).len();
     assert_eq!(
         alive.len() - dead.len(),
         sprite + 1,

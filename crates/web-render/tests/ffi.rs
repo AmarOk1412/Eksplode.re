@@ -145,3 +145,66 @@ fn portraits_work_without_a_loaded_game() {
         "slot and rows are clamped"
     );
 }
+
+fn set_looks(bytes: &[u8]) -> i32 {
+    let size = bytes.len().max(1);
+    let ptr = bomberust_alloc(size);
+    assert!(!ptr.is_null());
+    unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
+    let code = unsafe { bomberust_set_looks(ptr, bytes.len()) };
+    unsafe { bomberust_free(ptr, size) };
+    code
+}
+
+#[test]
+fn set_looks_codes_and_leniency() {
+    assert_eq!(set_looks(br#"[{"colour":"Green","head":"Crown"}]"#), 0);
+    assert_eq!(set_looks(b"[]"), 0, "no entries means defaults");
+    assert_eq!(
+        set_looks(b"[1,null,\"x\",{\"colour\":5}]"),
+        0,
+        "bad entries become defaults"
+    );
+    assert_eq!(set_looks(&[0xff, 0xfe, 0xfd]), 1, "not UTF-8");
+    assert_eq!(set_looks(b"{}"), 2, "not an array");
+    assert_eq!(set_looks(b"not json"), 2);
+    assert_eq!(set_looks(b""), 2);
+    let mut x: u64 = 0x2545_f491_4f6c_dd1d;
+    for len in 0..200usize {
+        let bytes: Vec<u8> = (0..len)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x & 0xff) as u8
+            })
+            .collect();
+        let code = set_looks(&bytes);
+        assert!((0..=2).contains(&code), "len {len} gave {code}");
+    }
+}
+
+#[test]
+fn f3_us1_as5_frames_and_portraits_use_the_loaded_looks() {
+    use bomberust_web_render::look::CROWN;
+    let crowns = |n: usize| {
+        let data = unsafe { std::slice::from_raw_parts(bomberust_output_ptr(), n * 16) };
+        data.chunks(16)
+            .filter(|c| c[0] == 0.0 && c[1..4] == CROWN[..] && c[4] == 1.0)
+            .count()
+    };
+    assert_eq!(load(&fixture_json()), 0);
+    assert_eq!(set_looks(b"[]"), 0);
+    let n = bomberust_frame(800.0, 600.0, 1.0);
+    assert_eq!(crowns(n), 0);
+    assert_eq!(
+        set_looks(br#"[{"head":"Crown"},{},{},{"head":"Crown"}]"#),
+        0
+    );
+    let n = bomberust_frame(800.0, 600.0, 1.0);
+    assert!(crowns(n) > 0, "players in the match wear the crown");
+    let p = bomberust_portrait(3, 160.0, 226.0, 7);
+    assert!(crowns(p) > 0, "portraits use the looks too");
+    let p = bomberust_portrait(1, 160.0, 226.0, 7);
+    assert_eq!(crowns(p), 0);
+}

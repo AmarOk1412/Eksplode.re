@@ -158,6 +158,15 @@ pub fn player_color(slot: u8) -> Rgb {
     }
 }
 
+/// Blends `a` towards `b` by `t` (0.0 keeps `a`, 1.0 gives `b`).
+pub fn mix(a: Rgb, b: Rgb, t: f32) -> Rgb {
+    [
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    ]
+}
+
 /// A horizontal run of equally coloured pixels of a sprite.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Run {
@@ -168,11 +177,15 @@ pub struct Run {
 }
 
 /// Merges the pixels of a template into horizontal runs; characters without a colour are skipped.
-pub fn runs(template: &[&str], rows: usize, colour_of: impl Fn(char) -> Option<Rgb>) -> Vec<Run> {
+pub fn runs<S: AsRef<str>>(
+    template: &[S],
+    rows: usize,
+    colour_of: impl Fn(char) -> Option<Rgb>,
+) -> Vec<Run> {
     let mut out: Vec<Run> = Vec::new();
     for (row, line) in template.iter().take(rows).enumerate() {
         let mut open: Option<Run> = None;
-        for (col, ch) in line.chars().enumerate() {
+        for (col, ch) in line.as_ref().chars().enumerate() {
             match (colour_of(ch), open.as_mut()) {
                 (Some(c), Some(run)) if run.color == c => run.len += 1,
                 (Some(c), _) => {

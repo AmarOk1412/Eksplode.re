@@ -9,8 +9,9 @@ use std::cell::RefCell;
 
 use bomberust_core::Observation;
 
-use crate::commands::{build, flatten, portrait, Command};
+use crate::commands::{build_with_looks, flatten, portrait_look, Command};
 use crate::interp::Interp;
+use crate::look::{default_for, from_value, Look};
 use crate::view::fit;
 
 const MAX_ALLOC: usize = 1 << 20;
@@ -21,6 +22,7 @@ struct State {
     interp: Interp,
     out: Vec<f32>,
     canvas: (f32, f32),
+    looks: [Look; 4],
 }
 
 thread_local! {
@@ -29,6 +31,7 @@ thread_local! {
         interp: Interp::default(),
         out: Vec::new(),
         canvas: (0.0, 0.0),
+        looks: [0, 1, 2, 3].map(default_for),
     });
 }
 
@@ -85,6 +88,35 @@ pub unsafe extern "C" fn bomberust_load(ptr: *const u8, len: usize) -> i32 {
     0
 }
 
+/// Loads the looks of the four slots from a JSON array (extra entries are ignored, missing or
+/// invalid ones become the slot defaults). Returns 0 on success, 1 for invalid UTF-8 and 2 when the
+/// text is not a JSON array.
+///
+/// # Safety
+/// `ptr` must point to `len` readable bytes (or `len` must be 0).
+#[no_mangle]
+pub unsafe extern "C" fn bomberust_set_looks(ptr: *const u8, len: usize) -> i32 {
+    let bytes: &[u8] = if ptr.is_null() || len == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(ptr, len)
+    };
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return 1;
+    };
+    let Ok(serde_json::Value::Array(entries)) = serde_json::from_str::<serde_json::Value>(text)
+    else {
+        return 2;
+    };
+    let looks = [0usize, 1, 2, 3].map(|slot| {
+        entries
+            .get(slot)
+            .map_or_else(|| default_for(slot), |v| from_value(v, slot))
+    });
+    STATE.with(|s| s.borrow_mut().looks = looks);
+    0
+}
+
 /// Builds the drawing commands for a canvas; returns how many (0 if nothing is loaded).
 #[no_mangle]
 pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize {
@@ -96,7 +128,7 @@ pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize 
         let Some(obs) = s.obs.as_ref() else {
             return 0;
         };
-        let list = build(obs, &s.interp, alpha, (width, height));
+        let list = build_with_looks(obs, &s.interp, alpha, (width, height), &s.looks);
         s.out = flatten(&list);
         s.canvas = (width, height);
         list.len()
@@ -107,9 +139,13 @@ pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize 
 /// the whole figure for `rows == 0`, otherwise its first `rows` rows. Returns how many.
 #[no_mangle]
 pub extern "C" fn bomberust_portrait(slot: u32, width: f32, height: f32, rows: u32) -> usize {
-    let list = portrait((slot % 4) as u8, (width, height), rows as usize);
     STATE.with(|s| {
         let mut s = s.borrow_mut();
+        let list = portrait_look(
+            &s.looks[(slot % 4) as usize],
+            (width, height),
+            rows as usize,
+        );
         s.out = flatten(&list);
         list.len()
     })
