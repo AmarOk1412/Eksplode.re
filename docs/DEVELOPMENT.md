@@ -164,10 +164,13 @@ prints into [WEB.md](WEB.md).
 | Criterion | Result | Where it is checked |
 |-----------|--------|---------------------|
 | Key press to the snapshot that shows it, p95, two browsers and two terminals at 20 Hz | about 100 ms (limit 200 ms) | `cargo test -p bomberust-web --test mixed sc003 -- --nocapture` |
-| WebAssembly module size | 193 KB (limit 300 KB) | `scripts/build-wasm.sh` fails above the limit; `sc005_the_whole_page_stays_small` |
-| Whole page (HTML, JS, CSS, wasm) | 255 KB (limit 500 KB) | `sc005_the_whole_page_stays_small` in `crates/web/tests/http.rs` |
+| WebAssembly module size | 213 KB (limit 300 KB) | `scripts/build-wasm.sh` fails above the limit; `sc005_the_whole_page_stays_small` |
+| Whole page (HTML, JS, CSS, wasm) | 293 KB (limit 500 KB) | `sc005_the_whole_page_stays_small` in `crates/web/tests/http.rs` |
 | Cross-origin WebSocket upgrades refused by default | 100 of 100 | `sc007_cross_origin_upgrades_are_refused_by_default` |
 | Enter starts a match in a real pseudo-terminal | 20 of 20 for each Enter variant | `python3 scripts/pty-enter-check.py --attempts 20` |
+
+On the large 25 x 19 board with a full room the same kind of test gives a p95 of about 65 ms
+(`f4_sc010_key_to_snapshot_latency_on_the_large_board`, limit 200 ms).
 
 With the powers of feature 003 the same latency test gives a p95 of about 100 ms. Sixty frames per
 second in the animated lobby and in a match is checked by eye (SC-010).

@@ -73,6 +73,11 @@ Pure rules in [`crates/core`](../crates/core).
   to see where a flying bomb will explode; `kick` has the slide rules of a kicked bomb and
   `predict_slide_stop` and `predict_slide_explosion` for the same purpose. Maluses (slow, hyper speed, small bomb) are timers on
   the participant.
+- `room` has `RoomSettings` (name, `Mode`, `BoardSize`, minutes, friendly fire), its `sanitize`
+  and `to_config`, and `PLAYABLE`, the modes whose rules exist; the lobby carries the settings.
+  `closing` is the end pattern (spiral order, announcements, landings), `team` the teams and
+  friendly fire, `chaser` the roles, the random bonuses and the Chaser results. All of them are
+  called from `step` in a fixed order and use only ticks and the state's seeded generator.
 
 ### `bots`
 
@@ -111,7 +116,7 @@ tells the others (`PlayerLeft`). In the lobby the slot is freed.
 
 - `args` parses the command line; `input` turns terminal key events into inputs (every kind of
   Enter, including LF and Ctrl+J, counts as Enter); `view` draws the arena; `lobby` is the local
-  lobby screen.
+  lobby screen; `setup` is the room setup screen of the host.
 - `app::Session` is a local match: keys and bots feed `core::step` directly.
 - `online::Online` is a host or client session: it applies server messages to a view and sends
   keys as `Input`. `app::run_host` starts a `net::Host`, and with `--web-port` also a
