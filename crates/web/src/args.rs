@@ -18,6 +18,7 @@ Options:
   --allow-origin <ORIGIN>  accept WebSocket connections from this web origin (repeatable)
   --allow-any-origin       accept WebSocket connections from any web origin (unsafe)
   --max-connections <N>    open HTTP/WebSocket connections (default 64, minimum 4)
+  --dev                    developer mode: owner-only commands to pause bots and set drop chances (testing only)
   -h, --help               show this help
   -V, --version            show the version
 
@@ -98,6 +99,7 @@ where
                 listed.push(v);
             }
             "--allow-any-origin" => any = true,
+            "--dev" => opts.dev = true,
             "--max-connections" => {
                 let v = value(&arg, it.next())?;
                 opts.max_connections = match v.parse::<usize>() {

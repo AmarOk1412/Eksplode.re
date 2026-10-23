@@ -67,6 +67,7 @@ impl Server {
             seed: opts.seed,
             game: opts.game.clone(),
             silence_timeout: opts.silence_timeout,
+            dev: opts.dev,
         })
         .map_err(|e| match e {
             NetError::Io(source) => ServerError::Bind {

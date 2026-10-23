@@ -67,6 +67,9 @@ pub fn warnings(opts: &ServerOptions) -> Vec<String> {
             opts.bind
         ));
     }
+    if opts.dev {
+        out.push(bomberust_net::DEV_WARNING.to_string());
+    }
     match &opts.origins {
         AllowedOrigins::SameOrigin => {}
         AllowedOrigins::List(list) => {

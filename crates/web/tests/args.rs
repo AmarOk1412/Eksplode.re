@@ -149,3 +149,13 @@ fn help_and_version() {
     assert_eq!(args(&["--version"]), Ok(Command::Version));
     assert_eq!(args(&["-V"]), Ok(Command::Version));
 }
+
+#[test]
+fn f3_us4_as1_dev_mode_is_off_by_default_and_parses_alone_or_with_other_options() {
+    assert!(!opts(&[]).dev);
+    assert!(opts(&["--dev"]).dev);
+    let o = opts(&["--bots", "2", "--dev", "--http-port", "9000"]);
+    assert!(o.dev);
+    assert_eq!((o.bots, o.http_port), (2, 9000));
+    assert!(bomberust_web::args::USAGE.contains("--dev"));
+}

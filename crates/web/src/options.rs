@@ -27,6 +27,8 @@ pub struct ServerOptions {
     /// A player silent for this long during a match is replaced by a bot.
     pub silence_timeout: Duration,
     pub game: Config,
+    /// Developer mode: the lobby owner may pause bots and change the drop chances (testing).
+    pub dev: bool,
     /// Duration of one simulation tick.
     pub tick: Duration,
 }
@@ -45,6 +47,7 @@ impl Default for ServerOptions {
             request_timeout: Duration::from_secs(5),
             silence_timeout: Duration::from_secs(10),
             tick: Duration::from_secs(1) / game.tick_hz,
+            dev: false,
             game,
         }
     }

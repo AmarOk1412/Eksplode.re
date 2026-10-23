@@ -32,7 +32,7 @@ fn client_ips(bound: IpAddr) -> Vec<IpAddr> {
 }
 
 /// What `bomberust-server` prints when it is ready.
-pub fn banner(_opts: &ServerOptions, http: SocketAddr, game: SocketAddr) -> String {
+pub fn banner(opts: &ServerOptions, http: SocketAddr, game: SocketAddr) -> String {
     let ips = client_ips(http.ip());
     let mut out = String::from("Bomberust server running\n");
     for (i, ip) in ips.iter().enumerate() {
@@ -58,6 +58,9 @@ pub fn banner(_opts: &ServerOptions, http: SocketAddr, game: SocketAddr) -> Stri
             host_part(*ip),
             game.port()
         ));
+    }
+    if opts.dev {
+        out.push_str("  Developer mode: on (testing only)\n");
     }
     out.push_str("  Stop:            Ctrl+C\n");
     out
