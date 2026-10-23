@@ -244,3 +244,60 @@ fn f3_sc009_no_audio_file_is_referenced_or_embedded() {
         "audio.js must not fetch anything"
     );
 }
+
+#[test]
+fn f4_the_guides_describe_every_mode_setting_option_and_sound_of_game_modes() {
+    use bomberust_core::{BoardSize, Mode, MINUTES};
+    let gameplay = read("docs/GAMEPLAY.md");
+    let readme = read("README.md");
+    let protocol = read("docs/PROTOCOL.md");
+    let web = read("docs/WEB.md");
+    for mode in Mode::ALL {
+        let label = mode.label();
+        assert!(
+            gameplay.contains(&format!("{label} mode")),
+            "docs/GAMEPLAY.md has no section for {label} mode"
+        );
+        assert!(readme.contains(label), "README.md does not mention {label}");
+        assert!(
+            protocol.contains(&format!("`{}`", mode.name())),
+            "docs/PROTOCOL.md lacks `{}`",
+            mode.name()
+        );
+    }
+    for size in BoardSize::ALL {
+        let (w, h) = size.dimensions();
+        assert!(
+            gameplay.contains(&format!("{w} x {h}")),
+            "docs/GAMEPLAY.md lacks {w} x {h}"
+        );
+    }
+    for m in MINUTES {
+        assert!(gameplay.contains(&m.to_string()), "round time {m}");
+    }
+    for flag in [
+        "--room-name",
+        "--mode",
+        "--size",
+        "--time",
+        "--friendly-fire",
+        "--no-setup",
+    ] {
+        assert!(readme.contains(flag), "README.md lacks {flag}");
+    }
+    for needle in [
+        "end pattern",
+        "friendly fire",
+        "hearts",
+        "RoomQuery",
+        "SetRoom",
+        "bomberust.room.v1",
+    ] {
+        assert!(
+            [&gameplay, &readme, &protocol, &web]
+                .iter()
+                .any(|d| d.contains(needle)),
+            "no guide mentions {needle}"
+        );
+    }
+}

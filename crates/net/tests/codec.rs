@@ -340,3 +340,63 @@ fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn f4_old_messages_without_the_new_fields_still_decode() {
+    // a Join of an old client carries neither a look nor a room
+    let join: ClientMsg = decode(br#"{"type":"Join","version":1,"name":"Old"}"#).unwrap();
+    assert!(matches!(
+        join,
+        ClientMsg::Join {
+            room: None,
+            look: None,
+            ..
+        }
+    ));
+    // a lobby of an old host has no settings: the defaults apply
+    let lobby: ServerMsg = decode(
+        br#"{"type":"Lobby","lobby":{"slots":[
+            {"controller":"Remote","name":"A","ready":false},
+            {"controller":"Empty","name":"","ready":false},
+            {"controller":"Empty","name":"","ready":false},
+            {"controller":"Empty","name":"","ready":false}]}}"#,
+    )
+    .unwrap();
+    match lobby {
+        ServerMsg::Lobby { lobby, .. } => {
+            assert_eq!(lobby.settings, bomberust_core::RoomSettings::default());
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn f4_a_client_that_does_not_know_a_message_gets_an_error_not_a_panic() {
+    for line in [
+        r#"{"type":"RoomInfoV2","open":true}"#,
+        r#"{"type":"RoomInfo"}"#,
+        r#"{"type":"RoomInfo","open":"yes","settings":5,"humans":-1}"#,
+        r#"{"type":"HeartLost"}"#,
+        r#"{"type":"Ended","outcome":{"TeamWin":"x"}}"#,
+        r#"{"type":"Ended","outcome":"NobodyWins"}"#,
+    ] {
+        assert!(decode::<ServerMsg>(line.as_bytes()).is_err(), "{line}");
+    }
+    // and the new outcomes round trip
+    for outcome in [
+        Outcome::TeamWin(1),
+        Outcome::ChaserWins,
+        Outcome::RunnersWin,
+    ] {
+        roundtrip(ServerMsg::Ended { outcome });
+    }
+    roundtrip(ServerMsg::RoomInfo {
+        open: true,
+        settings: bomberust_core::RoomSettings::default(),
+        humans: 2,
+    });
+    roundtrip(ClientMsg::RoomQuery);
+    roundtrip(ClientMsg::SetRoom {
+        settings: serde_json::json!({"mode": "team"}),
+    });
+}

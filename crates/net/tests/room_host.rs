@@ -7,6 +7,7 @@ use bomberust_net::protocol::{ClientMsg, ServerMsg};
 use bomberust_net::Host;
 use common::*;
 use serde_json::{json, Value};
+use std::io::Write;
 use std::time::{Duration, Instant};
 
 fn join(host: &Host, name: &str, room: Option<Value>) -> (Raw, u8, Lobby) {
@@ -403,6 +404,89 @@ fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
                     .filter(|p| p.role == Role::Runner)
                     .count(),
                 3
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn f4_random_and_truncated_room_frames_never_break_the_room() {
+    let host = host();
+    let (mut owner, _, before) = join(
+        &host,
+        "Ann",
+        Some(json!({"name": "Steady", "size": "medium"})),
+    );
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for round in 0..4 {
+        let mut bad = Raw::connect(host.addr());
+        for _ in 0..30 {
+            let text = match next() % 7 {
+                0 => r#"{"type":"RoomQuery"}"#.to_string(),
+                1 => r#"{"type":"SetRoom","settings":{"mode":7,"size":[],"minutes":"x"}}"#
+                    .to_string(),
+                2 => r#"{"type":"SetRoom"}"#.to_string(),
+                3 => r#"{"type":"SetRoom","settings":{"name":"#.to_string(),
+                4 => format!(
+                    r#"{{"type":"Join","version":1,"name":"M{round}","room":{{"minutes":{}}}}}"#,
+                    next()
+                ),
+                5 => String::from_utf8_lossy(&(0..40).map(|_| next() as u8).collect::<Vec<_>>())
+                    .to_string(),
+                _ => r#"{"type":"SetRoom","settings":{"name":"Hijack"}}"#.to_string(),
+            };
+            if bad.stream.write_all(text.as_bytes()).is_err()
+                || bad.stream.write_all(b"\n").is_err()
+            {
+                break; // too many bad messages: the host closed the connection
+            }
+        }
+    }
+    // the owner and the room are untouched and the room still works
+    owner.send_line(r#"{"type":"RoomQuery"}"#);
+    match owner.recv_until(|m| matches!(m, ServerMsg::RoomInfo { .. })) {
+        Some(ServerMsg::RoomInfo { open, settings, .. }) => {
+            assert!(open);
+            assert_eq!(settings, before.settings);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn f4_a_set_room_line_over_the_limit_closes_the_connection_and_changes_nothing() {
+    let host = host();
+    let (mut a, _, before) = join(&host, "Ann", None);
+    let big = format!(
+        r#"{{"type":"SetRoom","settings":{{"name":"{}"}}}}"#,
+        "x".repeat(70 * 1024)
+    );
+    a.send_line(&big);
+    // an Error says why, then the connection is closed (recv gives None)
+    let mut saw_oversize_name = false;
+    while let Some(m) = a.recv() {
+        if let ServerMsg::Lobby { lobby, .. } = m {
+            saw_oversize_name |= lobby.settings.name.len() > 100;
+        }
+    }
+    assert!(!saw_oversize_name);
+    let mut probe = Raw::connect(host.addr());
+    probe.send_line(r#"{"type":"RoomQuery"}"#);
+    match probe.recv_until(|m| matches!(m, ServerMsg::RoomInfo { .. })) {
+        Some(ServerMsg::RoomInfo { settings, .. }) => {
+            // the owner was disconnected, so the room may have closed: either way the name is not
+            // the oversized one
+            assert!(
+                settings.name == before.settings.name
+                    || settings.name.is_empty()
+                    || settings.name.is_empty()
             );
         }
         other => panic!("{other:?}"),

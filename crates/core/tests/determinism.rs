@@ -183,3 +183,36 @@ fn f4_us2_as7_the_same_seed_settings_and_inputs_give_the_same_pattern_and_result
     }
     assert!(started > 0, "the pattern ran in at least one round");
 }
+
+#[test]
+fn f4_every_mode_and_size_is_deterministic_for_a_seed_and_the_inputs() {
+    use bomberust_core::{BoardSize, Mode, RoomSettings};
+    for mode in Mode::ALL {
+        for size in BoardSize::ALL {
+            let config = RoomSettings {
+                mode,
+                size,
+                minutes: 2,
+                ..RoomSettings::default()
+            }
+            .to_config(&Config::default());
+            for seed in [1u64, 2, 3] {
+                let mut a = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+                let mut b = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+                let mut ra = Rng::new(seed ^ 0xF4);
+                let mut rb = Rng::new(seed ^ 0xF4);
+                for _ in 0..config.round_limit_ticks + 40 {
+                    let ea = step(&mut a, &random_inputs(&mut ra));
+                    let eb = step(&mut b, &random_inputs(&mut rb));
+                    assert_eq!(ea, eb, "{mode:?} {size:?} seed {seed}");
+                }
+                assert_eq!(a, b, "{mode:?} {size:?} seed {seed}");
+                assert_ne!(
+                    a.phase,
+                    bomberust_core::Phase::Playing,
+                    "{mode:?} {size:?} seed {seed} must end"
+                );
+            }
+        }
+    }
+}
