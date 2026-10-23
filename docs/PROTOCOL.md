@@ -36,6 +36,9 @@ runs the simulation and validates every message, whatever the transport.
 | `Start` | none | lobby owner only: start the match |
 | `AddBot` | none | lobby owner only: put a bot into the first free slot |
 | `RemoveBot` | none | lobby owner only: free the highest bot slot |
+| `DevPauseBots` | `paused: bool` | developer mode and owner only: stop or resume the bots |
+| `DevSetDrops` | `chances: [f32; 7]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
+| `DevResetDrops` | none | developer mode and owner only: back to the default drop table |
 
 Examples:
 
@@ -49,7 +52,7 @@ Examples:
 
 | type | Fields | When |
 |------|--------|------|
-| `Welcome` | `slot: 0..3`, `config`, `lobby`, `looks: [Look; 4]` | the join was accepted |
+| `Welcome` | `slot: 0..3`, `config`, `lobby`, `looks: [Look; 4]`, `dev: bool` (optional, false when missing) | the join was accepted |
 | `Rejected` | `reason: "Full" / "BadVersion" / "BadName" / "InMatch"` | the join was refused; the connection is closed |
 | `Lobby` | `lobby: {slots: [{controller, name, ready}; 4]}`, `looks: [Look; 4]` | any lobby change |
 | `Start` | `seed: u64`, `config` | the owner started a match |
@@ -58,6 +61,7 @@ Examples:
 | `Ended` | `outcome: {"Winner": slot} / "Draw"` | the round is over; the lobby follows |
 | `Error` | `code: string`, `message: string` | a message was refused; see below |
 | `Pong` | `nonce: u64` | answer to `Ping` |
+| `DevState` | `paused: bool`, `drops: [f32; 7]` | developer mode: sent to a joiner and to everybody when the pause or the drop table changes |
 
 `controller` in a lobby slot is `Local` (a person at the host), `Remote` (a person on the
 network, terminal or browser), `Bot` or `Empty`.
@@ -104,11 +108,13 @@ none and old clients ignore the field.
 | `Malformed` | bad JSON, unknown `type`, binary WebSocket frame, or an oversized message |
 | `NotJoined` | the first message was not `Join` |
 | `AlreadyJoined` | a second `Join` on the same connection |
-| `NotOwner` | `Start`, `AddBot` or `RemoveBot` from somebody who is not the lobby owner; the message names the owner |
+| `NotOwner` | `Start`, `AddBot`, `RemoveBot` or a `Dev*` message from somebody who is not the lobby owner; the message names the owner |
 | `CannotStart` | `Start` while a match is already running |
 | `WrongPhase` | `AddBot`, `RemoveBot` or `SetReady` during a match, or `Input` in the lobby |
 | `NoSlot` | `AddBot` with all slots taken |
 | `BadTick` | an `Input` from the future |
+| `DevDisabled` | a `Dev*` message on a host that was not started with `--dev` |
+| `BadValue` | `DevSetDrops` with a value outside 0 to 1, not finite or not seven values |
 | `Timeout` | silent for too long; the slot goes to a bot |
 | `HostLeft` | the host is shutting down; every client gets it before the connection closes |
 | `LookAdjusted` | the requested colour was taken; the message names the colour you got (a notice, not a refusal) |

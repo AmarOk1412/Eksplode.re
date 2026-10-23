@@ -43,6 +43,14 @@ Do this only on a network you trust, or put one of these in front:
   `--allow-origin https://play.example.org` only if the page is served from a different origin
   than the WebSocket; behind a proxy that keeps the `Host` header the default works.
 
+## Developer mode
+
+`--dev` gives the lobby owner commands to pause bots and to change the drop chances of the
+powers. They cannot hurt the machine, but they change the rules of the match, so the mode is off
+by default, prints `WARNING: developer mode is on: ...` at start-up, and every developer message
+is refused with `DevDisabled` unless it was asked for. Use it for testing on a trusted machine,
+never on an exposed network.
+
 ## The Origin and CORS policy
 
 Browsers let any web page open a WebSocket to any address, including `127.0.0.1`. Without a

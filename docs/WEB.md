@@ -23,6 +23,18 @@ when the system asks for reduced motion.
 Sound effects and music are generated in the page; the speaker button opens the volume settings.
 See [AUDIO.md](AUDIO.md).
 
+## Developer mode
+
+`--dev` (also `bomberust-cli host --dev`) turns on developer mode for testing. The page then shows
+a "DEV MODE" marker and a panel for the lobby owner: pause or resume every bot (placed bombs keep
+burning, people are not affected), seven sliders from 0 to 100 % for the drop chance of each power
+(extra bomb, flame, roller, punch, slow, hyper speed, small bomb) and a reset button. The sliders
+change what blocks destroyed from then on drop, also in the middle of a match; for example punch
+at 100 % and the rest at 0 % makes every block drop a punch. Without `--dev` the server refuses
+every developer command (`DevDisabled`) and the page shows no panel. Developer mode is for testing
+on your own machine: it prints a `WARNING:` at start-up and must not be exposed to an untrusted
+network, see [SECURITY.md](SECURITY.md).
+
 ## Options
 
 <!-- options:begin -->
@@ -36,6 +48,7 @@ See [AUDIO.md](AUDIO.md).
 | `--allow-origin <ORIGIN>` | accept WebSocket connections from this web origin (repeatable) |
 | `--allow-any-origin` | accept WebSocket connections from any web origin (unsafe) |
 | `--max-connections <N>` | open HTTP/WebSocket connections (default 64, minimum 4) |
+| `--dev` | developer mode: owner-only commands to pause bots and set drop chances (testing only) |
 | `-h, --help` | show this help |
 | `-V, --version` | show the version |
 <!-- options:end -->

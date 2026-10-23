@@ -62,3 +62,10 @@ The terminal draws a bomb in flight as `(~` (cells are two characters wide) and 
 effects after each player's stats: `punch`, `slow 7s`, `hyper 4s`, `small 9s`. The browser lists
 them in the player list next to the board and tints a player with a malus (blue slow, yellow
 hyper speed, red small bomb).
+
+## Forcing a power (developer mode)
+
+Start the server with `--dev` (or `bomberust-cli host --dev`), join from the browser as the lobby
+owner and use the DEV MODE panel: set the slider of a power to 100 % and the others to 0 % and
+every block destroyed from then on drops that power. The "pause bots" button freezes the bots so
+you can try a punch in peace. Other players cannot use the panel; without `--dev` there is none.

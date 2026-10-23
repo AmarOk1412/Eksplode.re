@@ -60,11 +60,13 @@ capture PNGs).
 - `--lobby` shows the lobby screen first (Up/Down select, `h` human, `b` bot, Enter start);
 - `-h`, `--help` and `-V`, `--version`.
 
-`bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP]`:
+`bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]`:
 
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
   name (1 to 16 printable characters), `--seed <N>` fixed seed;
 - `--web-port <N>` also serve the web page on this port;
+- `--dev` developer mode (testing only): the owner can pause bots and set drop chances from the
+  web page; see [docs/WEB.md](docs/WEB.md);
 - `--bind <IP>` listening address. By default the game port listens on every interface and the
   page only on `127.0.0.1`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
@@ -78,8 +80,8 @@ The terminal must be at least 40x20. Wrong usage exits with status 2.
 ### Server options
 
 `bomberust-server` (`cargo run -p bomberust-web --`) takes `--bind`, `--http-port`,
-`--game-port`, `--bots`, `--seed`, `--allow-origin`, `--allow-any-origin` and
-`--max-connections`; the table and examples are in [docs/WEB.md](docs/WEB.md).
+`--game-port`, `--bots`, `--seed`, `--allow-origin`, `--allow-any-origin`,
+`--max-connections` and `--dev`; the table and examples are in [docs/WEB.md](docs/WEB.md).
 
 ## Controls
 
