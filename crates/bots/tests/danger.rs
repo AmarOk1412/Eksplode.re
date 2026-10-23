@@ -135,3 +135,34 @@ fn the_landing_prediction_hops_over_blocks_players_and_other_bombs() {
     let d = DangerMap::from_observation(&obs(&s, 0));
     assert_eq!(d.first_danger(pos(5, 3)), Some(12));
 }
+
+fn slide(s: &mut bomberust_core::GameState, at: (u8, u8), dir: bomberust_core::Dir, fuse: u32) {
+    add_bomb(s, 1, at.0, at.1, fuse);
+    let b = s.bombs.last_mut().unwrap();
+    b.slide = Some(bomberust_core::Slide { dir, step_left: 2 });
+}
+
+#[test]
+fn f3_us2_as12_a_sliding_bomb_is_dangerous_where_it_is_and_where_it_will_stop() {
+    let mut s = duel(&OPEN, (1, 5), (5, 1));
+    slide(&mut s, (1, 3), bomberust_core::Dir::Right, 10);
+    let d = DangerMap::from_observation(&obs(&s, 0));
+    // it will stop on (5, 3), the last free square before the wall: that cross burns
+    for p in [pos(5, 3), pos(5, 1), pos(5, 5), pos(3, 3)] {
+        assert_eq!(d.first_danger(p), Some(10), "stop cross {p:?}");
+    }
+    // and the cross of the current square burns too
+    assert_eq!(d.first_danger(pos(1, 2)), Some(10), "current cross");
+    assert_eq!(d.first_danger(pos(1, 1)), Some(10));
+}
+
+#[test]
+fn f3_us2_as12_the_stop_square_follows_blockers_on_the_way() {
+    let mut s = duel(&OPEN, (1, 5), (5, 1));
+    s.players[1].pos = pos(4, 3);
+    slide(&mut s, (1, 3), bomberust_core::Dir::Right, 12);
+    let landing = bomberust_core::kick::predict_slide_stop(&s.arena, &s.players, &s.bombs, 0);
+    assert_eq!(landing, pos(3, 3), "it stops before the living player");
+    let d = DangerMap::from_observation(&obs(&s, 0));
+    assert_eq!(d.first_danger(pos(3, 2)), Some(12));
+}

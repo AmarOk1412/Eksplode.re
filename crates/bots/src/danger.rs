@@ -1,5 +1,6 @@
 //! When and for how long each tile is going to burn, derived from the public observation.
 
+use bomberust_core::kick::{predict_slide_explosion, predict_slide_stop};
 use bomberust_core::punch::predict_landing;
 use bomberust_core::{blast, Observation, Pos};
 
@@ -33,6 +34,19 @@ impl DangerMap {
                 let landing = predict_landing(&obs.arena, &obs.players, &obs.bombs, i);
                 if landing != b.pos {
                     bombs.push((landing, b.range, b.ticks_left));
+                }
+            }
+            if b.slide.is_some() {
+                // a kicked bomb explodes where the slide has taken it when the fuse ends, which
+                // is anywhere up to its stop square: both are dangerous
+                let slide_ticks = obs.config.slide_ticks;
+                let at_fuse =
+                    predict_slide_explosion(&obs.arena, &obs.players, &obs.bombs, i, slide_ticks);
+                let stop = predict_slide_stop(&obs.arena, &obs.players, &obs.bombs, i);
+                for pos in [at_fuse, stop] {
+                    if pos != b.pos {
+                        bombs.push((pos, b.range, b.ticks_left));
+                    }
                 }
             }
         }

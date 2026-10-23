@@ -82,6 +82,7 @@ fn us2_as2_bots_escape_in_at_least_95_percent_of_scripted_scenarios() {
             ticks_left: 30,
             range,
             flight: None,
+            slide: None,
         });
         s.players[1].bombs_active = 1;
         if !escape_exists(&s, me, range, 5) {
