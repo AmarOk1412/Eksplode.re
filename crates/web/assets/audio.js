@@ -48,7 +48,7 @@ export function effectiveGain(value, muted) {
 
 // --- sound effects --------------------------------------------------------------------------
 
-export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "land", "eliminated", "win", "draw"];
+export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw"];
 export const MAX_SOUNDS_PER_SNAPSHOT = 8;
 const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb"]);
 
@@ -65,6 +65,7 @@ export function soundsForEvents(events) {
     if ("BombPlaced" in e) add("bombPlace");
     else if ("BombExploded" in e) add("explosion");
     else if ("BombPunched" in e) add("punch");
+    else if ("BombKicked" in e) add("kick");
     else if ("BombLanded" in e) add("land");
     else if ("PlayerEliminated" in e) add("eliminated");
     else if ("PowerUpCollected" in e) add(MALUS_KINDS.has(e.PowerUpCollected?.kind) ? "malus" : "bonus");
@@ -150,6 +151,7 @@ const RECIPES = {
     noise(c, o, { type: "highpass", f0: 1500, start: t, dur: 0.12, gain: 0.6 * v });
     tone(c, o, { type: "triangle", f0: 700, f1: 200, start: t, dur: 0.12, gain: 0.5 * v });
   },
+  kick: (c, o, t, v) => tone(c, o, { type: "triangle", f0: 260, f1: 90, start: t, dur: 0.11, gain: 0.7 * v }),
   land: (c, o, t, v) => tone(c, o, { type: "sine", f0: 140, start: t, dur: 0.09, gain: 0.7 * v }),
   eliminated: (c, o, t, v) => {
     [392, 329.63, 261.63, 196].forEach((f0, i) => tone(c, o, { type: "triangle", f0, start: t + 0.1 * i, dur: 0.1, gain: 0.45 * v }));

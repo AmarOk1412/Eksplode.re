@@ -9,6 +9,7 @@ const ev = {
   exploded: { BombExploded: { owner: 0, pos: P } },
   punched: { BombPunched: { player: 0, from: P, dir: "Right" } },
   landed: { BombLanded: { pos: P } },
+  kicked: { BombKicked: { player: 0, from: P, dir: "Right" } },
   out: { PlayerEliminated: { player: 2 } },
   bonus: { PowerUpCollected: { player: 0, pos: P, kind: "Punch" } },
   malus: { PowerUpCollected: { player: 0, pos: P, kind: "Slow" } },
@@ -23,17 +24,18 @@ test("f3_us3_as2_every_listed_event_has_its_own_sound", () => {
   assert.deepEqual(ids([ev.exploded]), ["explosion"]);
   assert.deepEqual(ids([ev.punched]), ["punch"]);
   assert.deepEqual(ids([ev.landed]), ["land"]);
+  assert.deepEqual(ids([ev.kicked]), ["kick"]);
   assert.deepEqual(ids([ev.out]), ["eliminated"]);
   assert.deepEqual(ids([ev.win]), ["win"]);
   assert.deepEqual(ids([ev.draw]), ["draw"]);
-  for (const kind of ["ExtraBomb", "Range", "Speed", "Punch"]) {
+  for (const kind of ["ExtraBomb", "Range", "Speed", "Punch", "Kick"]) {
     assert.deepEqual(ids([{ PowerUpCollected: { player: 0, pos: P, kind } }]), ["bonus"], kind);
   }
   for (const kind of ["Slow", "HyperSpeed", "SmallBomb"]) {
     assert.deepEqual(ids([{ PowerUpCollected: { player: 0, pos: P, kind } }]), ["malus"], kind);
   }
   assert.equal(new Set(SOUND_IDS).size, SOUND_IDS.length);
-  for (const id of ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "land", "eliminated", "win", "draw"]) {
+  for (const id of ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw"]) {
     assert.ok(SOUND_IDS.includes(id), id);
   }
 });
@@ -154,6 +156,14 @@ test("punch is a 120 ms noise burst with a pitch drop from 700 to 200 Hz", () =>
   assert.equal(osc.length, 1);
   assert.deepEqual([osc[0].f0, osc[0].f1], [700, 200]);
   assert.ok(near(osc[0].dur, 0.12));
+});
+
+test("kick is a 110 ms triangle thud falling from 260 to 90 Hz", () => {
+  const { osc, noise } = play("kick");
+  assert.equal(noise.length, 0);
+  assert.equal(osc.length, 1);
+  assert.deepEqual([osc[0].type, osc[0].f0, osc[0].f1], ["triangle", 260, 90]);
+  assert.ok(near(osc[0].dur, 0.11));
 });
 
 test("land is a 90 ms sine thud at 140 Hz", () => {
