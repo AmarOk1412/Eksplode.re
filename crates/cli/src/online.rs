@@ -216,6 +216,7 @@ impl Online {
             tick: self.tick,
             mv: i.mv,
             bomb: i.bomb,
+            punch: i.punch,
         });
     }
 

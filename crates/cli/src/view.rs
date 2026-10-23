@@ -44,21 +44,33 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
                 .add_modifier(Modifier::BOLD),
         );
     }
-    if state.bombs.iter().any(|b| b.pos == pos) {
+    if let Some(b) = state.bombs.iter().find(|b| b.pos == pos) {
+        // a bomb in the air after a punch trails a wave
+        let glyph = if b.flight.is_some() { "(~" } else { "()" };
         return (
-            "()".into(),
+            glyph.into(),
             Style::default()
                 .fg(Color::White)
                 .add_modifier(Modifier::BOLD),
         );
     }
     if let Some(u) = state.powerups.iter().find(|u| u.pos == pos) {
+        // bonuses are green with a plus, maluses red with a minus
         let glyph = match u.kind {
             PowerUpKind::ExtraBomb => "+B",
-            PowerUpKind::Range => "+R",
-            PowerUpKind::Speed => "+S",
+            PowerUpKind::Speed => "+R",
+            PowerUpKind::Range => "+F",
+            PowerUpKind::Punch => "+P",
+            PowerUpKind::Slow => "-S",
+            PowerUpKind::HyperSpeed => "-H",
+            PowerUpKind::SmallBomb => "-s",
         };
-        return (glyph.into(), Style::default().fg(Color::Magenta));
+        let colour = if u.kind.is_malus() {
+            Color::Red
+        } else {
+            Color::Green
+        };
+        return (glyph.into(), Style::default().fg(colour));
     }
     match state.arena.tile(pos) {
         Tile::Wall => ("##".into(), Style::default().fg(Color::DarkGray)),
@@ -130,8 +142,21 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
         );
         let detail = if p.alive {
             let speed = state.config.base_move_cooldown + 1 - p.move_cooldown;
+            let mut effects = String::new();
+            if p.has_punch {
+                effects.push_str(" punch");
+            }
+            if let Some(m) = p.malus {
+                let name = match m.kind {
+                    PowerUpKind::Slow => "slow",
+                    PowerUpKind::HyperSpeed => "hyper",
+                    _ => "small",
+                };
+                let seconds = m.ticks_left.div_ceil(state.config.tick_hz.max(1));
+                effects.push_str(&format!(" {name} {seconds}s"));
+            }
             format!(
-                "{tag:<6} bombs {}/{} range {} speed {speed}",
+                "{tag:<6} bombs {}/{} range {} speed {speed}{effects}",
                 p.bombs_active, p.bombs_max, p.range
             )
         } else {

@@ -53,7 +53,7 @@ fn command_keys() {
 
 #[test]
 fn unknown_keys_are_ignored() {
-    assert_eq!(map_key(KeyCode::Char('z')), None);
+    assert_eq!(map_key(KeyCode::Char('x')), None);
     assert_eq!(map_key(KeyCode::F(5)), None);
     assert_eq!(map_key(KeyCode::Enter), None);
 }
@@ -99,4 +99,33 @@ fn clear_forgets_pending_input() {
     s.clear();
     let i = s.take()[0];
     assert_eq!((i.mv, i.bomb), (None, false));
+}
+
+#[test]
+fn f3_us2_as9_each_player_has_a_punch_key_that_clashes_with_nothing() {
+    for (slot, key) in [(0, 'z'), (1, 'c'), (2, 'u'), (3, 'n')] {
+        assert_eq!(
+            map_key(KeyCode::Char(key)),
+            player(slot, PlayerAction::Punch),
+            "{key}"
+        );
+    }
+    // every other key keeps its meaning
+    assert_eq!(map_key(KeyCode::Char('q')), Some(KeyAction::Quit));
+    assert_eq!(map_key(KeyCode::Char('p')), Some(KeyAction::Pause));
+    assert_eq!(map_key(KeyCode::Char('r')), Some(KeyAction::Rematch));
+    assert_eq!(map_key(KeyCode::Char('b')), None);
+    assert_eq!(map_key(KeyCode::Char('x')), None);
+    assert_eq!(map_key(KeyCode::Char('e')), player(1, PlayerAction::Bomb));
+}
+
+#[test]
+fn punch_presses_fire_once() {
+    let mut s = InputState::new(4);
+    s.press(1, PlayerAction::Punch);
+    assert!(s.take()[1].punch);
+    assert!(!s.take()[1].punch);
+    s.press(1, PlayerAction::Punch);
+    s.clear();
+    assert!(!s.take()[1].punch);
 }

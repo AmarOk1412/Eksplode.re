@@ -65,6 +65,7 @@ fn draws_bombs_flames_and_powerups() {
         pos: Pos::new(3, 3),
         ticks_left: 30,
         range: 2,
+        flight: None,
     });
     st.flames.push(Flame {
         pos: Pos::new(4, 3),
@@ -83,7 +84,7 @@ fn draws_bombs_flames_and_powerups() {
         kind: PowerUpKind::Speed,
     });
     let s = screen(&st, &ctx());
-    for glyph in ["()", "**", "+B", "+R", "+S"] {
+    for glyph in ["()", "**", "+B", "+F", "+R"] {
         assert!(s.contains(glyph), "{glyph}");
     }
 }
@@ -145,4 +146,61 @@ fn minimum_size_is_enough() {
 fn default_arena_fits_the_minimum_size() {
     let st = GameState::new(Config::default(), 1, [true; 4]).unwrap();
     assert_eq!(required_size(&st.observe(pid(0))), (40, 20));
+}
+
+#[test]
+fn f3_us2_as9_every_power_has_its_letter() {
+    let mut st = base();
+    for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
+        st.powerups.push(PowerUp {
+            pos: Pos::new(1 + i as u8 % 5, 2 + i as u8 / 5),
+            kind: *kind,
+        });
+    }
+    let s = screen(&st, &ctx());
+    for glyph in ["+B", "+R", "+F", "+P", "-S", "-H", "-s"] {
+        assert!(s.contains(glyph), "{glyph}\n{s}");
+    }
+}
+
+#[test]
+fn f3_us2_as9_a_bomb_in_flight_looks_different_from_a_landed_one() {
+    let mut st = base();
+    st.bombs.push(Bomb {
+        owner: pid(0),
+        pos: Pos::new(3, 3),
+        ticks_left: 30,
+        range: 2,
+        flight: Some(bomberust_core::Flight {
+            dir: bomberust_core::Dir::Right,
+            hop_left: 2,
+            origin: Pos::new(3, 3),
+        }),
+    });
+    let obs = st.observe(pid(0));
+    let (glyph, _) = bomberust_cli::view::cell(&obs, Pos::new(3, 3));
+    assert_eq!(glyph, "(~");
+}
+
+#[test]
+fn f3_us2_as9_status_lines_list_the_punch_and_the_malus_with_seconds() {
+    let mut st = base();
+    st.players[0].has_punch = true;
+    st.players[0].malus = Some(bomberust_core::ActiveMalus {
+        kind: PowerUpKind::Slow,
+        ticks_left: 7 * 20 - 3,
+    });
+    st.players[1].malus = Some(bomberust_core::ActiveMalus {
+        kind: PowerUpKind::HyperSpeed,
+        ticks_left: 4 * 20,
+    });
+    let s = screen(&st, &ctx());
+    assert!(s.contains("punch"), "{s}");
+    assert!(s.contains("slow 7s"), "{s}");
+    assert!(s.contains("hyper 4s"), "{s}");
+    st.players[1].malus = Some(bomberust_core::ActiveMalus {
+        kind: PowerUpKind::SmallBomb,
+        ticks_left: 9 * 20 - 19,
+    });
+    assert!(screen(&st, &ctx()).contains("small 9s"));
 }

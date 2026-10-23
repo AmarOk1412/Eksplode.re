@@ -8,6 +8,8 @@ use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 pub enum PlayerAction {
     Move(Dir),
     Bomb,
+    /// Punch the bomb in front of the player (needs the punch power).
+    Punch,
 }
 
 /// The meaning of a key press.
@@ -18,6 +20,9 @@ pub enum KeyAction {
     Rematch,
     Pause,
 }
+
+/// Punch key of each slot (the arrow-key player is slot 0).
+const PUNCH_KEYS: [char; 4] = ['z', 'c', 'u', 'n'];
 
 /// Per slot keys: up, down, left, right, bomb.
 const KEYS: [[char; 5]; 3] = [
@@ -65,6 +70,9 @@ pub fn map_key(code: KeyCode) -> Option<KeyAction> {
                 'p' => return Some(KeyAction::Pause),
                 _ => {}
             }
+            if let Some(slot) = PUNCH_KEYS.iter().position(|k| *k == c) {
+                return player(slot, PlayerAction::Punch);
+            }
             for (i, keys) in KEYS.iter().enumerate() {
                 let Some(k) = keys.iter().position(|x| *x == c) else {
                     continue;
@@ -93,6 +101,7 @@ pub struct InputState {
     hold_ticks: u32,
     held: [Option<(Dir, u32)>; 4],
     bomb: [bool; 4],
+    punch: [bool; 4],
 }
 
 impl InputState {
@@ -101,6 +110,7 @@ impl InputState {
             hold_ticks,
             held: [None; 4],
             bomb: [false; 4],
+            punch: [false; 4],
         }
     }
 
@@ -112,6 +122,7 @@ impl InputState {
         match action {
             PlayerAction::Move(d) => self.held[slot] = Some((d, self.hold_ticks)),
             PlayerAction::Bomb => self.bomb[slot] = true,
+            PlayerAction::Punch => self.punch[slot] = true,
         }
     }
 
@@ -124,6 +135,7 @@ impl InputState {
                 self.held[slot] = left.checked_sub(1).filter(|l| *l > 0).map(|l| (dir, l));
             }
             input.bomb = std::mem::take(&mut self.bomb[slot]);
+            input.punch = std::mem::take(&mut self.punch[slot]);
         }
         out
     }
@@ -132,5 +144,6 @@ impl InputState {
     pub fn clear(&mut self) {
         self.held = [None; 4];
         self.bomb = [false; 4];
+        self.punch = [false; 4];
     }
 }
