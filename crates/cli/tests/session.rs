@@ -12,6 +12,7 @@ fn session(players: u8, bots: u8) -> Session {
             bots,
             seed: None,
             lobby: false,
+            room: Default::default(),
         },
         7,
     )

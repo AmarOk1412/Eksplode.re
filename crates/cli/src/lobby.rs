@@ -87,10 +87,9 @@ pub fn render(frame: &mut Frame, screen: &LobbyScreen) {
     }
     lines.push(Line::default());
     lines.push(Line::from("Up/Down select   h human   b bot"));
-    lines.push(Line::from(if screen.lobby.can_start() {
-        "Enter start   q quit"
-    } else {
-        "Enter start (needs a player)   q quit"
+    lines.push(Line::from(match screen.lobby.start_problem() {
+        None => "Enter start   q quit".to_string(),
+        Some(problem) => format!("{problem}   q quit"),
     }));
     let height = (lines.len() as u16 + 2).min(area.height);
     let rect = Rect::new(area.x, area.y, area.width, height);

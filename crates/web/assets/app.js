@@ -21,6 +21,24 @@ import {
   saveLook,
 } from "./look.js";
 
+import {
+  MODES,
+  MODE_HINTS,
+  MODE_LABELS,
+  PLAYABLE_MODES,
+  SIZES,
+  SIZE_DIMENSIONS,
+  SIZE_LABELS,
+  MINUTES,
+  loadRoom,
+  roomControls,
+  roomPayload,
+  roomReducer,
+  sanitizeRoom,
+  saveRoom,
+  setRoomMessage,
+} from "./room.js";
+
 const DIRECTIONS = {
   ArrowUp: "Up",
   KeyW: "Up",
@@ -75,7 +93,20 @@ export class KeyTracker {
 }
 
 export function initialState() {
-  return { stage: "idle", slot: null, lobby: null, notice: "", observation: null, tick: 0, looks: defaultLooks(), dev: false, devState: null };
+  return {
+    stage: "idle",
+    // "room" shows the room creation menu, "join" the name and look screen
+    menu: "join",
+    room: null,
+    slot: null,
+    lobby: null,
+    notice: "",
+    observation: null,
+    tick: 0,
+    looks: defaultLooks(),
+    dev: false,
+    devState: null,
+  };
 }
 
 function defaultLooks() {
@@ -122,6 +153,17 @@ export function reduce(state, event) {
       return { ...state, stage: "closed", notice: "Connection lost. The server may have stopped." };
     case "retry":
       return initialState();
+    case "RoomInfo": {
+      const room = {
+        open: event.open === true,
+        settings: sanitizeRoom(event.settings),
+        humans: Number.isInteger(event.humans) ? event.humans : 0,
+      };
+      if (state.stage !== "idle") return { ...state, room };
+      return { ...state, room, menu: room.open ? "join" : "room" };
+    }
+    case "room-confirm":
+      return { ...state, menu: "join" };
     case "Welcome":
       return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "", looks: looksOf(event, null), dev: event.dev === true, devState: null };
     case "DevState":
@@ -405,6 +447,23 @@ function start() {
   const el = {
     notice: $("notice"),
     joinPanel: $("join-panel"),
+    roomPanel: $("room-panel"),
+    roomName: $("room-name"),
+    roomModes: $("room-modes"),
+    roomModeHint: $("room-mode-hint"),
+    roomSize: $("room-size"),
+    roomMinutes: $("room-minutes"),
+    roomFfLabel: $("room-ff-label"),
+    roomFf: $("room-ff"),
+    roomCreate: $("room-create"),
+    joinRoom: $("join-room"),
+    roomSummary: $("room-summary"),
+    lobbyName: $("lobby-room-name"),
+    lobbyMode: $("lobby-mode"),
+    lobbySize: $("lobby-size"),
+    lobbyMinutes: $("lobby-minutes"),
+    lobbyFfLabel: $("lobby-ff-label"),
+    lobbyFf: $("lobby-ff"),
     lobbyPanel: $("lobby-panel"),
     gamePanel: $("game-panel"),
     name: $("name"),
@@ -555,10 +614,13 @@ function start() {
     el.notice.textContent = state.notice;
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
-    el.joinPanel.hidden = inLobby || playing;
+    const roomMenu = state.stage === "idle" && state.menu === "room";
+    el.roomPanel.hidden = !roomMenu;
+    el.joinPanel.hidden = inLobby || playing || roomMenu;
     el.lobbyPanel.hidden = !inLobby;
     el.gamePanel.hidden = !playing;
-    el.editor.hidden = !(!inLobby && !playing) && !(inLobby && editing);
+    el.editor.hidden = roomMenu || (!(!inLobby && !playing) && !(inLobby && editing));
+    renderRoom();
     el.doneLook.hidden = !inLobby;
     if (!el.editor.hidden) renderEditor();
     el.join.hidden = state.stage === "closed";
@@ -640,12 +702,16 @@ function start() {
       updateUi();
       return;
     }
+    // the settings of the creation menu are used only when this join creates the room
+    const creating = state.room !== null && state.room.open === false;
+    if (creating) saveRoom(storage, roomDraft);
     dispatch({ type: "connecting" });
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${scheme}://${location.host}/ws`);
     socket.onopen = () => {
       dispatch({ type: "socket-open" });
-      send(lookMessage("Join", draft, { version: PROTOCOL_VERSION, name }));
+      const join = lookMessage("Join", draft, { version: PROTOCOL_VERSION, name });
+      send(creating ? { ...join, room: roomPayload(roomDraft) } : join);
     };
     socket.onmessage = (ev) => {
       try {
@@ -657,6 +723,133 @@ function start() {
     socket.onclose = () => dispatch({ type: "socket-closed" });
   }
 
+  // settings and looks are remembered on this device when its storage allows it
+  const storage = (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return undefined;
+    }
+  })();
+
+  // ---- the room: the creation menu before joining and the settings in the lobby ----
+  const modeLabel = (m) => MODE_LABELS[m] ?? m;
+  const sizeText = (s) => `${SIZE_LABELS[s]} (${SIZE_DIMENSIONS[s][0]} x ${SIZE_DIMENSIONS[s][1]})`;
+  function fillOptions(select, values, text) {
+    select.replaceChildren(
+      ...values.map((v) => {
+        const o = document.createElement("option");
+        o.value = String(v);
+        o.textContent = text(v);
+        return o;
+      }),
+    );
+  }
+  for (const [size, minutes, mode] of [
+    [el.roomSize, el.roomMinutes, null],
+    [el.lobbySize, el.lobbyMinutes, el.lobbyMode],
+  ]) {
+    fillOptions(size, SIZES, sizeText);
+    fillOptions(minutes, MINUTES, (m) => `${m} minutes`);
+    if (mode) fillOptions(mode, PLAYABLE_MODES, modeLabel);
+  }
+  let roomDraft = loadRoom(storage);
+
+  function renderRoomMenu() {
+    el.roomName.value = roomDraft.name;
+    el.roomSize.value = roomDraft.size;
+    el.roomMinutes.value = String(roomDraft.minutes);
+    el.roomFf.checked = roomDraft.friendly_fire;
+    el.roomFfLabel.hidden = roomDraft.mode !== "team";
+    el.roomModeHint.textContent = MODE_HINTS[roomDraft.mode] ?? "";
+    el.roomModes.replaceChildren(
+      ...PLAYABLE_MODES.map((mode) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.textContent = modeLabel(mode);
+        b.setAttribute("role", "radio");
+        b.setAttribute("aria-checked", String(mode === roomDraft.mode));
+        b.addEventListener("click", () => editRoom({ type: "mode", value: mode }));
+        return b;
+      }),
+    );
+  }
+
+  function editRoom(action) {
+    roomDraft = roomReducer(roomDraft, action);
+    renderRoomMenu();
+  }
+
+  /** Settings shown in the lobby; the owner's controls follow the lobby message. */
+  function renderRoom() {
+    const controls = roomControls(state);
+    el.roomSummary.textContent = state.stage === "lobby" ? controls.summary : "";
+    const s = controls.settings;
+    if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
+    el.lobbyMode.value = s.mode;
+    el.lobbySize.value = s.size;
+    el.lobbyMinutes.value = String(s.minutes);
+    el.lobbyFf.checked = s.friendly_fire;
+    el.lobbyFfLabel.hidden = !controls.showFriendlyFire;
+    for (const control of [el.lobbyName, el.lobbyMode, el.lobbySize, el.lobbyMinutes, el.lobbyFf]) {
+      control.disabled = !controls.enabled;
+    }
+    const room = state.room;
+    el.joinRoom.hidden = !(room && room.open);
+    el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}` : "";
+    if (state.stage === "idle" && state.menu === "room") renderRoomMenu();
+  }
+
+  const roomControlsSummary = (settings) => roomControls({ stage: "lobby", slot: null, lobby: { slots: [], settings } }).summary;
+
+  function changeRoom(field, value) {
+    if (state.stage !== "lobby") return;
+    const settings = { ...sanitizeRoom(state.lobby?.settings), [field]: value };
+    send(setRoomMessage(settings));
+  }
+  el.roomName.addEventListener("input", () => {
+    roomDraft = roomReducer(roomDraft, { type: "name", value: el.roomName.value });
+  });
+  el.roomName.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") dispatch({ type: "room-confirm" });
+  });
+  el.roomSize.addEventListener("change", () => editRoom({ type: "size", value: el.roomSize.value }));
+  el.roomMinutes.addEventListener("change", () => editRoom({ type: "minutes", value: el.roomMinutes.value }));
+  el.roomFf.addEventListener("change", () => editRoom({ type: "friendly_fire", value: el.roomFf.checked }));
+  el.roomCreate.addEventListener("click", () => dispatch({ type: "room-confirm" }));
+  el.lobbyName.addEventListener("change", () => changeRoom("name", el.lobbyName.value));
+  el.lobbyMode.addEventListener("change", () => changeRoom("mode", el.lobbyMode.value));
+  el.lobbySize.addEventListener("change", () => changeRoom("size", el.lobbySize.value));
+  el.lobbyMinutes.addEventListener("change", () => changeRoom("minutes", Number(el.lobbyMinutes.value)));
+  el.lobbyFf.addEventListener("change", () => changeRoom("friendly_fire", el.lobbyFf.checked));
+
+  /** Asks the server whether a room is open on a short-lived socket; no answer means an old server. */
+  function queryRoom() {
+    if (typeof WebSocket === "undefined") return;
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    let probe;
+    try {
+      probe = new WebSocket(`${scheme}://${location.host}/ws`);
+    } catch {
+      return;
+    }
+    const timer = setTimeout(() => probe.close(), 1000);
+    probe.onopen = () => probe.send(JSON.stringify({ type: "RoomQuery" }));
+    probe.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data);
+        if (msg.type !== "RoomInfo") return;
+        clearTimeout(timer);
+        roomDraft = loadRoom(storage, sanitizeRoom(msg.settings));
+        dispatch(msg);
+      } catch {
+        // not a protocol message
+      }
+      probe.close();
+    };
+    probe.onerror = () => clearTimeout(timer);
+  }
+
   el.join.addEventListener("click", connect);
   el.name.addEventListener("keydown", (e) => {
     if (e.key === "Enter") connect();
@@ -664,6 +857,7 @@ function start() {
   el.retry.addEventListener("click", () => {
     if (socket) socket.close();
     dispatch({ type: "retry" });
+    queryRoom();
   });
   el.start.addEventListener("click", () => send({ type: "Start" }));
   el.addBot.addEventListener("click", () => send({ type: "AddBot" }));
@@ -674,13 +868,6 @@ function start() {
   });
 
   // ---- the character editor: the draft is saved on this device and used by the next Join ----
-  const storage = (() => {
-    try {
-      return window.localStorage;
-    } catch {
-      return undefined;
-    }
-  })();
 
   // ---- sound: generated effects and music, started by the first key press or click ----
   const audio = new AudioEngine({ storage });
@@ -784,6 +971,8 @@ function start() {
       if (e.code in DIRECTIONS || BOMB_KEYS.has(e.code)) e.preventDefault();
       keys.press(e.code);
     } else if (state.stage === "lobby" && e.key === "Enter") {
+      // Enter in a text field or a list belongs to that control
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
       send({ type: "Start" });
     }
   });
@@ -840,6 +1029,7 @@ function start() {
 
   updateUi();
   loadGraphics();
+  queryRoom();
   requestAnimationFrame(draw);
 }
 

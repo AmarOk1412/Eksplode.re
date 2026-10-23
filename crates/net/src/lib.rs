@@ -5,6 +5,7 @@ pub mod codec;
 pub mod host;
 pub mod look;
 pub mod protocol;
+pub mod room;
 
 pub use client::Client;
 pub use codec::NetError;

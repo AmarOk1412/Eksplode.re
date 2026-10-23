@@ -78,3 +78,64 @@ fn the_look_options_of_the_server_the_renderer_the_page_and_the_docs_agree() {
         }
     }
 }
+
+/// The strings of `export const NAME = ["A", "B"];` in room.js.
+fn room_list(source: &str, name: &str) -> Vec<String> {
+    let start = source
+        .find(&format!("export const {name} = ["))
+        .unwrap_or_else(|| panic!("{name} not found in room.js"));
+    let rest = &source[start..];
+    let open = rest.find('[').unwrap() + 1;
+    let close = rest.find(']').unwrap();
+    rest[open..close]
+        .split(',')
+        .map(|s| s.trim().trim_matches('"').to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+#[test]
+fn the_room_options_of_the_core_the_page_and_the_docs_agree() {
+    use bomberust_core::{BoardSize, Mode, MINUTES, PLAYABLE};
+    let js = read("crates/web/assets/room.js");
+    let docs = read("docs/PROTOCOL.md");
+    let lists: [(&str, Vec<String>); 4] = [
+        (
+            "MODES",
+            Mode::ALL.iter().map(|m| m.name().to_string()).collect(),
+        ),
+        (
+            "PLAYABLE_MODES",
+            PLAYABLE.iter().map(|m| m.name().to_string()).collect(),
+        ),
+        (
+            "SIZES",
+            BoardSize::ALL
+                .iter()
+                .map(|s| s.name().to_string())
+                .collect(),
+        ),
+        ("MINUTES", MINUTES.iter().map(|m| m.to_string()).collect()),
+    ];
+    for (name, core) in lists {
+        assert_eq!(
+            room_list(&js, name),
+            core,
+            "room.js {name} differs from core::room"
+        );
+        for value in &core {
+            assert!(
+                docs.contains(&format!("`{value}`")),
+                "docs/PROTOCOL.md must list `{value}` ({name})"
+            );
+        }
+    }
+    for size in BoardSize::ALL {
+        let (w, h) = size.dimensions();
+        assert!(
+            js.contains(&format!("{}: [{w}, {h}]", size.name())),
+            "room.js SIZE_DIMENSIONS differs for {}",
+            size.name()
+        );
+    }
+}

@@ -1,6 +1,6 @@
 //! Messages exchanged between host and clients; see contracts/network-protocol.md.
 
-use bomberust_core::{Config, Dir, Event, Lobby, Observation, Outcome};
+use bomberust_core::{Config, Dir, Event, Lobby, Observation, Outcome, RoomSettings};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -22,6 +22,17 @@ pub enum ClientMsg {
         name: String,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         look: Option<Value>,
+        /// Room settings (see [`crate::room::from_wire`]); used only when this join creates
+        /// the room, ignored otherwise.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        room: Option<Value>,
+    },
+    /// Allowed before `Join`: asks whether a room is open; answered with `RoomInfo`.
+    RoomQuery,
+    /// Lobby owner only: replace the room settings (read leniently; not an object gives
+    /// `Error{BadRoom}`).
+    SetRoom {
+        settings: Value,
     },
     /// Lobby only: change the sender's look.
     SetLook {
@@ -63,6 +74,15 @@ pub enum ClientMsg {
     DevResetDrops,
 }
 
+impl ClientMsg {
+    /// A `SetRoom` carrying `settings`.
+    pub fn set_room(settings: &RoomSettings) -> ClientMsg {
+        ClientMsg::SetRoom {
+            settings: serde_json::to_value(settings).unwrap_or(Value::Null),
+        }
+    }
+}
+
 /// Why a join was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum RejectReason {
@@ -89,6 +109,13 @@ pub enum ServerMsg {
     },
     Rejected {
         reason: RejectReason,
+    },
+    /// The answer to `RoomQuery`: whether a person is in the room, its settings (the start-up
+    /// defaults while it is closed) and how many humans are in it.
+    RoomInfo {
+        open: bool,
+        settings: RoomSettings,
+        humans: u8,
     },
     Lobby {
         lobby: Lobby,

@@ -129,6 +129,17 @@ impl Ws {
             version: PROTOCOL_VERSION,
             name: name.into(),
             look: None,
+            room: None,
+        });
+    }
+
+    /// Joins with room settings given as loose JSON (used only when the join creates the room).
+    pub fn join_with_room(&mut self, name: &str, room: serde_json::Value) {
+        self.send(&ClientMsg::Join {
+            version: PROTOCOL_VERSION,
+            name: name.into(),
+            look: None,
+            room: Some(room),
         });
     }
 
@@ -138,6 +149,7 @@ impl Ws {
             version: PROTOCOL_VERSION,
             name: name.into(),
             look: Some(look),
+            room: None,
         });
     }
 

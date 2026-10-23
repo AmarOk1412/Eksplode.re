@@ -59,6 +59,7 @@ impl Client {
             version: PROTOCOL_VERSION,
             name: name.to_string(),
             look: None,
+            room: None,
         })?;
         Ok(client)
     }

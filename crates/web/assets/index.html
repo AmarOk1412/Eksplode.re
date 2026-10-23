@@ -27,8 +27,23 @@
       </div>
     </section>
 
+    <section id="room-panel" class="menu room" aria-label="Create a room" hidden>
+      <h2>Create a room</h2>
+      <label for="room-name">Room name</label>
+      <input id="room-name" maxlength="24" autocomplete="off" spellcheck="false" placeholder="My room">
+      <div id="room-modes" class="mode-cards" role="radiogroup" aria-label="Mode"></div>
+      <p id="room-mode-hint" class="hint"></p>
+      <label for="room-size">Board size</label>
+      <select id="room-size"></select>
+      <label for="room-minutes">Round time</label>
+      <select id="room-minutes"></select>
+      <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
+      <button id="room-create" type="button">Create room</button>
+    </section>
+
     <section id="join-panel" class="menu">
       <canvas id="logo" aria-hidden="true"></canvas>
+      <p id="join-room" class="hint" hidden></p>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
       <button id="join" type="button">Join Game</button>
@@ -55,6 +70,18 @@
 
     <section id="lobby-panel" class="dialog" hidden>
       <h2>Lobby</h2>
+      <p id="room-summary" class="room-summary" aria-live="polite"></p>
+      <div id="room-controls" class="room-controls" role="group" aria-label="Room settings">
+        <label for="lobby-room-name">Name</label>
+        <input id="lobby-room-name" maxlength="24" autocomplete="off" spellcheck="false">
+        <label for="lobby-mode">Mode</label>
+        <select id="lobby-mode"></select>
+        <label for="lobby-size">Board</label>
+        <select id="lobby-size"></select>
+        <label for="lobby-minutes">Time</label>
+        <select id="lobby-minutes"></select>
+        <label id="lobby-ff-label" class="check" hidden><input id="lobby-ff" type="checkbox"> Friendly fire</label>
+      </div>
       <ul id="slots" class="cards"></ul>
       <div class="buttons">
         <button id="start" type="button">Start (Enter)</button>
@@ -63,7 +90,7 @@
         <button id="ready" type="button">Ready</button>
         <button id="change-look" type="button">Change look</button>
       </div>
-      <p class="hint">The first human player is the owner and starts the match.
+      <p class="hint">The first human player is the owner: only the owner changes the room settings and starts the match.
 Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>
     </section>
 

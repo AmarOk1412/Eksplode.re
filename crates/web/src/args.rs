@@ -3,6 +3,8 @@
 use std::fmt;
 use std::net::IpAddr;
 
+use bomberust_core::{BoardSize, Mode, MINUTES};
+
 use crate::options::ServerOptions;
 use crate::origin::AllowedOrigins;
 
@@ -18,6 +20,11 @@ Options:
   --allow-origin <ORIGIN>  accept WebSocket connections from this web origin (repeatable)
   --allow-any-origin       accept WebSocket connections from any web origin (unsafe)
   --max-connections <N>    open HTTP/WebSocket connections (default 64, minimum 4)
+  --room-name <TEXT>       default room name, at most 24 characters (default: the owner's name plus 's room)
+  --mode <MODE>            default mode: normal, team or chaser (default normal)
+  --size <SIZE>            default board size: small, medium or large (default small)
+  --time <MIN>             default round time in minutes: 2, 3, 5 or 10 (default 3)
+  --friendly-fire <on|off>  default friendly fire for Team mode (default on)
   --dev                    developer mode: owner-only commands to pause bots and set drop chances (testing only)
   -h, --help               show this help
   -V, --version            show the version
@@ -27,6 +34,7 @@ The game has no encryption and no authentication: see docs/SECURITY.md.";
 
 /// What the user asked the program to do.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)] // built once at start-up
 pub enum Command {
     Run(ServerOptions),
     Help,
@@ -47,7 +55,16 @@ impl PartialEq for Command {
 pub enum UsageError {
     UnknownOption(String),
     MissingValue(String),
-    InvalidValue { option: String, value: String },
+    InvalidValue {
+        option: String,
+        value: String,
+    },
+    /// A value outside a short list of choices; `allowed` names them.
+    InvalidChoice {
+        option: String,
+        value: String,
+        allowed: &'static str,
+    },
 }
 
 impl fmt::Display for UsageError {
@@ -58,6 +75,14 @@ impl fmt::Display for UsageError {
             UsageError::InvalidValue { option, value } => {
                 write!(f, "invalid value '{value}' for '{option}'")
             }
+            UsageError::InvalidChoice {
+                option,
+                value,
+                allowed,
+            } => write!(
+                f,
+                "invalid value '{value}' for '{option}' (allowed: {allowed})"
+            ),
         }
     }
 }
@@ -100,6 +125,32 @@ where
             }
             "--allow-any-origin" => any = true,
             "--dev" => opts.dev = true,
+            "--room-name" => opts.room.name = value(&arg, it.next())?,
+            "--mode" => {
+                let v = value(&arg, it.next())?;
+                opts.room.mode =
+                    Mode::from_name(&v).ok_or_else(|| choice(&arg, v, "normal, team, chaser"))?;
+            }
+            "--size" => {
+                let v = value(&arg, it.next())?;
+                opts.room.size = BoardSize::from_name(&v)
+                    .ok_or_else(|| choice(&arg, v, "small, medium, large"))?;
+            }
+            "--time" => {
+                let v = value(&arg, it.next())?;
+                opts.room.minutes = match v.parse::<u8>() {
+                    Ok(m) if MINUTES.contains(&m) => m,
+                    _ => return Err(choice(&arg, v, "2, 3, 5, 10")),
+                };
+            }
+            "--friendly-fire" => {
+                let v = value(&arg, it.next())?;
+                opts.room.friendly_fire = match v.as_str() {
+                    "on" => true,
+                    "off" => false,
+                    _ => return Err(choice(&arg, v, "on, off")),
+                };
+            }
             "--max-connections" => {
                 let v = value(&arg, it.next())?;
                 opts.max_connections = match v.parse::<usize>() {
@@ -110,6 +161,7 @@ where
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }
+    opts.room = opts.room.clone().clean();
     opts.origins = if any {
         AllowedOrigins::Any
     } else if listed.is_empty() {
@@ -122,6 +174,14 @@ where
 
 fn value(option: &str, v: Option<String>) -> Result<String, UsageError> {
     v.ok_or_else(|| UsageError::MissingValue(option.to_string()))
+}
+
+fn choice(option: &str, v: String, allowed: &'static str) -> UsageError {
+    UsageError::InvalidChoice {
+        option: option.to_string(),
+        value: v,
+        allowed,
+    }
 }
 
 fn invalid(option: &str, v: String) -> UsageError {

@@ -87,7 +87,7 @@ def stop(*procs):
 
 
 def check_host_enter(label, seq):
-    host = spawn(["host", "--port", str(free_port()), "--name", "Host"])
+    host = spawn(["host", "--no-setup", "--port", str(free_port()), "--name", "Host"])
     ok = wait_for([host[1]], host[1], "Slot 1")
     if ok:
         os.write(host[1], seq)
@@ -134,7 +134,7 @@ def check_owner_through_server(seq):
 def check_host_serves_the_page():
     """host --web-port shows the page address and really serves the page."""
     web = free_port()
-    host = spawn(["host", "--port", str(free_port()), "--web-port", str(web), "--bind", "127.0.0.1"])
+    host = spawn(["host", "--no-setup", "--port", str(free_port()), "--web-port", str(web), "--bind", "127.0.0.1"])
     url = f"http://127.0.0.1:{web}/"
     ok = wait_for([host[1]], host[1], url)
     if ok:
@@ -149,7 +149,7 @@ def check_host_serves_the_page():
 
 def check_joined_non_owner():
     port = free_port()
-    host = spawn(["host", "--port", str(port), "--name", "Host"])
+    host = spawn(["host", "--no-setup", "--port", str(port), "--name", "Host"])
     wait_for([host[1]], host[1], "Slot 1")
     client = spawn(["join", f"127.0.0.1:{port}", "--name", "Cli"])
     fds = [host[1], client[1]]

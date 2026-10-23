@@ -12,6 +12,7 @@ fn opts(players: u8, bots: u8, seed: Option<u64>, lobby: bool) -> Result<Command
         bots,
         seed,
         lobby,
+        room: Default::default(),
     }))
 }
 
@@ -110,6 +111,9 @@ mod network {
             web_port: None,
             bind: None,
             dev: false,
+            room: Default::default(),
+            room_given: false,
+            no_setup: false,
         }))
     }
 
@@ -250,5 +254,124 @@ mod network {
             args(&["join", "a", "--bots", "1"]),
             Err(UsageError::UnknownOption(_))
         ));
+    }
+}
+
+mod room_options {
+    use super::*;
+    use bomberust_cli::args::{HostOptions, USAGE};
+    use bomberust_core::{BoardSize, Mode, RoomSettings};
+
+    fn host_opts(list: &[&str]) -> HostOptions {
+        let mut full = vec!["host"];
+        full.extend_from_slice(list);
+        match args(&full) {
+            Ok(Command::Host(o)) => o,
+            other => panic!("expected host options, got {other:?}"),
+        }
+    }
+
+    fn local_opts(list: &[&str]) -> LocalOptions {
+        match args(list) {
+            Ok(Command::Run(o)) => o,
+            other => panic!("expected local options, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn host_takes_every_room_setting() {
+        let o = host_opts(&[
+            "--room-name",
+            "Friday",
+            "--mode",
+            "team",
+            "--size",
+            "medium",
+            "--time",
+            "5",
+            "--friendly-fire",
+            "off",
+        ]);
+        assert_eq!(o.room.name, "Friday");
+        assert_eq!(o.room.mode, Mode::Team);
+        assert_eq!(o.room.size, BoardSize::Medium);
+        assert_eq!(o.room.minutes, 5);
+        assert!(!o.room.friendly_fire);
+        assert!(o.room_given);
+        assert!(!o.no_setup);
+    }
+
+    #[test]
+    fn host_without_settings_keeps_the_defaults_and_shows_the_setup() {
+        let o = host_opts(&[]);
+        assert_eq!(o.room, RoomSettings::default());
+        assert!(!o.room_given && !o.no_setup);
+        assert!(host_opts(&["--no-setup"]).no_setup);
+        assert!(!host_opts(&["--no-setup"]).room_given);
+    }
+
+    #[test]
+    fn the_local_game_takes_mode_size_time_and_friendly_fire() {
+        let o = local_opts(&["--mode", "chaser", "--size", "large", "--time", "2"]);
+        assert_eq!(o.room.mode, Mode::Chaser);
+        assert_eq!(o.room.size, BoardSize::Large);
+        assert_eq!(o.room.minutes, 2);
+        let o = local_opts(&["--friendly-fire", "off"]);
+        assert!(!o.room.friendly_fire);
+    }
+
+    #[test]
+    fn the_local_game_has_no_room_name_and_no_setup_option() {
+        for opt in ["--room-name", "--no-setup"] {
+            assert!(matches!(
+                args(&[opt, "x"]),
+                Err(UsageError::UnknownOption(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn a_mode_that_needs_four_participants_is_checked_for_the_local_game() {
+        assert!(matches!(
+            args(&["--mode", "team", "--players", "1", "--bots", "1"]),
+            Err(UsageError::ModeNeedsPlayers { needed: 4, .. })
+        ));
+        assert!(args(&["--mode", "team", "--players", "2", "--bots", "2"]).is_ok());
+        assert!(args(&["--mode", "team", "--lobby", "--players", "0", "--bots", "0"]).is_ok());
+    }
+
+    #[test]
+    fn bad_values_list_the_allowed_ones() {
+        for (list, allowed) in [
+            (&["--mode", "battle"][..], "normal, team, chaser"),
+            (&["--size", "huge"], "small, medium, large"),
+            (&["--time", "4"], "2, 3, 5, 10"),
+            (&["--friendly-fire", "maybe"], "on, off"),
+        ] {
+            let err = args(list).unwrap_err();
+            assert!(err.to_string().contains(allowed), "{list:?}: {err}");
+            let mut host = vec!["host"];
+            host.extend_from_slice(list);
+            let err = args(&host).unwrap_err();
+            assert!(err.to_string().contains(allowed), "host {list:?}: {err}");
+        }
+        assert!(matches!(
+            args(&["host", "--room-name"]),
+            Err(UsageError::MissingValue(_))
+        ));
+    }
+
+    #[test]
+    fn the_help_text_mentions_every_option() {
+        for flag in [
+            "--room-name",
+            "--mode",
+            "--size",
+            "--time",
+            "--friendly-fire",
+            "--no-setup",
+        ] {
+            assert!(USAGE.contains(flag), "{flag} missing from --help");
+        }
     }
 }

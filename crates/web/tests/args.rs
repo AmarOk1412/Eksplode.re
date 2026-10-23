@@ -159,3 +159,53 @@ fn f3_us4_as1_dev_mode_is_off_by_default_and_parses_alone_or_with_other_options(
     assert_eq!((o.bots, o.http_port), (2, 9000));
     assert!(bomberust_web::args::USAGE.contains("--dev"));
 }
+
+#[test]
+fn f4_room_options_set_the_defaults_of_the_creation_menu() {
+    use bomberust_core::{BoardSize, Mode};
+    let o = opts(&[
+        "--room-name",
+        "Friday",
+        "--mode",
+        "team",
+        "--size",
+        "large",
+        "--time",
+        "10",
+        "--friendly-fire",
+        "off",
+    ]);
+    assert_eq!(o.room.name, "Friday");
+    assert_eq!(o.room.mode, Mode::Team);
+    assert_eq!(o.room.size, BoardSize::Large);
+    assert_eq!(o.room.minutes, 10);
+    assert!(!o.room.friendly_fire);
+    assert_eq!(opts(&[]).room, bomberust_core::RoomSettings::default());
+}
+
+#[test]
+fn f4_invalid_room_options_list_the_allowed_values() {
+    for (list, allowed) in [
+        (["--mode", "battle"], "normal, team, chaser"),
+        (["--size", "huge"], "small, medium, large"),
+        (["--time", "4"], "2, 3, 5, 10"),
+        (["--time", "x"], "2, 3, 5, 10"),
+        (["--friendly-fire", "maybe"], "on, off"),
+    ] {
+        let err = args(&list).unwrap_err();
+        assert!(
+            err.to_string().contains(allowed),
+            "{list:?}: {err} must list {allowed}"
+        );
+    }
+    assert_eq!(
+        args(&["--mode"]).unwrap_err(),
+        UsageError::MissingValue("--mode".into())
+    );
+}
+
+#[test]
+fn f4_a_long_room_name_is_cut_like_the_menu_does() {
+    let o = opts(&["--room-name", &"x".repeat(80)]);
+    assert_eq!(o.room.name.chars().count(), 24);
+}

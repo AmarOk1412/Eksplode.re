@@ -58,13 +58,21 @@ capture PNGs).
 - `--bots <N>` bots, 0 to 4 (default: fill up to 4 participants);
 - `--seed <U64>` fixes the random generator;
 - `--lobby` shows the lobby screen first (Up/Down select, `h` human, `b` bot, Enter start);
+- `--mode <normal|team|chaser>`, `--size <small|medium|large>`, `--time <2|3|5|10>` (minutes) and
+  `--friendly-fire <on|off>` set the room settings of the match (defaults: normal, small, 3, on);
 - `-h`, `--help` and `-V`, `--version`.
 
-`bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]`:
+`bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
+[--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]`:
 
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
   name (1 to 16 printable characters), `--seed <N>` fixed seed;
 - `--web-port <N>` also serve the web page on this port;
+- `--room-name <TEXT>` names the room (at most 24 characters), and `--mode`, `--size`, `--time` and
+  `--friendly-fire` set it as above; without any of them the host first shows a room setup screen
+  (Up/Down select, Left/Right change, type the name, Enter on "Create room"), which `--no-setup`
+  skips. In the lobby the owner changes the settings with `m` mode, `s` size, `t` time and `f`
+  friendly fire; everybody sees them;
 - `--dev` developer mode (testing only): the owner can pause bots and set drop chances from the
   web page; see [docs/WEB.md](docs/WEB.md);
 - `--bind <IP>` listening address. By default the game port listens on every interface and the
@@ -81,7 +89,8 @@ The terminal must be at least 40x20. Wrong usage exits with status 2.
 
 `bomberust-server` (`cargo run -p bomberust-web --`) takes `--bind`, `--http-port`,
 `--game-port`, `--bots`, `--seed`, `--allow-origin`, `--allow-any-origin`,
-`--max-connections` and `--dev`; the table and examples are in [docs/WEB.md](docs/WEB.md).
+`--max-connections`, `--dev` and the room defaults of the creation menu (`--room-name`, `--mode`,
+`--size`, `--time`, `--friendly-fire`); the table and examples are in [docs/WEB.md](docs/WEB.md).
 
 ## Controls
 

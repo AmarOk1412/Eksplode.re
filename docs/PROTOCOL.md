@@ -27,7 +27,9 @@ runs the simulation and validates every message, whatever the transport.
 
 | type | Fields | When |
 |------|--------|------|
-| `Join` | `version: u32`, `name: string`, `look` (optional, see [Looks](#looks)) | must be the first message |
+| `Join` | `version: u32`, `name: string`, `look` (optional, see [Looks](#looks)), `room` (optional, see [Rooms](#rooms)) | must be the first message that joins; `room` is used only when this join creates the room |
+| `RoomQuery` | none | any time, also before `Join`: answered with `RoomInfo`; takes no slot |
+| `SetRoom` | `settings` (see [Rooms](#rooms)) | lobby owner only: replace the room settings; refused during a match with `WrongPhase`, a `settings` that is not an object gives `BadRoom` |
 | `SetLook` | `look` | lobby only: change the sender's look; refused during a match with `WrongPhase` |
 | `SetReady` | `ready: bool` | in the lobby |
 | `Input` | `tick: u32`, `mv: "Up"/"Down"/"Left"/"Right"/null`, `bomb: bool`, `punch: bool` (optional, false when missing) | during a match, at most one per tick; `tick` is the latest snapshot the client has seen |
@@ -54,7 +56,8 @@ Examples:
 |------|--------|------|
 | `Welcome` | `slot: 0..3`, `config`, `lobby`, `looks: [Look; 4]`, `dev: bool` (optional, false when missing) | the join was accepted |
 | `Rejected` | `reason: "Full" / "BadVersion" / "BadName" / "InMatch"` | the join was refused; the connection is closed |
-| `Lobby` | `lobby: {slots: [{controller, name, ready}; 4]}`, `looks: [Look; 4]` | any lobby change |
+| `RoomInfo` | `open: bool`, `settings`, `humans: u8` | answer to `RoomQuery`: whether a person is in the room, its settings (the start-up defaults while it is closed) and how many humans are in it |
+| `Lobby` | `lobby: {slots: [{controller, name, ready}; 4], settings}`, `looks: [Look; 4]` | any lobby change, including a change of the settings |
 | `Start` | `seed: u64`, `config` | the owner started a match |
 | `Snapshot` | `tick: u32`, `state` (an `Observation` for this slot), `events: [Event]` | every tick of a match (20 Hz) |
 | `PlayerLeft` | `slot: u8`, `replaced_by_bot: bool` | a player disconnected or went silent |
@@ -84,6 +87,30 @@ peers. Events gain `BombPunched`, `BombHopped`, `BombLanded`, `BombKicked`, `Bom
 `MalusStarted` and `MalusEnded`.
 Rules: [GAMEPLAY.md](GAMEPLAY.md).
 
+## Rooms
+
+A room is the lobby plus its settings, one object that a later version can publish on the network:
+
+```json
+{"name":"Friday room","mode":"normal","size":"medium","minutes":5,"friendly_fire":true}
+```
+
+| Field | Values | Default |
+|-------|--------|---------|
+| `name` | text, control characters removed, at most 24 characters; empty becomes "<owner>'s room" | empty |
+| `mode` | `normal`, `team`, `chaser` (a mode whose rules do not exist yet becomes `normal`) | `normal` |
+| `size` | `small` 15 x 13, `medium` 19 x 15, `large` 25 x 19 | `small` |
+| `minutes` | `2`, `3`, `5`, `10` | `3` |
+| `friendly_fire` | `true` or `false`, used by Team mode | `true` |
+
+The host reads the settings leniently, like looks: a missing, wrongly typed or unknown field
+becomes its default and a value that is not an object gives the defaults (only `SetRoom` refuses
+that with `BadRoom`), so a room never causes `Malformed`. The first `Join` into an empty room
+creates it and its sender becomes the owner; a `room` in any later `Join` is ignored. The room
+closes when the last person leaves it, and the next person creates a new one. `Welcome` and `Lobby`
+carry the settings in `lobby.settings`; `Start.config` and `Welcome.config` are derived from them.
+Old clients never send `RoomQuery` or `SetRoom` and ignore the new fields.
+
 ## Looks
 
 A look is a JSON object `{"colour":"Blue","gender":"Male","head":"Cap","face":"None"}`. The host
@@ -109,8 +136,9 @@ none and old clients ignore the field.
 | `Malformed` | bad JSON, unknown `type`, binary WebSocket frame, or an oversized message |
 | `NotJoined` | the first message was not `Join` |
 | `AlreadyJoined` | a second `Join` on the same connection |
-| `NotOwner` | `Start`, `AddBot`, `RemoveBot` or a `Dev*` message from somebody who is not the lobby owner; the message names the owner |
-| `CannotStart` | `Start` while a match is already running |
+| `NotOwner` | `Start`, `AddBot`, `RemoveBot`, `SetRoom` or a `Dev*` message from somebody who is not the lobby owner; the message names the owner |
+| `CannotStart` | `Start` while a match is already running, or with the wrong number of participants for the mode (the message says how many are missing) |
+| `BadRoom` | `SetRoom` whose `settings` is not an object |
 | `WrongPhase` | `AddBot`, `RemoveBot` or `SetReady` during a match, or `Input` in the lobby |
 | `NoSlot` | `AddBot` with all slots taken |
 | `BadTick` | an `Input` from the future |

@@ -92,6 +92,22 @@ async function main() {
   await call("Page.enable");
   await call("Page.navigate", { url });
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
+
+  // room settings (feature 004): an empty server shows the creation menu first
+  await waitFor("!document.getElementById('room-panel').hidden", "the room creation menu");
+  await shot("0-room-menu.png");
+  await evaluate(`(() => {
+    document.getElementById('room-name').value = 'Smoke room';
+    document.getElementById('room-name').dispatchEvent(new Event('input'));
+    for (const [id, value] of [['room-size', 'medium'], ['room-minutes', '5']]) {
+      const select = document.getElementById(id);
+      select.value = value;
+      select.dispatchEvent(new Event('change'));
+    }
+    document.getElementById('room-create').click();
+    return 1;
+  })()`);
+  await waitFor("!document.getElementById('join-panel').hidden && document.getElementById('room-panel').hidden", "the join screen after the menu");
   await shot("1-join.png");
 
   // the sound settings (feature 003): open the panel, move a slider, check that it is stored
@@ -124,6 +140,47 @@ async function main() {
 
   await evaluate("document.getElementById('name').value = 'SmokeTest'; document.getElementById('join').click(); 1");
   await waitFor("!document.getElementById('lobby-panel').hidden", "the lobby");
+  // a second participant joins the open room, sees the settings and cannot change them
+  const wsUrl = `ws://${new URL(url).host}/ws`;
+  const peer = new WebSocket(wsUrl);
+  const seen = [];
+  peer.addEventListener("message", (ev) => seen.push(JSON.parse(ev.data)));
+  await new Promise((resolve) => peer.addEventListener("open", resolve));
+  const until = async (pred, what) => {
+    for (let t = 0; t < 4000; t += 50) {
+      const hit = seen.find(pred);
+      if (hit) return hit;
+      await sleep(50);
+    }
+    throw new Error(`peer timed out waiting for ${what}`);
+  };
+  peer.send(JSON.stringify({ type: "RoomQuery" }));
+  const info = await until((m) => m.type === "RoomInfo", "RoomInfo");
+  console.log("peer sees the room:", JSON.stringify(info));
+  peer.send(JSON.stringify({ type: "Join", version: 1, name: "Peer" }));
+  const welcome = await until((m) => m.type === "Welcome", "Welcome");
+  console.log("peer lobby settings:", JSON.stringify(welcome.lobby.settings));
+  peer.send(JSON.stringify({ type: "SetRoom", settings: { size: "large" } }));
+  const refused = await until((m) => m.type === "Error" && m.code === "NotOwner", "NotOwner");
+  console.log("peer refused:", refused.message);
+  await evaluate(`(() => {
+    const s = document.getElementById('lobby-size');
+    s.value = 'large';
+    s.dispatchEvent(new Event('change'));
+    return 1;
+  })()`);
+  const changed = await until((m) => m.type === "Lobby" && m.lobby.settings.size === "large", "the owner's change");
+  console.log("peer sees the change:", changed.lobby.settings.size);
+  await waitFor("document.getElementById('room-summary').innerText.includes('25 x 19')", "the summary of the new size");
+  await evaluate(`(() => {
+    const s = document.getElementById('lobby-size');
+    s.value = 'medium';
+    s.dispatchEvent(new Event('change'));
+    return 1;
+  })()`);
+  peer.close();
+  await sleep(300);
+
   // fill the lobby with bots so that four cards show characters
   for (let i = 0; i < 3; i += 1) {
     await evaluate("document.getElementById('add-bot').click(); 1");
@@ -131,7 +188,9 @@ async function main() {
   }
   await sleep(500);
   console.log("lobby:", await evaluate("document.getElementById('slots').innerText"));
+  console.log("room summary:", await evaluate("document.getElementById('room-summary').innerText"));
   await shot("2-lobby.png");
+
   await sleep(1300);
   await shot("2b-lobby-later.png");
 

@@ -48,6 +48,11 @@ network, see [SECURITY.md](SECURITY.md).
 | `--allow-origin <ORIGIN>` | accept WebSocket connections from this web origin (repeatable) |
 | `--allow-any-origin` | accept WebSocket connections from any web origin (unsafe) |
 | `--max-connections <N>` | open HTTP/WebSocket connections (default 64, minimum 4) |
+| `--room-name <TEXT>` | default room name, at most 24 characters (default: the owner's name plus 's room) |
+| `--mode <MODE>` | default mode: normal, team or chaser (default normal) |
+| `--size <SIZE>` | default board size: small, medium or large (default small) |
+| `--time <MIN>` | default round time in minutes: 2, 3, 5 or 10 (default 3) |
+| `--friendly-fire <on|off>` | default friendly fire for Team mode (default on) |
 | `--dev` | developer mode: owner-only commands to pause bots and set drop chances (testing only) |
 | `-h, --help` | show this help |
 | `-V, --version` | show the version |
@@ -90,6 +95,7 @@ bomberust-cli join http://192.168.1.20:8080/     # web addresses work too; only 
 | `GET /`, `GET /index.html` | `200 text/html` - the page |
 | `GET /app.js` | `200 text/javascript` - the page logic (ES module) |
 | `GET /look.js` | `200 text/javascript` - the character looks: options, editor state and storage |
+| `GET /room.js` | `200 text/javascript` - the room settings: options, menu state and storage |
 | `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
 | `GET /style.css` | `200 text/css` |
 | `GET /bomberust_render.wasm` | `200 application/wasm` - the graphics module |
@@ -122,10 +128,21 @@ When the page and the server share an origin (the normal case) there is nothing 
 | File | Role |
 |------|------|
 | [`index.html`](../crates/web/assets/index.html) | structure: join form, lobby list, canvas, HUD, notices; no inline script |
-| [`look.js`](../crates/web/assets/look.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the generated sound and settings |
+| [`look.js`](../crates/web/assets/look.js), [`room.js`](../crates/web/assets/room.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the room settings, menu state and storage; the generated sound and settings |
 | [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard tracking, DOM updates, and painting of the draw commands on the canvas |
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`bomberust_render.wasm`](../crates/web/assets/bomberust_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
+
+**Room creation and settings.** When the page opens it asks the server (`RoomQuery`, on a
+short-lived connection) whether a room is open. On an empty server the first screen is the room
+creation menu: room name, mode, board size, round time and, for Team mode, friendly fire; the
+defaults are Normal, small, 3 minutes (or the options the server was started with, or what this
+device used last, stored under `bomberust.room.v1`). "Create room" leads to the name and look
+screen, and the settings travel in the `Join` that creates the room. Everybody who joins an open
+room goes straight to the join screen, which names the room. In the lobby the settings are shown to
+everybody in one line, and the owner changes them with the controls above the cards (each change is
+a `SetRoom`); the controls are disabled for everybody else and during a match. The room closes when
+the last person leaves it; see [PROTOCOL.md](PROTOCOL.md#rooms).
 
 **Character editor.** On the join screen (and from "Change look" in the lobby) the player picks a
 colour, a gender look, a head accessory and a face accessory with a live preview drawn by the

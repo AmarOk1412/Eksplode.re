@@ -3,7 +3,7 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-use bomberust_core::Config;
+use bomberust_core::{Config, RoomSettings};
 
 use crate::origin::AllowedOrigins;
 
@@ -27,6 +27,8 @@ pub struct ServerOptions {
     /// A player silent for this long during a match is replaced by a bot.
     pub silence_timeout: Duration,
     pub game: Config,
+    /// What the room creation menu offers and what a room created without settings gets.
+    pub room: RoomSettings,
     /// Developer mode: the lobby owner may pause bots and change the drop chances (testing).
     pub dev: bool,
     /// Duration of one simulation tick.
@@ -48,6 +50,7 @@ impl Default for ServerOptions {
             silence_timeout: Duration::from_secs(10),
             tick: Duration::from_secs(1) / game.tick_hz,
             dev: false,
+            room: RoomSettings::default(),
             game,
         }
     }

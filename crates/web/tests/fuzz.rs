@@ -111,7 +111,12 @@ fn the_websocket_bridge_survives_random_frames_and_stays_fair() {
                         "{\"type\":\"DevSetDrops\",\"chances\":\"all\"}",
                         "{\"type\":\"DevPauseBots\"}",
                         "{\"type\":\"Join\",\"version\":1,\"name\":\"F\",\"look\":[[]]}",
-                    ][rng.below(13)],
+                        "{\"type\":\"RoomQuery\"}",
+                        "{\"type\":\"SetRoom\",\"settings\":{\"mode\":9,\"minutes\":\"x\"}}",
+                        "{\"type\":\"SetRoom\",\"settings\":[1]}",
+                        "{\"type\":\"SetRoom\"}",
+                        "{\"type\":\"Join\",\"version\":1,\"name\":\"G\",\"room\":{\"size\":[]}}",
+                    ][rng.below(18)],
                 ),
             };
             if bad.socket.send(frame).is_err() {

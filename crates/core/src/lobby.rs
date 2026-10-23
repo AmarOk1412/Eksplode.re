@@ -3,6 +3,7 @@
 use std::fmt;
 
 use crate::action::MAX_PLAYERS;
+use crate::room::RoomSettings;
 
 /// Who controls a slot.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -51,6 +52,9 @@ impl std::error::Error for LobbyError {}
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Lobby {
     pub slots: [Slot; MAX_PLAYERS],
+    /// The room settings; the host keeps them here so every client sees them with the slots.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub settings: RoomSettings,
 }
 
 impl Lobby {
@@ -133,9 +137,25 @@ impl Lobby {
         [0, 1, 2, 3].map(|i| self.slots[i].controller != Controller::Empty)
     }
 
-    /// At least one participant is needed to start.
+    /// Whether the number of participants fits the mode of the room.
     pub fn can_start(&self) -> bool {
-        self.participants() > 0
+        self.start_problem().is_none()
+    }
+
+    /// Why the match cannot start yet, in words for the owner; `None` when it can.
+    pub fn start_problem(&self) -> Option<String> {
+        let (min, max) = self.settings.participants_needed();
+        let have = self.participants();
+        if have >= usize::from(min) && have <= usize::from(max) {
+            return None;
+        }
+        let mode = self.settings.mode.label();
+        Some(if min == max {
+            let missing = usize::from(min).saturating_sub(have);
+            format!("{mode} needs {min} players: {missing} missing, add bots to fill the slots")
+        } else {
+            format!("{mode} needs at least {min} player")
+        })
     }
 
     /// The lobby owner: the lowest slot held by a human. Only the owner may start the match.

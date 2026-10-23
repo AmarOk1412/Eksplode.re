@@ -161,7 +161,7 @@ impl Online {
                     self.notice = Some(message);
                 }
             }
-            ServerMsg::Pong { .. } | ServerMsg::DevState { .. } => {}
+            ServerMsg::Pong { .. } | ServerMsg::DevState { .. } | ServerMsg::RoomInfo { .. } => {}
         }
     }
 
@@ -194,6 +194,16 @@ impl Online {
     /// answers refusals with an `Error` that ends up in the notice.
     fn lobby_key(&mut self, code: KeyCode, action: Option<KeyAction>) {
         let msg = match code {
+            KeyCode::Char(c @ ('m' | 's' | 't' | 'f' | 'M' | 'S' | 'T' | 'F')) => {
+                let mut settings = self.lobby.settings.clone();
+                match c.to_ascii_lowercase() {
+                    'm' => settings.step_mode(1),
+                    's' => settings.step_size(1),
+                    't' => settings.step_minutes(1),
+                    _ => settings.friendly_fire = !settings.friendly_fire,
+                }
+                ClientMsg::set_room(&settings)
+            }
             KeyCode::Char('b') => ClientMsg::AddBot,
             KeyCode::Char('x') => ClientMsg::RemoveBot,
             KeyCode::Enter => ClientMsg::Start,
@@ -263,6 +273,13 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
         }
         lines.push(Line::default());
     }
+    if online.stage != Stage::Connecting {
+        lines.push(Line::from(Span::styled(
+            online.lobby.settings.label(),
+            Style::default().add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::default());
+    }
     for (i, slot) in online.lobby.slots.iter().enumerate() {
         let who = match slot.controller {
             Controller::Empty => "Empty".to_string(),
@@ -295,6 +312,11 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
         (Stage::Closed, _) => "q quit",
         _ => "Enter start (owner)   b add bot   x remove bot   r ready   q quit",
     }));
+    if online.stage == Stage::Lobby {
+        lines.push(Line::from(
+            "Owner: m mode   s size   t time   f friendly fire",
+        ));
+    }
     let height = (lines.len() as u16 + 2).min(area.height);
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title(" Bomberust online ")),

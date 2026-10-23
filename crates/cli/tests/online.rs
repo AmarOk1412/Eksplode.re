@@ -298,6 +298,9 @@ fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
         web_port,
         bind: bind.map(|b| b.parse().unwrap()),
         dev: false,
+        room: Default::default(),
+        room_given: false,
+        no_setup: true,
     }
 }
 
@@ -475,4 +478,97 @@ fn f3_us1_as7_terminal_players_get_a_default_look_and_keep_working() {
     assert!(pump_until(&mut a, |o| o.lobby.slots[1].ready));
     assert_eq!(a.stage, Stage::Lobby);
     drop(raw);
+}
+
+fn lobby_text_has(o: &Online, needle: &str) -> bool {
+    screen(o).contains(needle)
+}
+
+fn room_host(defaults: bomberust_core::RoomSettings) -> Host {
+    Host::start(HostConfig {
+        bind: "127.0.0.1:0".into(),
+        tick: Duration::from_millis(4),
+        seed: Some(3),
+        game: open_game(1000),
+        defaults,
+        ..HostConfig::default()
+    })
+    .expect("host")
+}
+
+#[test]
+fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
+    use bomberust_core::{BoardSize, RoomSettings};
+    let host = room_host(RoomSettings {
+        name: "Lab".into(),
+        ..RoomSettings::default()
+    });
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    assert!(
+        lobby_text_has(&h, "Lab - Normal - 15 x 13 - 3 min"),
+        "{}",
+        screen(&h)
+    );
+
+    h.handle_key(KeyCode::Char('s'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.size == BoardSize::Medium));
+    assert!(
+        lobby_text_has(&h, "Lab - Normal - 19 x 15 - 3 min"),
+        "{}",
+        screen(&h)
+    );
+
+    h.handle_key(KeyCode::Char('t'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.minutes == 5));
+    assert!(lobby_text_has(&h, "5 min"));
+
+    h.handle_key(KeyCode::Char('f'));
+    assert!(pump_until(&mut h, |o| !o.lobby.settings.friendly_fire));
+
+    h.handle_key(KeyCode::Char('m'));
+    h.pump();
+    assert!(bomberust_core::PLAYABLE.contains(&h.lobby.settings.mode));
+
+    // a terminal player sees the same line
+    let mut a = joined_at(h.host_addr().unwrap(), "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    assert!(
+        lobby_text_has(&a, "Lab - Normal - 19 x 15 - 5 min"),
+        "{}",
+        screen(&a)
+    );
+}
+
+#[test]
+fn only_the_owner_changes_the_settings_in_the_terminal_lobby() {
+    use bomberust_core::BoardSize;
+    let host = room_host(Default::default());
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let mut a = joined_at(h.host_addr().unwrap(), "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    a.handle_key(KeyCode::Char('s'));
+    assert!(pump_until(&mut a, |o| o
+        .notice
+        .as_deref()
+        .is_some_and(|n| n.contains("Only"))));
+    assert_eq!(a.lobby.settings.size, BoardSize::Small);
+    h.pump();
+    assert_eq!(h.lobby.settings.size, BoardSize::Small);
+    // and the owner's change reaches the other terminal
+    h.handle_key(KeyCode::Char('s'));
+    assert!(pump_until(&mut a, |o| o.lobby.settings.size == BoardSize::Medium));
+}
+
+#[test]
+fn a_terminal_player_who_joins_an_empty_room_gets_the_defaults() {
+    let host = room_host(Default::default());
+    let mut a = joined(&host, "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(0)));
+    assert!(
+        lobby_text_has(&a, "Ann's room - Normal - 15 x 13 - 3 min"),
+        "{}",
+        screen(&a)
+    );
 }

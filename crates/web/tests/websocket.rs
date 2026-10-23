@@ -43,6 +43,7 @@ fn invalid_names_and_versions_are_rejected() {
         version: 99,
         name: "Ann".into(),
         look: None,
+        room: None,
     });
     assert_eq!(
         ws.recv(),

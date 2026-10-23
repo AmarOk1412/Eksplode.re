@@ -12,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use bomberust_bots::{Bot, DefaultBot};
 use bomberust_core::{
     step, Config, Controller, DropTable, GameState, Lobby, Phase, PlayerId, PlayerInput,
-    MAX_PLAYERS,
+    RoomSettings, MAX_PLAYERS,
 };
 use serde_json::Value;
 
@@ -20,6 +20,7 @@ use crate::client::Client;
 use crate::codec::{decode, encode, LineReader, NetError};
 use crate::look::{resolve_colour, Colour, Look};
 use crate::protocol::{valid_name, ClientMsg, RejectReason, ServerMsg, PROTOCOL_VERSION};
+use crate::room::from_wire;
 
 /// Connections that cause this many errors are closed.
 const MAX_ERRORS: u32 = 10;
@@ -38,6 +39,8 @@ pub struct HostConfig {
     pub silence_timeout: Duration,
     /// Developer mode: the owner may pause bots and change the drop table (testing only).
     pub dev: bool,
+    /// What a new room starts with (the defaults of the room creation menu).
+    pub defaults: RoomSettings,
 }
 
 impl Default for HostConfig {
@@ -50,6 +53,7 @@ impl Default for HostConfig {
             game,
             silence_timeout: Duration::from_secs(10),
             dev: false,
+            defaults: RoomSettings::default(),
         }
     }
 }
@@ -171,6 +175,7 @@ impl Host {
             version: PROTOCOL_VERSION,
             name: name.to_string(),
             look: None,
+            room: None,
         })?;
         Ok(client)
     }
@@ -322,11 +327,15 @@ struct Server {
 
 impl Server {
     fn new(cfg: HostConfig, rx: Receiver<Ev>) -> Self {
+        let lobby = Lobby {
+            settings: cfg.defaults.clone().sanitize(),
+            ..Lobby::new()
+        };
         Self {
             drops: DropTable::defaults(cfg.game.powerup_chance),
             cfg,
             rx,
-            lobby: Lobby::new(),
+            lobby,
             conns: HashMap::new(),
             game: None,
             next_tick: Instant::now(),
@@ -416,14 +425,17 @@ impl Server {
                 version,
                 name,
                 look,
-            } => self.join(id, version, &name, look.as_ref()),
+                room,
+            } => self.join(id, version, &name, look.as_ref(), room.as_ref()),
             ClientMsg::Ping { nonce } => self.send(id, ServerMsg::Pong { nonce }),
+            ClientMsg::RoomQuery => self.send(id, self.room_info()),
             _ if !joined => {
                 self.send(id, ServerMsg::error("NotJoined", "send Join first"));
                 self.remove(id);
             }
             ClientMsg::Leave => self.remove(id),
             ClientMsg::SetLook { look } => self.set_look(id, &look),
+            ClientMsg::SetRoom { settings } => self.set_room(id, &settings),
             ClientMsg::SetReady { ready } => self.set_ready(id, ready),
             ClientMsg::Input {
                 tick,
@@ -527,7 +539,10 @@ impl Server {
             OwnerCommand::Start if self.game.is_some() => {
                 self.error(id, "CannotStart", "a match is already running")
             }
-            OwnerCommand::Start => self.start(),
+            OwnerCommand::Start => match self.lobby.start_problem() {
+                Some(problem) => self.error(id, "CannotStart", &problem),
+                None => self.start(),
+            },
             _ if self.game.is_some() => {
                 self.error(id, "WrongPhase", "bots can only be changed in the lobby")
             }
@@ -547,7 +562,65 @@ impl Server {
         }
     }
 
-    fn join(&mut self, id: u64, version: u32, name: &str, look: Option<&Value>) {
+    /// The room is open while a person is in it.
+    fn room_info(&self) -> ServerMsg {
+        let humans = self
+            .lobby
+            .slots
+            .iter()
+            .filter(|s| matches!(s.controller, Controller::Local | Controller::Remote))
+            .count();
+        ServerMsg::RoomInfo {
+            open: humans > 0,
+            settings: self.lobby.settings.clone(),
+            humans: humans as u8,
+        }
+    }
+
+    /// Forgets the settings of a room nobody is in; the next person creates it anew.
+    fn close_room_if_empty(&mut self) {
+        if self.lobby.owner().is_none() {
+            self.lobby.settings = self.cfg.defaults.clone().sanitize();
+        }
+    }
+
+    fn set_room(&mut self, id: u64, settings: &Value) {
+        let Some(slot) = self.conns.get(&id).and_then(|c| c.slot) else {
+            return;
+        };
+        match self.lobby.owner() {
+            Some(owner) if owner == slot => {}
+            Some(owner) => {
+                let message = format!(
+                    "Only {} can change the room settings",
+                    self.lobby.slots[owner].name
+                );
+                return self.error(id, "NotOwner", &message);
+            }
+            None => return,
+        }
+        if self.game.is_some() {
+            return self.error(id, "WrongPhase", "the room can only change in the lobby");
+        }
+        if !settings.is_object() {
+            return self.error(id, "BadRoom", "the room settings must be an object");
+        }
+        let mut next = from_wire(settings).sanitize();
+        if next.name.is_empty() {
+            next.name = self.lobby.settings.name.clone();
+        }
+        self.lobby.settings = next;
+        self.broadcast_lobby();
+    }
+
+    fn join(
+        &mut self,
+        id: u64,
+        version: u32,
+        name: &str,
+        look: Option<&Value>,
+        room: Option<&Value>,
+    ) {
         let Some(conn) = self.conns.get(&id) else {
             return;
         };
@@ -574,6 +647,7 @@ impl Server {
         let Some(slot) = self.lobby.first_free() else {
             return;
         };
+        let creates_room = self.lobby.owner().is_none();
         let controller = if local {
             Controller::Local
         } else {
@@ -585,12 +659,20 @@ impl Server {
         if let Some(c) = self.conns.get_mut(&id) {
             c.slot = Some(slot);
         }
+        if creates_room {
+            if let Some(room) = room {
+                self.lobby.settings = from_wire(room).sanitize();
+            }
+            if self.lobby.settings.name.is_empty() {
+                self.lobby.settings.name = format!("{name}'s room");
+            }
+        }
         let adjusted = self.seat_look(slot, look);
         self.send(
             id,
             ServerMsg::Welcome {
                 slot: slot as u8,
-                config: self.cfg.game.clone(),
+                config: self.lobby.settings.to_config(&self.cfg.game),
                 lobby: self.lobby.clone(),
                 looks: self.looks_to_send(),
                 dev: self.cfg.dev,
@@ -698,15 +780,13 @@ impl Server {
                 .map_or(0, |d| d.as_nanos() as u64);
             t ^ self.matches
         });
-        let Ok(mut state) = GameState::new(self.cfg.game.clone(), seed, self.lobby.active()) else {
+        let config = self.lobby.settings.to_config(&self.cfg.game);
+        let Ok(mut state) = GameState::new(config.clone(), seed, self.lobby.active()) else {
             return;
         };
         let _ = state.set_drops(self.drops.clone());
         let bots = bots_for(&self.lobby, seed);
-        self.broadcast(ServerMsg::Start {
-            seed,
-            config: self.cfg.game.clone(),
-        });
+        self.broadcast(ServerMsg::Start { seed, config });
         self.game = Some(Running {
             state,
             pending: [None; MAX_PLAYERS],
@@ -738,6 +818,7 @@ impl Server {
             for s in &mut self.lobby.slots {
                 s.ready = s.controller == Controller::Bot;
             }
+            self.close_room_if_empty();
             self.broadcast_lobby();
         }
     }
@@ -775,6 +856,7 @@ impl Server {
             });
         } else {
             let _ = self.lobby.clear(slot);
+            self.close_room_if_empty();
             self.broadcast_lobby();
         }
     }

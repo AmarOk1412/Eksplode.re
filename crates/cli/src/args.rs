@@ -3,12 +3,14 @@
 use std::fmt;
 use std::net::IpAddr;
 
+use bomberust_core::{BoardSize, Mode, RoomSettings, MINUTES};
 use bomberust_net::protocol::{valid_name, DEFAULT_PORT};
 
 pub const USAGE: &str = "\
 Usage:
   bomberust-cli [OPTIONS]                          play on this machine
   bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
+                     [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
   bomberust-cli join <ADDR[:PORT]> [--name NAME]
 
 Local options:
@@ -16,6 +18,10 @@ Local options:
   --bots <N>      number of bots, 0-4 (default: fill up to 4 participants)
   --seed <U64>    RNG seed (default: from the system time)
   --lobby         choose the slots on a lobby screen before the game starts
+  --mode <MODE>   normal, team or chaser (default normal); team and chaser need 4 participants
+  --size <SIZE>   small, medium or large board (default small)
+  --time <MIN>    round time in minutes: 2, 3, 5 or 10 (default 3)
+  --friendly-fire <on|off>  Team mode: whether explosions hurt teammates (default on)
   -h, --help      show this help
   -V, --version   show the version
 
@@ -25,10 +31,15 @@ Host options:
                   web page on 127.0.0.1)
   --dev           developer mode: the owner can pause bots and set drop chances in
                   the web page (testing only)
+  --room-name <TEXT>  name of the room (at most 24 characters; default: your name plus 's room)
+  --mode, --size, --time, --friendly-fire  the room settings, as above
+  --no-setup      do not show the room setup screen before the lobby (it is also skipped
+                  when a room setting is given)
 
 Network play: the host listens on port 7878 by default; up to 4 participants (humans and bots).
 Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
-Lobby keys: host b add bot, x remove bot, Enter start; clients r ready. Anyone: q quit.
+Lobby keys: host b add bot, x remove bot, Enter start; clients r ready. The room owner changes
+the settings with m mode, s size, t time, f friendly fire. Anyone: q quit.
 Keys: P1 arrows+Space, P2 WASD+E, P3 IJKL+O, P4 TFGH+Y; q quit, p pause, r rematch.";
 
 /// Options of a local match.
@@ -39,6 +50,8 @@ pub struct LocalOptions {
     pub seed: Option<u64>,
     /// Show the lobby screen first.
     pub lobby: bool,
+    /// Mode, board size, time and friendly fire of the match (the name is not used).
+    pub room: RoomSettings,
 }
 
 /// Options of `host`.
@@ -54,6 +67,12 @@ pub struct HostOptions {
     pub bind: Option<IpAddr>,
     /// Developer mode: owner-only commands to pause bots and set drop chances.
     pub dev: bool,
+    /// The room the host opens; the setup screen starts from it.
+    pub room: RoomSettings,
+    /// Whether a room setting was given on the command line.
+    pub room_given: bool,
+    /// Skip the room setup screen.
+    pub no_setup: bool,
 }
 
 /// Options of `join`.
@@ -79,8 +98,25 @@ pub enum Command {
 pub enum UsageError {
     UnknownOption(String),
     MissingValue(String),
-    InvalidValue { option: String, value: String },
-    BadParticipants { players: u8, bots: u8 },
+    InvalidValue {
+        option: String,
+        value: String,
+    },
+    /// A value outside a short list of choices; `allowed` names them.
+    InvalidChoice {
+        option: String,
+        value: String,
+        allowed: &'static str,
+    },
+    BadParticipants {
+        players: u8,
+        bots: u8,
+    },
+    /// The mode needs more participants than the command line gives.
+    ModeNeedsPlayers {
+        mode: &'static str,
+        needed: u8,
+    },
     MissingAddress,
 }
 
@@ -92,9 +128,21 @@ impl fmt::Display for UsageError {
             UsageError::InvalidValue { option, value } => {
                 write!(f, "invalid value '{value}' for '{option}'")
             }
+            UsageError::InvalidChoice {
+                option,
+                value,
+                allowed,
+            } => write!(
+                f,
+                "invalid value '{value}' for '{option}' (allowed: {allowed})"
+            ),
             UsageError::BadParticipants { players, bots } => write!(
                 f,
                 "players ({players}) + bots ({bots}) must be between 1 and 4"
+            ),
+            UsageError::ModeNeedsPlayers { mode, needed } => write!(
+                f,
+                "mode '{mode}' needs {needed} participants: add players or bots"
             ),
             UsageError::MissingAddress => write!(f, "join needs the address of the host"),
         }
@@ -127,6 +175,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
     let mut bots = None;
     let mut seed = None;
     let mut lobby = false;
+    let mut room = RoomSettings::default();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
@@ -135,6 +184,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
             "--bots" => bots = Some(count(&arg, it.next(), 4)?),
             "--lobby" => lobby = true,
             "--seed" => seed = Some(number(&arg, it.next())?),
+            _ if room_option(&arg, &mut it, &mut room)? => {}
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }
@@ -144,11 +194,19 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
     if !(min..=4).contains(&total) {
         return Err(UsageError::BadParticipants { players, bots });
     }
+    let (needed, _) = room.participants_needed();
+    if !lobby && total < u16::from(needed) {
+        return Err(UsageError::ModeNeedsPlayers {
+            mode: room.mode.name(),
+            needed,
+        });
+    }
     Ok(Command::Run(LocalOptions {
         players,
         bots,
         seed,
         lobby,
+        room,
     }))
 }
 
@@ -161,6 +219,9 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         web_port: None,
         bind: None,
         dev: false,
+        room: RoomSettings::default(),
+        room_given: false,
+        no_setup: false,
     };
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -172,9 +233,16 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
             "--web-port" => opts.web_port = Some(web_port(&arg, it.next())?),
             "--bind" => opts.bind = Some(number(&arg, it.next())?),
             "--dev" => opts.dev = true,
+            "--no-setup" => opts.no_setup = true,
+            "--room-name" => {
+                opts.room.name = value(&arg, it.next())?;
+                opts.room_given = true;
+            }
+            _ if room_option(&arg, &mut it, &mut opts.room)? => opts.room_given = true,
             _ => return Err(UsageError::UnknownOption(arg)),
         }
     }
+    opts.room = opts.room.clean();
     Ok(Command::Host(opts))
 }
 
@@ -218,6 +286,51 @@ fn web_port(option: &str, v: Option<String>) -> Result<u16, UsageError> {
     match v.parse::<u16>() {
         Ok(p) if p > 0 => Ok(p),
         _ => Err(invalid(option, v)),
+    }
+}
+
+/// Reads `--mode`, `--size`, `--time` and `--friendly-fire`; `false` when `arg` is another option.
+fn room_option(
+    arg: &str,
+    it: &mut impl Iterator<Item = String>,
+    room: &mut RoomSettings,
+) -> Result<bool, UsageError> {
+    match arg {
+        "--mode" => {
+            let v = value(arg, it.next())?;
+            room.mode =
+                Mode::from_name(&v).ok_or_else(|| choice(arg, v, "normal, team, chaser"))?;
+        }
+        "--size" => {
+            let v = value(arg, it.next())?;
+            room.size =
+                BoardSize::from_name(&v).ok_or_else(|| choice(arg, v, "small, medium, large"))?;
+        }
+        "--time" => {
+            let v = value(arg, it.next())?;
+            room.minutes = match v.parse::<u8>() {
+                Ok(m) if MINUTES.contains(&m) => m,
+                _ => return Err(choice(arg, v, "2, 3, 5, 10")),
+            };
+        }
+        "--friendly-fire" => {
+            let v = value(arg, it.next())?;
+            room.friendly_fire = match v.as_str() {
+                "on" => true,
+                "off" => false,
+                _ => return Err(choice(arg, v, "on, off")),
+            };
+        }
+        _ => return Ok(false),
+    }
+    Ok(true)
+}
+
+fn choice(option: &str, v: String, allowed: &'static str) -> UsageError {
+    UsageError::InvalidChoice {
+        option: option.to_string(),
+        value: v,
+        allowed,
     }
 }
 

@@ -27,6 +27,7 @@ fn every_client_message_round_trips() {
         version: 1,
         name: "Ann".into(),
         look: None,
+        room: None,
     });
     roundtrip(ClientMsg::SetReady { ready: true });
     roundtrip(ClientMsg::Input {

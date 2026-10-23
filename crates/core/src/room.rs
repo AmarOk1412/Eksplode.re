@@ -33,6 +33,20 @@ impl Mode {
     /// Every mode, in menu order.
     pub const ALL: [Mode; 3] = [Mode::Normal, Mode::Team, Mode::Chaser];
 
+    /// The name used on the wire and in options.
+    pub fn name(self) -> &'static str {
+        match self {
+            Mode::Normal => "normal",
+            Mode::Team => "team",
+            Mode::Chaser => "chaser",
+        }
+    }
+
+    /// The mode with this exact name.
+    pub fn from_name(name: &str) -> Option<Mode> {
+        Self::ALL.into_iter().find(|m| m.name() == name)
+    }
+
     /// The name shown to people.
     pub fn label(self) -> &'static str {
         match self {
@@ -71,6 +85,20 @@ impl BoardSize {
             BoardSize::Medium => (19, 15),
             BoardSize::Large => (25, 19),
         }
+    }
+
+    /// The name used on the wire and in options.
+    pub fn name(self) -> &'static str {
+        match self {
+            BoardSize::Small => "small",
+            BoardSize::Medium => "medium",
+            BoardSize::Large => "large",
+        }
+    }
+
+    /// The size with this exact name.
+    pub fn from_name(name: &str) -> Option<BoardSize> {
+        Self::ALL.into_iter().find(|s| s.name() == name)
     }
 
     /// The name shown to people.
@@ -125,18 +153,25 @@ impl Default for RoomSettings {
 }
 
 impl RoomSettings {
-    /// Applies the limits: a clean, short name, a known time and a playable mode.
-    pub fn sanitize(mut self) -> RoomSettings {
+    /// Applies the shape limits: a clean, short name and a known time.
+    pub fn clean(mut self) -> RoomSettings {
         let clean: String = self.name.chars().filter(|c| !c.is_control()).collect();
         self.name = clean.trim().chars().take(MAX_NAME_CHARS).collect();
         self.name = self.name.trim().to_string();
         if !MINUTES.contains(&self.minutes) {
             self.minutes = 3;
         }
-        if !PLAYABLE.contains(&self.mode) {
-            self.mode = Mode::Normal;
-        }
         self
+    }
+
+    /// [`clean`](Self::clean) plus a playable mode: a mode whose rules do not exist yet becomes
+    /// Normal.
+    pub fn sanitize(self) -> RoomSettings {
+        let mut s = self.clean();
+        if !PLAYABLE.contains(&s.mode) {
+            s.mode = Mode::Normal;
+        }
+        s
     }
 
     /// The match configuration: the small size and 3 minutes keep what `base` says, so a custom
@@ -162,16 +197,50 @@ impl RoomSettings {
         }
     }
 
-    /// One line for the lobby: `name - Mode - 19 x 15 - 5 min`.
+    /// One line for the lobby: `name - Mode - 19 x 15 - 5 min`; Team mode adds the friendly-fire
+    /// choice.
     pub fn label(&self) -> String {
         let (w, h) = self.size.dimensions();
-        format!(
+        let mut line = format!(
             "{} - {} - {} x {} - {} min",
             self.name,
             self.mode.label(),
             w,
             h,
             self.minutes
-        )
+        );
+        if self.mode == Mode::Team {
+            line.push_str(if self.friendly_fire {
+                " - friendly fire on"
+            } else {
+                " - friendly fire off"
+            });
+        }
+        line
     }
+
+    /// Moves to the next (`step > 0`) or previous playable mode, wrapping around.
+    pub fn step_mode(&mut self, step: i8) {
+        let at = PLAYABLE.iter().position(|m| *m == self.mode).unwrap_or(0);
+        self.mode = PLAYABLE[wrap(at, step, PLAYABLE.len())];
+    }
+
+    /// Moves to the next or previous board size, wrapping around.
+    pub fn step_size(&mut self, step: i8) {
+        let at = BoardSize::ALL
+            .iter()
+            .position(|s| *s == self.size)
+            .unwrap_or(0);
+        self.size = BoardSize::ALL[wrap(at, step, BoardSize::ALL.len())];
+    }
+
+    /// Moves to the next or previous round time, wrapping around.
+    pub fn step_minutes(&mut self, step: i8) {
+        let at = MINUTES.iter().position(|m| *m == self.minutes).unwrap_or(1);
+        self.minutes = MINUTES[wrap(at, step, MINUTES.len())];
+    }
+}
+
+fn wrap(at: usize, step: i8, len: usize) -> usize {
+    (at as i64 + i64::from(step)).rem_euclid(len as i64) as usize
 }

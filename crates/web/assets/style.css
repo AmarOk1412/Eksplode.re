@@ -230,3 +230,24 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .dev-sliders { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
 .dev-sliders li { display: grid; grid-template-columns: 110px 1fr 48px; gap: 8px; align-items: center; }
 .dev-sliders output { text-align: right; }
+
+.room select, .room-controls select {
+  font: inherit;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border: 3px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 0;
+  width: min(270px, 100%);
+}
+
+.mode-cards { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.mode-cards button { width: auto; font-size: 1.1rem; padding: 6px 14px; }
+.mode-cards button[aria-checked="true"] { background: var(--ink); color: #fff; }
+
+.room-summary { text-align: center; font-weight: bold; margin: 8px 0; }
+.room-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; }
+.room-controls input { width: min(200px, 100%); font-size: 1rem; }
+.room-controls select { width: auto; }
+.check input { width: auto; }

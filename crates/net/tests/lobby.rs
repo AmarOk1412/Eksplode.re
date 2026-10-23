@@ -9,6 +9,7 @@ fn join_msg(name: &str) -> ClientMsg {
         version: PROTOCOL_VERSION,
         name: name.into(),
         look: None,
+        room: None,
     }
 }
 
@@ -32,6 +33,7 @@ fn a_wrong_protocol_version_is_rejected() {
         version: PROTOCOL_VERSION + 1,
         name: "Ann".into(),
         look: None,
+        room: None,
     });
     assert_eq!(
         raw.recv(),

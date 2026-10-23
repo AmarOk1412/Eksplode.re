@@ -20,6 +20,7 @@ use crate::args::{HostOptions, JoinOptions, LocalOptions};
 use crate::input::{map_key, normalize, InputState, KeyAction};
 use crate::lobby::{self, LobbyScreen};
 use crate::online::{self, Online};
+use crate::setup::{self, SetupScreen};
 use crate::view::{self, ViewContext};
 
 /// Errors that end the program with exit code 1.
@@ -95,14 +96,15 @@ pub struct Session {
 impl Session {
     /// Humans take the first slots, bots the following ones.
     pub fn new(opts: &LocalOptions, seed: u64) -> Result<Session, CoreError> {
-        let lobby = Lobby::from_counts(opts.players, opts.bots)
+        let mut lobby = Lobby::from_counts(opts.players, opts.bots)
             .map_err(|e| CoreError::InvalidSlots(e.to_string()))?;
+        lobby.settings = opts.room.clone().sanitize();
         Self::from_lobby(&lobby, seed)
     }
 
     /// Starts a round with the slots chosen in `lobby`.
     pub fn from_lobby(lobby: &Lobby, seed: u64) -> Result<Session, CoreError> {
-        let config = Config::default();
+        let config = lobby.settings.to_config(&Config::default());
         let state = GameState::new(config.clone(), seed, lobby.active())?;
         let controllers = [0, 1, 2, 3].map(|i| lobby.slots[i].controller);
         Ok(Session {
@@ -201,6 +203,7 @@ impl Drop for TerminalGuard {
 /// Runs a local match in the terminal until the player quits.
 pub fn run(opts: &LocalOptions, seed: u64) -> Result<(), AppError> {
     let mut lobby = Lobby::from_counts(opts.players, opts.bots)?;
+    lobby.settings = opts.room.clone().sanitize();
     let mut terminal = ratatui::try_init()?;
     let _guard = TerminalGuard;
 
@@ -319,11 +322,23 @@ fn connect_failure(addr: &str, e: NetError) -> AppError {
 /// Hosts a match: listens on the port and plays as the first participant, optionally also
 /// serving the web page for browsers.
 pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
+    for line in host_warnings(opts) {
+        eprintln!("{line}");
+    }
+    let room = if opts.room_given || opts.no_setup {
+        opts.room.clone().sanitize()
+    } else {
+        match setup_room(opts.room.clone())? {
+            Some(room) => room,
+            None => return Ok(()),
+        }
+    };
     let game_ip = opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
     let host = Host::start(HostConfig {
         bind: SocketAddr::new(game_ip, opts.port).to_string(),
         seed: opts.seed,
         dev: opts.dev,
+        defaults: room.clone(),
         ..HostConfig::default()
     })?;
     for _ in 0..opts.bots {
@@ -339,14 +354,12 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
                 game_port: host.addr().port(),
                 seed: opts.seed,
                 dev: opts.dev,
+                room: room.clone(),
                 ..ServerOptions::default()
             },
         )?),
         None => None,
     };
-    for line in host_warnings(opts) {
-        eprintln!("{line}");
-    }
     let client = host.local_client(&opts.name)?;
     let mut online = Online::hosting(host, client);
     online.web_url = web.as_ref().map(|s| web_url(s.http_addr()));
@@ -354,6 +367,24 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
     // the match host is gone by now, so every browser has been told before the page stops
     drop(web);
     result
+}
+
+/// Shows the room setup screen; `None` when the owner went back.
+fn setup_room(
+    start: bomberust_core::RoomSettings,
+) -> Result<Option<bomberust_core::RoomSettings>, AppError> {
+    let mut terminal = ratatui::try_init()?;
+    let _guard = TerminalGuard;
+    let mut screen = SetupScreen::new(start);
+    while !screen.done && !screen.quit {
+        terminal.draw(|f| setup::render(f, &screen))?;
+        if let TermEvent::Key(key) = event::read()? {
+            if let Some(code) = normalize(key) {
+                screen.handle_key(code);
+            }
+        }
+    }
+    Ok(screen.done.then_some(screen.settings))
 }
 
 /// Joins a match hosted elsewhere.
