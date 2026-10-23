@@ -117,11 +117,14 @@ pub fn render(frame: &mut Frame, state: &Observation, ctx: &ViewContext) {
     let area = frame.area();
     let (need_w, need_h) = required_size(state);
     if area.width < need_w || area.height < need_h {
-        let msg = format!(
-            "terminal too small (need {need_w}x{need_h}, have {}x{}); q quits",
-            area.width, area.height
-        );
-        frame.render_widget(Paragraph::new(msg), area);
+        // one short line each, so even the narrowest terminal shows all of it
+        let lines = vec![
+            Line::from("terminal too small"),
+            Line::from(format!("need {need_w}x{need_h}")),
+            Line::from(format!("have {}x{}", area.width, area.height)),
+            Line::from("q quits"),
+        ];
+        frame.render_widget(Paragraph::new(lines), area);
         return;
     }
 
