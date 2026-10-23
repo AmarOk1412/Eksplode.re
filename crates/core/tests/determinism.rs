@@ -81,13 +81,13 @@ fn the_round_always_ends_within_the_limit() {
 }
 
 #[test]
-fn observation_hides_rng_and_unrevealed_powerups() {
+fn observation_shows_no_rng_and_no_drop_table() {
     let c = Config {
         powerup_chance: 1.0,
         ..Config::default()
     };
     let s = GameState::new(c, 9, [true; 4]).unwrap();
-    assert!(!s.hidden_powerups.is_empty());
+    assert!(s.powerups.is_empty());
     let obs = s.observe(pid(2));
     assert_eq!(obs.me, pid(2));
     assert!(obs.powerups.is_empty());

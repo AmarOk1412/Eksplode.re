@@ -30,6 +30,11 @@ impl Rng {
         (self.next_u64() % u64::from(n)) as u32
     }
 
+    /// Returns a value in `0.0..1.0` with 24 bits of precision.
+    pub fn next_unit(&mut self) -> f32 {
+        (self.next_u64() >> 40) as f32 / (1u64 << 24) as f32
+    }
+
     /// Returns true with probability `p` (clamped to `0.0..=1.0`).
     pub fn chance(&mut self, p: f32) -> bool {
         if p <= 0.0 {

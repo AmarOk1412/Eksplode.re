@@ -1,10 +1,9 @@
 //! Game state types.
 
-use std::collections::BTreeMap;
-
 use crate::action::{Dir, PlayerId, Pos, MAX_PLAYERS};
 use crate::arena::{Arena, Tile};
 use crate::config::Config;
+use crate::drops::DropTable;
 use crate::error::CoreError;
 use crate::rng::Rng;
 
@@ -12,17 +11,50 @@ use crate::rng::Rng;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PowerUpKind {
+    /// One more bomb at a time.
     ExtraBomb,
+    /// Longer explosions (the flame).
     Range,
+    /// Faster movement (the roller).
     Speed,
+    /// Lets the player punch the bomb they face.
+    Punch,
+    /// Malus: slower movement for a while.
+    Slow,
+    /// Malus: much faster movement for a while.
+    HyperSpeed,
+    /// Malus: bombs reach one square for a while.
+    SmallBomb,
 }
 
 impl PowerUpKind {
-    pub const ALL: [PowerUpKind; 3] = [
+    /// Every kind, in the order the drop table uses.
+    pub const ALL: [PowerUpKind; 7] = [
         PowerUpKind::ExtraBomb,
         PowerUpKind::Range,
         PowerUpKind::Speed,
+        PowerUpKind::Punch,
+        PowerUpKind::Slow,
+        PowerUpKind::HyperSpeed,
+        PowerUpKind::SmallBomb,
     ];
+
+    /// Maluses are timed and hurt the player who takes them; bonuses last for the round.
+    pub fn is_malus(self) -> bool {
+        matches!(
+            self,
+            PowerUpKind::Slow | PowerUpKind::HyperSpeed | PowerUpKind::SmallBomb
+        )
+    }
+}
+
+/// A malus that currently applies to a player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ActiveMalus {
+    /// One of the malus kinds.
+    pub kind: PowerUpKind,
+    pub ticks_left: u32,
 }
 
 /// A visible power-up lying on a tile.
@@ -48,6 +80,42 @@ pub struct Participant {
     pub move_cooldown: u32,
     /// Ticks left until the next move is allowed.
     pub cooldown_left: u32,
+    /// Whether the player may punch the bomb they face.
+    pub has_punch: bool,
+    /// The malus that applies now, if any.
+    pub malus: Option<ActiveMalus>,
+}
+
+impl Participant {
+    /// Ticks between two moves with the malus applied: slow `ceil(base * 4 / 3)`, hyper speed
+    /// `max(1, base / 2)`.
+    pub fn effective_cooldown(&self) -> u32 {
+        let base = self.move_cooldown;
+        match self.malus.map(|m| m.kind) {
+            Some(PowerUpKind::Slow) => (base * 4).div_ceil(3),
+            Some(PowerUpKind::HyperSpeed) => (base / 2).max(1),
+            _ => base,
+        }
+    }
+
+    /// The reach of a bomb placed now: one square with the small-bomb malus.
+    pub fn placed_range(&self) -> u8 {
+        match self.malus {
+            Some(m) if m.kind == PowerUpKind::SmallBomb => 1,
+            _ => self.range,
+        }
+    }
+}
+
+/// A punched bomb on its way; it hops one square at a time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Flight {
+    pub dir: Dir,
+    /// Ticks until the next hop.
+    pub hop_left: u32,
+    /// The square the bomb was punched from.
+    pub origin: Pos,
 }
 
 /// A placed bomb. It blocks movement into its tile.
@@ -58,6 +126,8 @@ pub struct Bomb {
     pub pos: Pos,
     pub ticks_left: u32,
     pub range: u8,
+    /// Set while the bomb is flying after a punch; it then blocks nothing and flames ignore it.
+    pub flight: Option<Flight>,
 }
 
 /// One burning tile.
@@ -116,6 +186,25 @@ pub enum Event {
     PowerUpDestroyed {
         pos: Pos,
     },
+    BombPunched {
+        player: PlayerId,
+        from: Pos,
+        dir: Dir,
+    },
+    BombHopped {
+        pos: Pos,
+    },
+    BombLanded {
+        pos: Pos,
+    },
+    MalusStarted {
+        player: PlayerId,
+        kind: PowerUpKind,
+    },
+    MalusEnded {
+        player: PlayerId,
+        kind: PowerUpKind,
+    },
     PlayerEliminated {
         player: PlayerId,
     },
@@ -132,8 +221,8 @@ pub struct GameState {
     pub bombs: Vec<Bomb>,
     pub flames: Vec<Flame>,
     pub powerups: Vec<PowerUp>,
-    /// Power-ups still hidden under blocks; never exposed to players.
-    pub hidden_powerups: BTreeMap<Pos, PowerUpKind>,
+    /// What destroyed blocks drop; decided when a block breaks, so it can change during a round.
+    pub drops: DropTable,
     pub rng: Rng,
     pub phase: Phase,
     /// Number of participants that started the round.
@@ -152,14 +241,7 @@ impl GameState {
         let arena = Arena::generate(&config, &mut rng);
         let corners = arena.start_positions();
         let starts = [0, 1, 2, 3].map(|i| active[i].then_some(corners[i]));
-        let mut state = Self::build(config, arena, starts, rng)?;
-        for p in state.arena.positions_of(Tile::Block) {
-            if state.rng.chance(state.config.powerup_chance) {
-                let kind = PowerUpKind::ALL[state.rng.next_below(3) as usize];
-                state.hidden_powerups.insert(p, kind);
-            }
-        }
-        Ok(state)
+        Self::build(config, arena, starts, rng)
     }
 
     /// Creates a round on a given arena with explicit start positions (tests, scenarios).
@@ -205,8 +287,11 @@ impl GameState {
             range: config.start_range,
             move_cooldown: config.base_move_cooldown,
             cooldown_left: 0,
+            has_punch: false,
+            malus: None,
         });
         Ok(GameState {
+            drops: DropTable::defaults(config.powerup_chance),
             config,
             tick: 0,
             arena,
@@ -214,11 +299,17 @@ impl GameState {
             bombs: Vec::new(),
             flames: Vec::new(),
             powerups: Vec::new(),
-            hidden_powerups: BTreeMap::new(),
             rng,
             phase: Phase::Playing,
             started: started as u8,
         })
+    }
+
+    /// Replaces the drop table; an invalid table is refused and nothing changes.
+    pub fn set_drops(&mut self, drops: DropTable) -> Result<(), CoreError> {
+        drops.validate()?;
+        self.drops = drops;
+        Ok(())
     }
 
     /// Number of living participants.

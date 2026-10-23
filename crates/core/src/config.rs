@@ -19,7 +19,24 @@ pub struct Config {
     pub max_bombs: u8,
     pub max_range: u8,
     pub block_density: f32,
+    /// Share of destroyed blocks that drop a power (the default drop table adds up to this).
     pub powerup_chance: f32,
+    /// How long a malus lasts, in ticks.
+    #[cfg_attr(feature = "serde", serde(default = "default_malus_ticks"))]
+    pub malus_ticks: u32,
+    /// Ticks a punched bomb needs for one hop.
+    #[cfg_attr(feature = "serde", serde(default = "default_punch_hop_ticks"))]
+    pub punch_hop_ticks: u32,
+}
+
+#[cfg(feature = "serde")]
+fn default_malus_ticks() -> u32 {
+    200
+}
+
+#[cfg(feature = "serde")]
+fn default_punch_hop_ticks() -> u32 {
+    2
 }
 
 impl Default for Config {
@@ -39,6 +56,8 @@ impl Default for Config {
             max_range: 8,
             block_density: 0.7,
             powerup_chance: 0.3,
+            malus_ticks: 200,
+            punch_hop_ticks: 2,
         }
     }
 }
@@ -67,6 +86,9 @@ impl Config {
         }
         if self.start_range == 0 || self.start_range > self.max_range {
             return bad("start_range must be in 1..=max_range");
+        }
+        if self.malus_ticks == 0 || self.punch_hop_ticks == 0 {
+            return bad("malus_ticks and punch_hop_ticks must be positive");
         }
         if !(0.0..=1.0).contains(&self.block_density) || !(0.0..=1.0).contains(&self.powerup_chance)
         {

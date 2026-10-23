@@ -3,13 +3,15 @@
 use crate::action::{PlayerInput, MAX_PLAYERS};
 use crate::arena::Tile;
 use crate::bomb;
-use crate::state::{Event, GameState, Outcome, Phase, PowerUpKind};
+use crate::punch;
+use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind};
 
 /// Advances the round by one tick and returns what happened.
 ///
-/// Order: cooldowns, flame and fuse timers, moves (rotating priority), bomb placement,
-/// detonation with chain reactions, eliminations, end-of-round check. Does nothing once
-/// the round has ended.
+/// Order: cooldowns, flame and fuse timers, malus timers, moves (rotating priority), bomb
+/// flights (hops and landings), punches, bomb placement, detonation with chain reactions (drops
+/// are decided for destroyed blocks), eliminations, end-of-round check. Does nothing once the
+/// round has ended.
 pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<Event> {
     let mut events = Vec::new();
     if state.phase != Phase::Playing {
@@ -27,10 +29,18 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
         b.ticks_left = b.ticks_left.saturating_sub(1);
     }
 
+    malus_timers(state, &mut events);
+
     let first = state.tick as usize % MAX_PLAYERS;
     let order = [0, 1, 2, 3].map(|i| (first + i) % MAX_PLAYERS);
     for &i in &order {
         move_player(state, i, inputs[i], &mut events);
+    }
+    punch::advance(state, &mut events);
+    for &i in &order {
+        if inputs[i].punch {
+            punch::apply(state, i, &mut events);
+        }
     }
     for &i in &order {
         if inputs[i].bomb {
@@ -49,6 +59,24 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
     events
 }
 
+fn malus_timers(state: &mut GameState, events: &mut Vec<Event>) {
+    for p in state.players.iter_mut().filter(|p| p.alive) {
+        let Some(mut malus) = p.malus else {
+            continue;
+        };
+        malus.ticks_left = malus.ticks_left.saturating_sub(1);
+        if malus.ticks_left == 0 {
+            p.malus = None;
+            events.push(Event::MalusEnded {
+                player: p.id,
+                kind: malus.kind,
+            });
+        } else {
+            p.malus = Some(malus);
+        }
+    }
+}
+
 fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut Vec<Event>) {
     let (id, from, alive, cooldown_left) = {
         let p = &state.players[i];
@@ -65,13 +93,16 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
         return;
     };
     let blocked = state.arena.tile(to) != Tile::Floor
-        || state.bombs.iter().any(|b| b.pos == to)
+        || state
+            .bombs
+            .iter()
+            .any(|b| b.pos == to && b.flight.is_none())
         || state.players.iter().any(|o| o.alive && o.pos == to);
     if blocked {
         return;
     }
     state.players[i].pos = to;
-    state.players[i].cooldown_left = state.players[i].move_cooldown;
+    state.players[i].cooldown_left = state.players[i].effective_cooldown();
     events.push(Event::Moved {
         player: id,
         from,
@@ -88,6 +119,17 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
             PowerUpKind::Speed => {
                 p.move_cooldown = p.move_cooldown.saturating_sub(1).max(cfg.min_move_cooldown);
             }
+            PowerUpKind::Punch => p.has_punch = true,
+            PowerUpKind::Slow | PowerUpKind::HyperSpeed | PowerUpKind::SmallBomb => {
+                p.malus = Some(ActiveMalus {
+                    kind: power.kind,
+                    ticks_left: cfg.malus_ticks,
+                });
+                events.push(Event::MalusStarted {
+                    player: id,
+                    kind: power.kind,
+                });
+            }
         }
         events.push(Event::PowerUpCollected {
             player: id,
@@ -103,6 +145,7 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
         if p.alive && state.flames.iter().any(|f| f.pos == p.pos) {
             events.push(Event::PlayerEliminated { player: p.id });
             state.players[i].alive = false;
+            state.players[i].malus = None;
         }
     }
 }

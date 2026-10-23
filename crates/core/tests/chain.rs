@@ -78,6 +78,7 @@ fn us1_as5_walking_into_active_flames_is_fatal() {
     i[1] = PlayerInput {
         mv: Some(Dir::Down),
         bomb: false,
+        ..PlayerInput::default()
     };
     let ev = step(&mut s, &i);
     assert!(!s.players[1].alive);

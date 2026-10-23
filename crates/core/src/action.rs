@@ -19,6 +19,16 @@ impl Dir {
     /// All four directions.
     pub const ALL: [Dir; 4] = [Dir::Up, Dir::Down, Dir::Left, Dir::Right];
 
+    /// The direction that points the other way.
+    pub fn opposite(self) -> Dir {
+        match self {
+            Dir::Up => Dir::Down,
+            Dir::Down => Dir::Up,
+            Dir::Left => Dir::Right,
+            Dir::Right => Dir::Left,
+        }
+    }
+
     /// Offset `(dx, dy)` of one step; `y` grows downwards.
     pub fn delta(self) -> (i8, i8) {
         match self {
@@ -106,6 +116,9 @@ impl Color {
 pub struct PlayerInput {
     pub mv: Option<Dir>,
     pub bomb: bool,
+    /// Punch the bomb on the faced square (needs the punch power).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub punch: bool,
 }
 
 #[cfg(test)]

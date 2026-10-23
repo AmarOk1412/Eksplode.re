@@ -7,6 +7,7 @@ fn mv(d: Dir) -> PlayerInput {
     PlayerInput {
         mv: Some(d),
         bomb: false,
+        ..PlayerInput::default()
     }
 }
 

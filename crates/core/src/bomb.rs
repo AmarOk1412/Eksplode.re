@@ -9,14 +9,19 @@ use crate::state::{Bomb, Event, Flame, GameState, PowerUp};
 /// Places a bomb for player `i` if the rules allow it.
 pub(crate) fn place(state: &mut GameState, i: usize, events: &mut Vec<Event>) {
     let p = &state.players[i];
-    if !p.alive || p.bombs_active >= p.bombs_max || state.bombs.iter().any(|b| b.pos == p.pos) {
+    let occupied = state
+        .bombs
+        .iter()
+        .any(|b| b.pos == p.pos && b.flight.is_none());
+    if !p.alive || p.bombs_active >= p.bombs_max || occupied {
         return;
     }
     let bomb = Bomb {
         owner: p.id,
         pos: p.pos,
         ticks_left: state.config.fuse_ticks,
-        range: p.range,
+        range: p.placed_range(),
+        flight: None,
     };
     events.push(Event::BombPlaced {
         player: p.id,
@@ -47,9 +52,13 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
             let b = &state.bombs[idx];
             let hit = blast(&state.arena, b.pos, b.range);
             for (j, other) in state.bombs.iter().enumerate() {
-                if hit.tiles.contains(&other.pos) {
+                // a bomb in the air is out of reach of flames
+                if other.flight.is_none() && hit.tiles.contains(&other.pos) {
                     exploding[j] = true;
                 }
+            }
+            if b.flight.is_some() && state.arena.tile(b.pos) == Tile::Block {
+                destroyed.insert(b.pos);
             }
             tiles.extend(hit.tiles);
             destroyed.extend(hit.destroyed);
@@ -74,15 +83,12 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
         state.arena.set_tile(*pos, Tile::Floor);
         events.push(Event::BlockDestroyed { pos: *pos });
     }
-    let revealed: Vec<PowerUp> = destroyed
-        .iter()
-        .filter_map(|pos| {
-            state
-                .hidden_powerups
-                .remove(pos)
-                .map(|kind| PowerUp { pos: *pos, kind })
-        })
-        .collect();
+    let mut revealed: Vec<PowerUp> = Vec::new();
+    for pos in &destroyed {
+        if let Some(kind) = state.drops.roll(&mut state.rng) {
+            revealed.push(PowerUp { pos: *pos, kind });
+        }
+    }
 
     state.powerups.retain(|u| {
         let burns = tiles.contains(&u.pos);

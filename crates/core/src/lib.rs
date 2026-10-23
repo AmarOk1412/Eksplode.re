@@ -7,9 +7,11 @@ pub mod action;
 pub mod arena;
 pub mod bomb;
 pub mod config;
+pub mod drops;
 pub mod error;
 pub mod lobby;
 pub mod observation;
+pub mod punch;
 pub mod rng;
 pub mod state;
 pub mod step;
@@ -18,9 +20,13 @@ pub use action::{Color, Dir, PlayerId, PlayerInput, Pos, MAX_PLAYERS};
 pub use arena::{Arena, Tile};
 pub use bomb::{blast, Blast};
 pub use config::Config;
+pub use drops::DropTable;
 pub use error::CoreError;
 pub use lobby::{Controller, Lobby, LobbyError, Slot};
 pub use observation::Observation;
 pub use rng::Rng;
-pub use state::{Bomb, Event, Flame, GameState, Outcome, Participant, Phase, PowerUp, PowerUpKind};
+pub use state::{
+    ActiveMalus, Bomb, Event, Flame, Flight, GameState, Outcome, Participant, Phase, PowerUp,
+    PowerUpKind,
+};
 pub use step::step;

@@ -75,7 +75,7 @@ fn new_rejects_empty_slots_and_bad_config() {
 }
 
 #[test]
-fn same_seed_same_arena_and_hidden_powerups() {
+fn same_seed_same_arena() {
     let a = GameState::new(Config::default(), 42, [true; 4]).unwrap();
     let b = GameState::new(Config::default(), 42, [true; 4]).unwrap();
     assert_eq!(a, b);
@@ -89,41 +89,37 @@ fn different_seeds_give_different_layouts() {
 }
 
 #[test]
-fn blocks_exist_and_hide_powerups_only_under_blocks() {
+fn blocks_exist_and_nothing_is_on_the_board_before_a_block_breaks() {
     let c = Config {
         powerup_chance: 1.0,
         ..Config::default()
     };
     let s = GameState::new(c, 9, [true; 4]).unwrap();
-    let blocks: Vec<_> = s.arena.positions_of(Tile::Block);
-    assert!(!blocks.is_empty());
-    assert_eq!(s.hidden_powerups.len(), blocks.len());
-    for p in s.hidden_powerups.keys() {
-        assert_eq!(s.arena.tile(*p), Tile::Block);
-    }
+    assert!(!s.arena.positions_of(Tile::Block).is_empty());
+    assert!(s.powerups.is_empty(), "items are decided when blocks break");
+    assert!(
+        (s.drops.total() - 1.0).abs() < 1e-5,
+        "the table follows powerup_chance"
+    );
     let none = Config {
         powerup_chance: 0.0,
         ..Config::default()
     };
-    assert!(GameState::new(none, 9, [true; 4])
-        .unwrap()
-        .hidden_powerups
-        .is_empty());
+    assert_eq!(
+        GameState::new(none, 9, [true; 4]).unwrap().drops.total(),
+        0.0
+    );
 }
 
 #[test]
-fn all_powerup_kinds_can_be_hidden() {
+fn all_powerup_kinds_can_drop() {
     let c = Config {
         powerup_chance: 1.0,
         ..Config::default()
     };
     let s = GameState::new(c, 5, [true; 4]).unwrap();
-    for kind in [
-        PowerUpKind::ExtraBomb,
-        PowerUpKind::Range,
-        PowerUpKind::Speed,
-    ] {
-        assert!(s.hidden_powerups.values().any(|k| *k == kind), "{kind:?}");
+    for kind in PowerUpKind::ALL {
+        assert!(s.drops.chance(kind) > 0.0, "{kind:?}");
     }
 }
 

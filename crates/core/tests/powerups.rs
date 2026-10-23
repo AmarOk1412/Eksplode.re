@@ -8,6 +8,7 @@ fn go(d: Dir) -> [PlayerInput; 4] {
     i[0] = PlayerInput {
         mv: Some(d),
         bomb: false,
+        ..PlayerInput::default()
     };
     i
 }
@@ -17,9 +18,12 @@ const WITH_BLOCK: [&str; 7] = [
 ];
 
 #[test]
-fn us1_as6_destroyed_block_reveals_hidden_powerup() {
+fn us1_as6_destroyed_block_drops_a_powerup_by_the_table() {
     let mut s = state(&WITH_BLOCK, two_safe());
-    s.hidden_powerups.insert(pos(4, 3), PowerUpKind::Range);
+    let mut chances = [0.0; 7];
+    chances[1] = 1.0; // only the flame
+    s.set_drops(bomberust_core::DropTable::new(chances).unwrap())
+        .unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     let ev = step(&mut s, &idle());
     assert!(ev.contains(&Event::PowerUpSpawned {
@@ -33,12 +37,13 @@ fn us1_as6_destroyed_block_reveals_hidden_powerup() {
             kind: PowerUpKind::Range
         }]
     );
-    assert!(s.hidden_powerups.is_empty());
 }
 
 #[test]
-fn destroyed_block_without_hidden_powerup_reveals_nothing() {
+fn destroyed_block_with_an_empty_table_drops_nothing() {
     let mut s = state(&WITH_BLOCK, two_safe());
+    s.set_drops(bomberust_core::DropTable::new([0.0; 7]).unwrap())
+        .unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     step(&mut s, &idle());
     assert!(s.powerups.is_empty());

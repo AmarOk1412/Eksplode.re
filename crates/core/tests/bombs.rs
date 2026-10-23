@@ -126,6 +126,7 @@ fn us1_as3_bomb_cap_and_single_bomb_per_tile() {
     right[0] = PlayerInput {
         mv: Some(Dir::Right),
         bomb: true,
+        ..PlayerInput::default()
     };
     step(&mut s, &right);
     assert_eq!(s.bombs.len(), 1, "cap of one active bomb");
