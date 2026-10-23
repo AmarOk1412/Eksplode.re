@@ -3,7 +3,7 @@
 use bomberust_core::{blast, Dir, Observation, Participant, Phase, PlayerInput, Pos, Rng};
 
 use crate::danger::DangerMap;
-use crate::pathing::{find_path, passable, PathRequest};
+use crate::pathing::{find_path, has_malus, passable, PathRequest};
 use crate::Bot;
 
 /// Chance per tick to take a random safe step when nothing else is worth doing.
@@ -50,6 +50,7 @@ impl DefaultBot {
             Some((when, dir)) if when > here => PlayerInput {
                 mv: Some(dir),
                 bomb: false,
+                ..PlayerInput::default()
             },
             _ => PlayerInput::default(),
         }
@@ -63,10 +64,11 @@ impl DefaultBot {
             let Some(t) = me.pos.step(d, obs.arena.width(), obs.arena.height()) else {
                 continue;
             };
-            if passable(obs, t) && danger.safe_from(t, 1) {
+            if passable(obs, t) && !has_malus(obs, t) && danger.safe_from(t, 1) {
                 return PlayerInput {
                     mv: Some(d),
                     bomb: false,
+                    ..PlayerInput::default()
                 };
             }
         }
@@ -88,10 +90,13 @@ impl Bot for DefaultBot {
             path.and_then(|p| p.first().copied()).map(|d| PlayerInput {
                 mv: Some(d),
                 bomb: false,
+                ..PlayerInput::default()
             })
         };
 
         if !danger.safe_from(me.pos, 1) {
+            // staying alive beats avoiding a malus
+            req.avoid_malus = false;
             return step_to(find_path(&req, &|_| true))
                 .unwrap_or_else(|| self.desperate(obs, me, &danger));
         }
@@ -99,11 +104,16 @@ impl Bot for DefaultBot {
             return PlayerInput {
                 mv: None,
                 bomb: true,
+                ..PlayerInput::default()
             };
         }
 
         req.max_depth = 8;
-        let powerup = |t: Pos| obs.powerups.iter().any(|u| u.pos == t);
+        let powerup = |t: Pos| {
+            obs.powerups
+                .iter()
+                .any(|u| u.pos == t && !u.kind.is_malus())
+        };
         if let Some(i) = step_to(find_path(&req, &powerup)) {
             return i;
         }
@@ -119,7 +129,7 @@ impl Bot for DefaultBot {
             let hunt = |t: Pos| {
                 t != me.pos
                     && roomy(obs, t)
-                    && blast(&obs.arena, t, me.range)
+                    && blast(&obs.arena, t, me.placed_range())
                         .tiles
                         .iter()
                         .any(|x| enemies.contains(x))
@@ -128,7 +138,9 @@ impl Bot for DefaultBot {
                 return i;
             }
             let dig = |t: Pos| {
-                t != me.pos && roomy(obs, t) && !blast(&obs.arena, t, me.range).destroyed.is_empty()
+                t != me.pos
+                    && roomy(obs, t)
+                    && !blast(&obs.arena, t, me.placed_range()).destroyed.is_empty()
             };
             if let Some(i) = step_to(find_path(&req, &dig)) {
                 return i;
@@ -153,7 +165,7 @@ fn can_bomb_here(obs: &Observation, me: &Participant) -> bool {
     if me.bombs_active >= me.bombs_max || obs.bombs.iter().any(|b| b.pos == me.pos) {
         return false;
     }
-    let hit = blast(&obs.arena, me.pos, me.range);
+    let hit = blast(&obs.arena, me.pos, me.placed_range());
     let useful = !hit.destroyed.is_empty()
         || obs
             .players
@@ -163,7 +175,7 @@ fn can_bomb_here(obs: &Observation, me: &Participant) -> bool {
         return false;
     }
     // The bomb is placed during the next tick and explodes `fuse_ticks` ticks later.
-    let danger = DangerMap::with_bomb(obs, me.pos, me.range, obs.config.fuse_ticks + 1);
+    let danger = DangerMap::with_bomb(obs, me.pos, me.placed_range(), obs.config.fuse_ticks + 1);
     let mut req = PathRequest::new(obs, &danger);
     req.earliest_move = me.cooldown_left.max(2);
     find_path(&req, &|_| true).is_some()

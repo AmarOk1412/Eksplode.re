@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
 use bomberust_bots::DangerMap;
@@ -82,4 +84,54 @@ fn a_hypothetical_bomb_can_be_added() {
         DangerMap::from_observation(&o).first_danger(pos(3, 3)),
         None
     );
+}
+
+fn fly(s: &mut bomberust_core::GameState, at: (u8, u8), dir: bomberust_core::Dir, fuse: u32) {
+    add_bomb(s, 1, at.0, at.1, fuse);
+    let b = s.bombs.last_mut().unwrap();
+    b.flight = Some(bomberust_core::Flight {
+        dir,
+        hop_left: 2,
+        origin: pos(at.0, at.1),
+    });
+}
+
+#[test]
+fn a_bomb_in_flight_is_dangerous_where_it_will_land_and_where_it_is() {
+    let mut s = duel(&OPEN, (1, 5), (5, 1));
+    fly(&mut s, (2, 3), bomberust_core::Dir::Right, 10);
+    let d = DangerMap::from_observation(&obs(&s, 0));
+    // it will land on (3, 3): that cross burns
+    for p in [pos(3, 3), pos(3, 1), pos(3, 5), pos(5, 3)] {
+        assert_eq!(d.first_danger(p), Some(10), "landing cross {p:?}");
+    }
+    // it could also still be over (2, 3) when the fuse ends
+    assert_eq!(
+        d.first_danger(pos(2, 2)),
+        Some(10),
+        "cross of the current square"
+    );
+    assert_eq!(d.first_danger(pos(1, 1)), None);
+}
+
+#[test]
+fn the_landing_prediction_hops_over_blocks_players_and_other_bombs() {
+    let rows = [
+        "#######", "#.....#", "#.....#", "#..+..#", "#.....#", "#.....#", "#######",
+    ];
+    let mut s = duel(&rows, (1, 5), (4, 3));
+    s.arena = bomberust_core::Arena::from_rows(&[
+        "#######", "#.....#", "#.....#", "#.+...#", "#.....#", "#.....#", "#######",
+    ])
+    .unwrap();
+    fly(&mut s, (1, 3), bomberust_core::Dir::Right, 12);
+    // (2, 3) is a block and (3, 3) free: it lands on (3, 3)
+    let landing = bomberust_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
+    assert_eq!(landing, pos(3, 3));
+    // a player on (3, 3) moves the prediction on to (4, 3) ... which holds player 1: (5, 3)
+    s.players[0].pos = pos(3, 3);
+    let landing = bomberust_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
+    assert_eq!(landing, pos(5, 3));
+    let d = DangerMap::from_observation(&obs(&s, 0));
+    assert_eq!(d.first_danger(pos(5, 3)), Some(12));
 }

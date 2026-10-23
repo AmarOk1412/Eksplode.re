@@ -1,5 +1,6 @@
 //! When and for how long each tile is going to burn, derived from the public observation.
 
+use bomberust_core::punch::predict_landing;
 use bomberust_core::{blast, Observation, Pos};
 
 /// Burning windows per tile, in steps counted from the observation (step 1 is the next tick).
@@ -23,11 +24,18 @@ impl DangerMap {
     }
 
     fn build(obs: &Observation, extra: Option<(Pos, u8, u32)>) -> Self {
-        let mut bombs: Vec<(Pos, u8, u32)> = obs
-            .bombs
-            .iter()
-            .map(|b| (b.pos, b.range, b.ticks_left))
-            .collect();
+        let mut bombs: Vec<(Pos, u8, u32)> = Vec::new();
+        for (i, b) in obs.bombs.iter().enumerate() {
+            bombs.push((b.pos, b.range, b.ticks_left));
+            if b.flight.is_some() {
+                // a bomb in the air explodes where it lands, or where it is if the fuse is
+                // shorter than the flight: both are dangerous
+                let landing = predict_landing(&obs.arena, &obs.players, &obs.bombs, i);
+                if landing != b.pos {
+                    bombs.push((landing, b.range, b.ticks_left));
+                }
+            }
+        }
         bombs.extend(extra);
         let blasts: Vec<_> = bombs
             .iter()

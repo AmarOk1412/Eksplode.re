@@ -137,3 +137,73 @@ fn never_walks_into_a_blast_it_can_avoid() {
     run_bot(&mut s, 30);
     assert!(s.players[0].alive);
 }
+
+fn input_after(s: &GameState) -> PlayerInput {
+    DefaultBot::new(1).decide(&s.observe(pid(0)))
+}
+
+#[test]
+fn bonuses_attract_the_bot_but_maluses_do_not() {
+    use bomberust_core::{PowerUp, PowerUpKind};
+    // a punch two squares up and a slow two squares down: the bot goes for the punch
+    let mut s = duel(&OPEN, (3, 3), (5, 5));
+    s.powerups.push(PowerUp {
+        pos: pos(3, 1),
+        kind: PowerUpKind::Punch,
+    });
+    s.powerups.push(PowerUp {
+        pos: pos(3, 5),
+        kind: PowerUpKind::Slow,
+    });
+    s.players[1].alive = true;
+    for _ in 0..6 {
+        let i = input_after(&s);
+        if i.mv.is_some() {
+            assert_eq!(i.mv, Some(Dir::Up), "{i:?}");
+            break;
+        }
+        step(&mut s, &[PlayerInput::default(); 4]);
+    }
+}
+
+#[test]
+fn a_bot_walks_around_maluses() {
+    use bomberust_core::{PowerUp, PowerUpKind};
+    for kind in [
+        PowerUpKind::Slow,
+        PowerUpKind::HyperSpeed,
+        PowerUpKind::SmallBomb,
+    ] {
+        let mut s = duel(&OPEN, (1, 1), (5, 5));
+        s.players[0].bombs_max = 1;
+        for (x, y) in [(2, 1), (1, 2), (3, 3), (2, 2)] {
+            s.powerups.push(PowerUp {
+                pos: pos(x, y),
+                kind,
+            });
+        }
+        run_bot(&mut s, 120);
+        assert!(s.players[0].malus.is_none(), "{kind:?}");
+    }
+}
+
+#[test]
+fn bots_survive_every_power_on_the_board_and_never_punch() {
+    use bomberust_core::{PowerUp, PowerUpKind};
+    let mut s = duel(&OPEN, (1, 1), (5, 5));
+    s.players[0].has_punch = true;
+    for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
+        s.powerups.push(PowerUp {
+            pos: pos(2 + (i as u8 % 3), 2 + (i as u8 / 3)),
+            kind: *kind,
+        });
+    }
+    let mut bot = DefaultBot::new(1);
+    for _ in 0..200 {
+        let i = bot.decide(&s.observe(pid(0)));
+        assert!(!i.punch, "bots do not punch in this version");
+        let mut inputs = [PlayerInput::default(); 4];
+        inputs[0] = i;
+        step(&mut s, &inputs);
+    }
+}

@@ -32,6 +32,7 @@ pub fn add_bomb(s: &mut GameState, owner: u8, x: u8, y: u8, ticks_left: u32) {
         pos: pos(x, y),
         ticks_left,
         range,
+        flight: None,
     });
     s.players[usize::from(owner)].bombs_active += 1;
 }

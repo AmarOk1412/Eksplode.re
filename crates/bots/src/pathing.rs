@@ -15,6 +15,8 @@ pub struct PathRequest<'a> {
     /// Direction preference, used to break ties.
     pub order: [Dir; 4],
     pub max_depth: u32,
+    /// Do not step on a malus power-up (it is never worth it unless fleeing).
+    pub avoid_malus: bool,
 }
 
 impl<'a> PathRequest<'a> {
@@ -26,6 +28,7 @@ impl<'a> PathRequest<'a> {
             earliest_move: me.cooldown_left.max(1),
             order: Dir::ALL,
             max_depth: 14,
+            avoid_malus: true,
         }
     }
 }
@@ -48,7 +51,7 @@ pub fn find_path(req: &PathRequest, goal: &dyn Fn(Pos) -> bool) -> Option<Vec<Di
         if k == 0 {
             0
         } else {
-            req.earliest_move + (k - 1) * me.move_cooldown
+            req.earliest_move + (k - 1) * me.effective_cooldown()
         }
     };
 
@@ -90,7 +93,10 @@ pub fn find_path(req: &PathRequest, goal: &dyn Fn(Pos) -> bool) -> Option<Vec<Di
             let Some(next) = pos.step(dir, obs.arena.width(), obs.arena.height()) else {
                 continue;
             };
-            if passable(obs, next) && seen.insert(next) {
+            if passable(obs, next)
+                && !(req.avoid_malus && has_malus(obs, next))
+                && seen.insert(next)
+            {
                 nodes.push(Node {
                     pos: next,
                     depth: depth + 1,
@@ -103,10 +109,15 @@ pub fn find_path(req: &PathRequest, goal: &dyn Fn(Pos) -> bool) -> Option<Vec<Di
     None
 }
 
+/// Does a malus power-up lie on `p`?
+pub fn has_malus(obs: &Observation, p: Pos) -> bool {
+    obs.powerups.iter().any(|u| u.pos == p && u.kind.is_malus())
+}
+
 /// Can the player step on `p` right now (ignoring fire)?
 pub fn passable(obs: &Observation, p: Pos) -> bool {
     obs.arena.tile(p) == Tile::Floor
-        && !obs.bombs.iter().any(|b| b.pos == p)
+        && !obs.bombs.iter().any(|b| b.flight.is_none() && b.pos == p)
         && !obs
             .players
             .iter()
