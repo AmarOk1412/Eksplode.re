@@ -37,7 +37,7 @@ runs the simulation and validates every message, whatever the transport.
 | `AddBot` | none | lobby owner only: put a bot into the first free slot |
 | `RemoveBot` | none | lobby owner only: free the highest bot slot |
 | `DevPauseBots` | `paused: bool` | developer mode and owner only: stop or resume the bots |
-| `DevSetDrops` | `chances: [f32; 7]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
+| `DevSetDrops` | `chances: [f32; 8]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
 | `DevResetDrops` | none | developer mode and owner only: back to the default drop table |
 
 Examples:
@@ -61,7 +61,7 @@ Examples:
 | `Ended` | `outcome: {"Winner": slot} / "Draw"` | the round is over; the lobby follows |
 | `Error` | `code: string`, `message: string` | a message was refused; see below |
 | `Pong` | `nonce: u64` | answer to `Ping` |
-| `DevState` | `paused: bool`, `drops: [f32; 7]` | developer mode: sent to a joiner and to everybody when the pause or the drop table changes |
+| `DevState` | `paused: bool`, `drops: [f32; 8]` | developer mode: sent to a joiner and to everybody when the pause or the drop table changes |
 
 `controller` in a lobby slot is `Local` (a person at the host), `Remote` (a person on the
 network, terminal or browser), `Bot` or `Empty`.
@@ -77,10 +77,11 @@ Examples:
 
 An `Observation` is what any participant, human or bot, may see: the arena, the four players,
 bombs, flames and the power-ups lying on the board. It never contains the random generator or
-the drop table. Players carry `has_punch` and `malus` (`{"kind":"Slow","ticks_left":120}` or
+the drop table. Players carry `has_punch`, `has_kick` and `malus` (`{"kind":"Slow","ticks_left":120}` or
 null); a bomb in the air carries `flight` (`{"dir":"Right","hop_left":1,"origin":{"x":3,"y":1}}`).
 The config adds `malus_ticks` and `punch_hop_ticks`; all new fields are optional for older
-peers. Events gain `BombPunched`, `BombHopped`, `BombLanded`, `MalusStarted` and `MalusEnded`.
+peers. Events gain `BombPunched`, `BombHopped`, `BombLanded`, `BombKicked`, `BombSlid`, `BombStopped`,
+`MalusStarted` and `MalusEnded`.
 Rules: [GAMEPLAY.md](GAMEPLAY.md).
 
 ## Looks
@@ -114,7 +115,7 @@ none and old clients ignore the field.
 | `NoSlot` | `AddBot` with all slots taken |
 | `BadTick` | an `Input` from the future |
 | `DevDisabled` | a `Dev*` message on a host that was not started with `--dev` |
-| `BadValue` | `DevSetDrops` with a value outside 0 to 1, not finite or not seven values |
+| `BadValue` | `DevSetDrops` with a value outside 0 to 1, not finite or not eight values |
 | `Timeout` | silent for too long; the slot goes to a bot |
 | `HostLeft` | the host is shutting down; every client gets it before the connection closes |
 | `LookAdjusted` | the requested colour was taken; the message names the colour you got (a notice, not a refusal) |

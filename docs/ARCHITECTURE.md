@@ -67,10 +67,11 @@ Pure rules in [`crates/core`](../crates/core).
   drop table. Bots and the render module consume only this.
 - `Lobby` and `Controller` (`Local`, `Remote`, `Bot`, `Empty`) describe who holds each slot; the
   lobby owner is the lowest slot held by a person.
-- `drops` holds the `DropTable`: seven chances in `PowerUpKind::ALL` order, rolled with the seeded
+- `drops` holds the `DropTable`: eight chances in `PowerUpKind::ALL` order, rolled with the seeded
   generator when a block is destroyed (so the table can change live in developer mode).
   `punch` has the hop and landing rules of a punched bomb and `predict_landing`, which bots use
-  to see where a flying bomb will explode. Maluses (slow, hyper speed, small bomb) are timers on
+  to see where a flying bomb will explode; `kick` has the slide rules of a kicked bomb and
+  `predict_slide_stop` and `predict_slide_explosion` for the same purpose. Maluses (slow, hyper speed, small bomb) are timers on
   the participant.
 
 ### `bots`
@@ -79,7 +80,8 @@ Pure rules in [`crates/core`](../crates/core).
 `Observation`, return a `PlayerInput`. It builds a `DangerMap` (where flames will be, including
 chain reactions), finds paths with `find_path`, flees fire, collects power-ups, hunts opponents,
 digs through blocks and only drops a bomb when it has a way out. It dodges flying bombs (the
-landing square and the current square both count as dangerous), prefers bonuses, walks around
+landing square and the current square both count as dangerous, and for a sliding bomb the square
+where the fuse ends and its stop square), prefers bonuses, walks around
 maluses unless fleeing and never punches. A bot sees exactly what a human sees.
 
 ### `net`

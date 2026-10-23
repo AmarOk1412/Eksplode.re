@@ -27,8 +27,8 @@ See [AUDIO.md](AUDIO.md).
 
 `--dev` (also `bomberust-cli host --dev`) turns on developer mode for testing. The page then shows
 a "DEV MODE" marker and a panel for the lobby owner: pause or resume every bot (placed bombs keep
-burning, people are not affected), seven sliders from 0 to 100 % for the drop chance of each power
-(extra bomb, flame, roller, punch, slow, hyper speed, small bomb) and a reset button. The sliders
+burning, people are not affected), eight sliders from 0 to 100 % for the drop chance of each power
+(extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick) and a reset button. The sliders
 change what blocks destroyed from then on drop, also in the middle of a match; for example punch
 at 100 % and the rest at 0 % makes every block drop a punch. Without `--dev` the server refuses
 every developer command (`DevDisabled`) and the page shows no panel. Developer mode is for testing

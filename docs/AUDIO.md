@@ -39,6 +39,7 @@ sound per snapshot, and at most 8 sounds start per snapshot.
 | `bonus` | `PowerUpCollected` of a bonus | rising three-note arpeggio C5 E5 G5, 60 ms notes |
 | `malus` | `PowerUpCollected` of a malus | 250 ms sawtooth buzz falling from 400 to 120 Hz |
 | `punch` | `BombPunched` | 120 ms high-passed noise burst plus a triangle pitch drop from 700 to 200 Hz |
+| `kick` | `BombKicked` | 110 ms triangle thud falling from 260 to 90 Hz |
 | `land` | `BombLanded` | 90 ms sine thud at 140 Hz |
 | `eliminated` | `PlayerEliminated` | four descending triangle notes, 100 ms each |
 | `win` | `RoundEnded` with a winner | rising major fanfare C5 E5 G5 C6 |

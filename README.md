@@ -102,8 +102,9 @@ repeats. In the browser the game keeps moving while a key is held.
 
 Bombs explode after 3 s in a cross, stop at walls and destroy the first block, trigger other
 bombs they reach, and eliminate every player on a burning tile. Blocks may hide power-ups:
-extra bomb, roller (faster), flame (longer range) and a rare punch for bombs, but also maluses
-(slow, hyper speed, small bomb) that last 10 s. See [docs/GAMEPLAY.md](docs/GAMEPLAY.md). The web page has generated sound effects and music with a
+extra bomb, roller (faster), flame (longer range), a rare punch and a kick that pushes bombs
+until they hit something, but also maluses (slow, hyper speed, small bomb) that last 10 s. Every
+power has a pixel-art icon and players turn and walk as they move. See [docs/GAMEPLAY.md](docs/GAMEPLAY.md). The web page has generated sound effects and music with a
 volume panel (no audio files; see [docs/AUDIO.md](docs/AUDIO.md)). The last player alive wins; a round
 without a survivor, or lasting more than 3 minutes, is a draw. With a single player the round
 is a practice round that ends when that player dies.

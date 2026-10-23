@@ -121,8 +121,13 @@ result in a browser or with the smoke script, and record manual checks in a chec
 **A power.** Add the kind to `PowerUpKind` (and `ALL`, `is_malus`), its pickup effect in
 `crates/core/src/step.rs`, its share in `drops::DEFAULT_SHARES`, then core tests (`powerups`,
 `malus`, `drops`). Bots score it in `crates/bots`, the terminal needs a letter in `view.rs`, the
-render module an icon in `commands.rs`, the page a label in `devPanel` and the guide
-[GAMEPLAY.md](GAMEPLAY.md) a table row. Rebuild the wasm.
+render module a 10x10 pixel icon in `sprites.rs` (`icon`) and a letter in `commands.rs`, the
+page a label in `DROP_LABELS` and the guide [GAMEPLAY.md](GAMEPLAY.md) a table row; the drop table
+(`DEFAULT_SHARES`, `DevSetDrops`, the dev panel) grows by one entry at the end. Rebuild the wasm.
+
+**A sprite pose.** Views and frames of the characters live in `look::grid_view` (front, back,
+left; right is mirrored) and the choice of view and frame in `Interp::pose` and `depth.rs`; test
+them in `crates/web-render/tests/sprites3.rs`.
 
 **A look option.** Add the name to `crates/net/src/look.rs` and `crates/web-render/src/look.rs`
 (the wire names must match), the pixels or boxes in `look.rs` and `iso3d.rs`, the option in
