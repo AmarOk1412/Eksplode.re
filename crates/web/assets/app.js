@@ -31,6 +31,7 @@ const DIRECTIONS = {
   KeyD: "Right",
 };
 const BOMB_KEYS = new Set(["Space", "KeyE"]);
+const PUNCH_KEYS = new Set(["KeyZ", "KeyQ"]);
 const TICK_MS = 50;
 const PROTOCOL_VERSION = 1;
 
@@ -39,6 +40,7 @@ export class KeyTracker {
   constructor() {
     this.held = [];
     this.bomb = false;
+    this.punch = false;
   }
 
   press(code) {
@@ -46,6 +48,8 @@ export class KeyTracker {
       if (!this.held.includes(code)) this.held.push(code);
     } else if (BOMB_KEYS.has(code)) {
       this.bomb = true;
+    } else if (PUNCH_KEYS.has(code)) {
+      this.punch = true;
     }
   }
 
@@ -56,13 +60,15 @@ export class KeyTracker {
   clear() {
     this.held = [];
     this.bomb = false;
+    this.punch = false;
   }
 
-  /** The latest pressed direction that is still held; a bomb press fires once. */
+  /** The latest pressed direction that is still held; bomb and punch presses fire once. */
   take() {
     const last = this.held[this.held.length - 1];
-    const input = { mv: last ? DIRECTIONS[last] : null, bomb: this.bomb };
+    const input = { mv: last ? DIRECTIONS[last] : null, bomb: this.bomb, punch: this.punch };
     this.bomb = false;
+    this.punch = false;
     return input;
   }
 }
@@ -153,6 +159,7 @@ export function hudRows(state) {
   const slots = state.lobby?.slots;
   if (!players || !slots) return [];
   const base = state.observation.config?.base_move_cooldown ?? 4;
+  const hz = state.observation.config?.tick_hz > 0 ? state.observation.config.tick_hz : 20;
   const rows = [];
   slots.forEach((slot, i) => {
     if (slot.controller === "Empty" || !players[i]) return;
@@ -168,14 +175,27 @@ export function hudRows(state) {
       bombs: `${p.bombs_active}/${p.bombs_max}`,
       range: p.range,
       speed: base + 1 - p.move_cooldown,
+      effects: effectsOf(p, hz),
       you,
     });
   });
   return rows;
 }
 
+/** Short names of what is active on a player: the punch and the malus with the seconds left. */
+export function effectsOf(player, hz) {
+  const effects = [];
+  if (player.has_punch) effects.push("punch");
+  const m = player.malus;
+  if (m && typeof m.ticks_left === "number") {
+    const name = { Slow: "slow", HyperSpeed: "hyper", SmallBomb: "small" }[m.kind] ?? "malus";
+    effects.push(`${name} ${Math.ceil(m.ticks_left / hz)}s`);
+  }
+  return effects;
+}
+
 export function inputMessage(state, keys) {
-  return { type: "Input", tick: state.tick, mv: keys.mv, bomb: keys.bomb };
+  return { type: "Input", tick: state.tick, mv: keys.mv, bomb: keys.bomb, punch: keys.punch === true };
 }
 
 /** Time left in the round as `MM:SS`, or an empty string when the snapshot has no limit. */
@@ -412,7 +432,7 @@ function start() {
         chip.textContent = String(row.slot + 1);
         const text = document.createElement("span");
         text.textContent = row.alive
-          ? `${row.label}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}`
+          ? `${row.label}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
           : `${row.label}: eliminated`;
         li.append(chip, text);
         return li;

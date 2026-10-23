@@ -122,10 +122,27 @@ test("the hud lists the participants with their stats", () => {
   const s = run([welcome(1, lobby("Remote", "Remote", "Bot")), { type: "Snapshot", tick: 1, state: { players, config: { base_move_cooldown: 4 } }, events: [] }]);
   const rows = hudRows(s);
   assert.equal(rows.length, 3, "empty slots are not listed");
-  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, you: true });
+  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, effects: [], you: true });
   assert.equal(rows[2].label, "Bot");
   assert.equal(rows[2].kind, "bot");
   assert.equal(rows[2].alive, false);
+});
+
+test("f3_us2_as9_the_hud_lists_active_effects_with_seconds_left", () => {
+  const players = [0, 1, 2].map(() => ({ alive: true, bombs_active: 0, bombs_max: 1, range: 2, move_cooldown: 4 }));
+  players[1].has_punch = true;
+  players[1].malus = { kind: "Slow", ticks_left: 7 * 20 - 3 };
+  players[2].malus = { kind: "HyperSpeed", ticks_left: 80 };
+  const s = run([
+    welcome(1, lobby("Remote", "Remote", "Bot")),
+    { type: "Snapshot", tick: 1, state: { players, config: { base_move_cooldown: 4, tick_hz: 20 } }, events: [] },
+  ]);
+  const rows = hudRows(s);
+  assert.deepEqual(rows[0].effects, []);
+  assert.deepEqual(rows[1].effects, ["punch", "slow 7s"]);
+  assert.deepEqual(rows[2].effects, ["hyper 4s"]);
+  const small = { ...s, observation: { ...s.observation, players: players.map((p, i) => (i === 2 ? { ...p, malus: { kind: "SmallBomb", ticks_left: 161 } } : p)) } };
+  assert.deepEqual(hudRows(small)[2].effects, ["small 9s"]);
 });
 
 test("us2_as3_other_human_players_are_listed_by_name_and_kind", () => {
@@ -147,8 +164,9 @@ test("us2_as4_a_full_match_is_explained_and_not_owner_names_the_owner", () => {
 
 test("input messages carry the latest tick and the key state", () => {
   const s = { tick: 12 };
-  assert.deepEqual(inputMessage(s, { mv: "Left", bomb: true }), { type: "Input", tick: 12, mv: "Left", bomb: true });
-  assert.deepEqual(inputMessage(s, { mv: null, bomb: false }), { type: "Input", tick: 12, mv: null, bomb: false });
+  assert.deepEqual(inputMessage(s, { mv: "Left", bomb: true, punch: false }), { type: "Input", tick: 12, mv: "Left", bomb: true, punch: false });
+  assert.deepEqual(inputMessage(s, { mv: null, bomb: false, punch: true }), { type: "Input", tick: 12, mv: null, bomb: false, punch: true });
+  assert.equal(inputMessage(s, { mv: null, bomb: false }).punch, false, "a missing punch means false");
 });
 
 test("the timer shows the time left as minutes and seconds", () => {

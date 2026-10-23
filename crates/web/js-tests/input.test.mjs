@@ -5,11 +5,11 @@ import { KeyTracker } from "../assets/app.js";
 test("us1_as4_arrow_keys_and_space", () => {
   const k = new KeyTracker();
   k.press("ArrowLeft");
-  assert.deepEqual(k.take(), { mv: "Left", bomb: false });
+  assert.deepEqual(k.take(), { mv: "Left", bomb: false, punch: false });
   k.press("Space");
-  assert.deepEqual(k.take(), { mv: "Left", bomb: true });
+  assert.deepEqual(k.take(), { mv: "Left", bomb: true, punch: false });
   k.release("ArrowLeft");
-  assert.deepEqual(k.take(), { mv: null, bomb: false });
+  assert.deepEqual(k.take(), { mv: null, bomb: false, punch: false });
 });
 
 test("us1_as4_wasd_and_e", () => {
@@ -56,15 +56,15 @@ test("us1_as4_blur_clears_every_key", () => {
   k.press("ArrowDown");
   k.press("Space");
   k.clear();
-  assert.deepEqual(k.take(), { mv: null, bomb: false });
+  assert.deepEqual(k.take(), { mv: null, bomb: false, punch: false });
 });
 
 test("unknown keys are ignored and releasing an unpressed key is harmless", () => {
   const k = new KeyTracker();
-  k.press("KeyZ");
+  k.press("KeyX");
   k.press("Enter");
   k.release("ArrowUp");
-  assert.deepEqual(k.take(), { mv: null, bomb: false });
+  assert.deepEqual(k.take(), { mv: null, bomb: false, punch: false });
 });
 
 test("key repeat of a held direction keeps it", () => {
@@ -75,4 +75,22 @@ test("key repeat of a held direction keeps it", () => {
   assert.equal(k.take().mv, "Down");
   k.release("ArrowDown");
   assert.equal(k.take().mv, null);
+});
+
+test("f3_us2_as9_punch_keys_fire_once_and_clear_on_release_and_blur", () => {
+  for (const code of ["KeyZ", "KeyQ"]) {
+    const k = new KeyTracker();
+    k.press(code);
+    assert.equal(k.take().punch, true, code);
+    assert.equal(k.take().punch, false, "a punch fires once");
+    k.press(code);
+    k.release(code);
+    assert.equal(k.take().punch, true, "a quick tap is not lost");
+    k.press(code);
+    k.clear();
+    assert.equal(k.take().punch, false, "blur clears it");
+  }
+  const k = new KeyTracker();
+  k.press("KeyZ");
+  assert.deepEqual(k.take(), { mv: null, bomb: false, punch: true });
 });

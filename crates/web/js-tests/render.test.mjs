@@ -119,3 +119,19 @@ test("a loaded game can be picked by canvas position", async () => {
   assert.ok(m.ex.bomberust_pick_tile(400, 300) >= 0);
   assert.equal(m.ex.bomberust_pick_tile(-50, -50), -1);
 });
+
+test("f3_us2_as9_the_wasm_draws_every_power_icon_and_the_malus_pulse", async () => {
+  const m = await loadModule();
+  const obs = JSON.parse(fixtureText());
+  const kinds = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb"];
+  obs.powerups = kinds.map((kind, i) => ({ pos: { x: 1 + i, y: 1 }, kind }));
+  obs.players[0].malus = { kind: "Slow", ticks_left: 100 };
+  assert.equal(m.loadJson(JSON.stringify(obs)), 0);
+  const list = commands(m.frame(...CANVAS, 1));
+  const letters = list.filter((c) => c.kind === KIND.text).map((c) => String.fromCharCode(c.text));
+  for (const letter of ["B", "R", "F", "P", "S", "H", "s"]) {
+    assert.ok(letters.includes(letter), `missing icon ${letter}`);
+  }
+  const pulse = list.filter((c) => c.kind === KIND.quad && c.color[3] > 0.1 && c.color[3] < 0.5 && near(c.color.slice(0, 3), [0.25, 0.5, 0.95]));
+  assert.ok(pulse.length >= 1, "no malus pulse");
+});
