@@ -7,7 +7,7 @@ use crate::state::{Bomb, Event, Flight, GameState, Participant};
 
 /// Whether bomb `idx` could rest on `at`: a floor tile with no living player and no other bomb,
 /// landed or flying.
-fn free_square(
+pub(crate) fn free_square(
     arena: &Arena,
     players: &[Participant],
     bombs: &[Bomb],
@@ -79,6 +79,7 @@ pub(crate) fn apply(state: &mut GameState, i: usize, events: &mut Vec<Event>) {
     else {
         return;
     };
+    bomb.slide = None;
     bomb.flight = Some(Flight {
         dir,
         hop_left: hop,

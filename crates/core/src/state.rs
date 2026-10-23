@@ -25,11 +25,13 @@ pub enum PowerUpKind {
     HyperSpeed,
     /// Malus: bombs reach one square for a while.
     SmallBomb,
+    /// Walking into a landed bomb makes it slide until the next square is blocked.
+    Kick,
 }
 
 impl PowerUpKind {
     /// Every kind, in the order the drop table uses.
-    pub const ALL: [PowerUpKind; 7] = [
+    pub const ALL: [PowerUpKind; 8] = [
         PowerUpKind::ExtraBomb,
         PowerUpKind::Range,
         PowerUpKind::Speed,
@@ -37,6 +39,7 @@ impl PowerUpKind {
         PowerUpKind::Slow,
         PowerUpKind::HyperSpeed,
         PowerUpKind::SmallBomb,
+        PowerUpKind::Kick,
     ];
 
     /// Maluses are timed and hurt the player who takes them; bonuses last for the round.
@@ -82,6 +85,9 @@ pub struct Participant {
     pub cooldown_left: u32,
     /// Whether the player may punch the bomb they face.
     pub has_punch: bool,
+    /// Whether walking into a landed bomb pushes it.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub has_kick: bool,
     /// The malus that applies now, if any.
     pub malus: Option<ActiveMalus>,
 }
@@ -118,6 +124,16 @@ pub struct Flight {
     pub origin: Pos,
 }
 
+/// A kicked bomb on its way: it moves one square every `slide_ticks` until the next square is
+/// blocked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Slide {
+    pub dir: Dir,
+    /// Ticks until the next step.
+    pub step_left: u32,
+}
+
 /// A placed bomb. It blocks movement into its tile.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -128,6 +144,9 @@ pub struct Bomb {
     pub range: u8,
     /// Set while the bomb is flying after a punch; it then blocks nothing and flames ignore it.
     pub flight: Option<Flight>,
+    /// Set while the bomb slides after a kick; it still blocks and flames still reach it.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub slide: Option<Slide>,
 }
 
 /// One burning tile.
@@ -195,6 +214,17 @@ pub enum Event {
         pos: Pos,
     },
     BombLanded {
+        pos: Pos,
+    },
+    BombKicked {
+        player: PlayerId,
+        from: Pos,
+        dir: Dir,
+    },
+    BombSlid {
+        pos: Pos,
+    },
+    BombStopped {
         pos: Pos,
     },
     MalusStarted {
@@ -288,6 +318,7 @@ impl GameState {
             move_cooldown: config.base_move_cooldown,
             cooldown_left: 0,
             has_punch: false,
+            has_kick: false,
             malus: None,
         });
         Ok(GameState {

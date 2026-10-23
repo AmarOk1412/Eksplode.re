@@ -3,13 +3,14 @@
 use crate::action::{PlayerInput, MAX_PLAYERS};
 use crate::arena::Tile;
 use crate::bomb;
+use crate::kick;
 use crate::punch;
 use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind};
 
 /// Advances the round by one tick and returns what happened.
 ///
 /// Order: cooldowns, flame and fuse timers, malus timers, moves (rotating priority), bomb
-/// flights (hops and landings), punches, bomb placement, detonation with chain reactions (drops
+/// flights (hops and landings), slides (kicked bombs), punches, bomb placement, detonation with chain reactions (drops
 /// are decided for destroyed blocks), eliminations, end-of-round check. Does nothing once the
 /// round has ended.
 pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<Event> {
@@ -37,6 +38,7 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
         move_player(state, i, inputs[i], &mut events);
     }
     punch::advance(state, &mut events);
+    kick::advance(state, &mut events);
     for &i in &order {
         if inputs[i].punch {
             punch::apply(state, i, &mut events);
@@ -99,6 +101,7 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
             .any(|b| b.pos == to && b.flight.is_none())
         || state.players.iter().any(|o| o.alive && o.pos == to);
     if blocked {
+        kick::start(state, i, to, dir, events);
         return;
     }
     state.players[i].pos = to;
@@ -120,6 +123,7 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
                 p.move_cooldown = p.move_cooldown.saturating_sub(1).max(cfg.min_move_cooldown);
             }
             PowerUpKind::Punch => p.has_punch = true,
+            PowerUpKind::Kick => p.has_kick = true,
             PowerUpKind::Slow | PowerUpKind::HyperSpeed | PowerUpKind::SmallBomb => {
                 p.malus = Some(ActiveMalus {
                     kind: power.kind,

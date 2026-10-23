@@ -27,6 +27,9 @@ pub struct Config {
     /// Ticks a punched bomb needs for one hop.
     #[cfg_attr(feature = "serde", serde(default = "default_punch_hop_ticks"))]
     pub punch_hop_ticks: u32,
+    /// Ticks a kicked bomb needs for one square.
+    #[cfg_attr(feature = "serde", serde(default = "default_slide_ticks"))]
+    pub slide_ticks: u32,
 }
 
 #[cfg(feature = "serde")]
@@ -37,6 +40,11 @@ fn default_malus_ticks() -> u32 {
 #[cfg(feature = "serde")]
 fn default_punch_hop_ticks() -> u32 {
     2
+}
+
+#[cfg(feature = "serde")]
+fn default_slide_ticks() -> u32 {
+    3
 }
 
 impl Default for Config {
@@ -58,6 +66,7 @@ impl Default for Config {
             powerup_chance: 0.3,
             malus_ticks: 200,
             punch_hop_ticks: 2,
+            slide_ticks: 3,
         }
     }
 }
@@ -87,8 +96,8 @@ impl Config {
         if self.start_range == 0 || self.start_range > self.max_range {
             return bad("start_range must be in 1..=max_range");
         }
-        if self.malus_ticks == 0 || self.punch_hop_ticks == 0 {
-            return bad("malus_ticks and punch_hop_ticks must be positive");
+        if self.malus_ticks == 0 || self.punch_hop_ticks == 0 || self.slide_ticks == 0 {
+            return bad("malus_ticks, punch_hop_ticks and slide_ticks must be positive");
         }
         if !(0.0..=1.0).contains(&self.block_density) || !(0.0..=1.0).contains(&self.powerup_chance)
         {

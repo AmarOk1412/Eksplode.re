@@ -9,6 +9,7 @@ pub mod bomb;
 pub mod config;
 pub mod drops;
 pub mod error;
+pub mod kick;
 pub mod lobby;
 pub mod observation;
 pub mod punch;
@@ -27,6 +28,6 @@ pub use observation::Observation;
 pub use rng::Rng;
 pub use state::{
     ActiveMalus, Bomb, Event, Flame, Flight, GameState, Outcome, Participant, Phase, PowerUp,
-    PowerUpKind,
+    PowerUpKind, Slide,
 };
 pub use step::step;

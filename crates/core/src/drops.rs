@@ -5,8 +5,8 @@ use crate::rng::Rng;
 use crate::state::PowerUpKind;
 
 /// Shares of the overall drop rate, in [`PowerUpKind::ALL`] order: extra bomb, flame, roller,
-/// punch, slow, hyper speed, small bomb. They add up to 1.0.
-pub const DEFAULT_SHARES: [f32; 7] = [0.20, 0.24, 0.24, 0.03, 0.10, 0.08, 0.11];
+/// punch, slow, hyper speed, small bomb, kick. They add up to 1.0.
+pub const DEFAULT_SHARES: [f32; 8] = [0.19, 0.22, 0.22, 0.03, 0.10, 0.08, 0.11, 0.05];
 
 /// One chance per power kind, in [`PowerUpKind::ALL`] order.
 ///
@@ -14,7 +14,7 @@ pub const DEFAULT_SHARES: [f32; 7] = [0.20, 0.24, 0.24, 0.03, 0.10, 0.08, 0.11];
 /// scaled down proportionally when rolling, so a block never drops more than one item.
 #[derive(Clone, Debug, PartialEq)]
 pub struct DropTable {
-    pub chances: [f32; 7],
+    pub chances: [f32; 8],
 }
 
 impl DropTable {
@@ -31,7 +31,7 @@ impl DropTable {
     }
 
     /// A table with the given chances; each must be finite and within `0.0..=1.0`.
-    pub fn new(chances: [f32; 7]) -> Result<DropTable, CoreError> {
+    pub fn new(chances: [f32; 8]) -> Result<DropTable, CoreError> {
         let table = DropTable { chances };
         table.validate()?;
         Ok(table)

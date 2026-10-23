@@ -22,6 +22,7 @@ pub(crate) fn place(state: &mut GameState, i: usize, events: &mut Vec<Event>) {
         ticks_left: state.config.fuse_ticks,
         range: p.placed_range(),
         flight: None,
+        slide: None,
     };
     events.push(Event::BombPlaced {
         player: p.id,

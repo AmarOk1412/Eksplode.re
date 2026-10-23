@@ -67,6 +67,7 @@ fn f3_us2_as1_a_pickup_removes_the_item_and_applies_at_once() {
             PowerUpKind::Range => assert_eq!(s.players[0].range, 3),
             PowerUpKind::Speed => assert_eq!(s.players[0].move_cooldown, 3),
             PowerUpKind::Punch => assert!(s.players[0].has_punch),
+            PowerUpKind::Kick => assert!(s.players[0].has_kick),
             _ => assert_eq!(s.players[0].malus.map(|m| m.kind), Some(kind)),
         }
     }
