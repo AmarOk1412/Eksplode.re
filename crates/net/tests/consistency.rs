@@ -37,6 +37,7 @@ fn drive(c: Client, slot: usize) -> (Vec<Duration>, Option<Outcome>, u32) {
                     tick,
                     mv,
                     bomb: false,
+                    punch: false,
                 });
             }
             ServerMsg::Ended { outcome } => return (latencies, Some(outcome), last_tick),

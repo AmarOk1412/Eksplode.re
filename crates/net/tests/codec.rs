@@ -33,11 +33,13 @@ fn every_client_message_round_trips() {
         tick: 7,
         mv: Some(Dir::Left),
         bomb: true,
+        punch: false,
     });
     roundtrip(ClientMsg::Input {
         tick: 0,
         mv: None,
         bomb: false,
+        punch: false,
     });
     roundtrip(ClientMsg::Start);
     roundtrip(ClientMsg::AddBot);
@@ -187,4 +189,92 @@ fn refusal_codes_round_trip_as_errors() {
     for code in ["NotOwner", "CannotStart", "WrongPhase", "NoSlot"] {
         roundtrip(ServerMsg::error(code, "why"));
     }
+}
+
+#[test]
+fn an_input_without_punch_means_no_punch() {
+    let old = br#"{"type":"Input","tick":3,"mv":"Left","bomb":true}"#;
+    match decode::<ClientMsg>(old).unwrap() {
+        ClientMsg::Input {
+            tick,
+            mv,
+            bomb,
+            punch,
+        } => {
+            assert_eq!((tick, mv, bomb, punch), (3, Some(Dir::Left), true, false));
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn an_input_with_punch_round_trips() {
+    roundtrip(ClientMsg::Input {
+        tick: 9,
+        mv: None,
+        bomb: false,
+        punch: true,
+    });
+}
+
+#[test]
+fn the_observation_carries_punch_malus_and_flight() {
+    use bomberust_core::{ActiveMalus, Flight, PowerUpKind};
+    let mut s = GameState::new(Config::default(), 3, [true; 4]).unwrap();
+    s.players[1].has_punch = true;
+    s.players[1].malus = Some(ActiveMalus {
+        kind: PowerUpKind::Slow,
+        ticks_left: 120,
+    });
+    let bomb = bomberust_core::Bomb {
+        owner: PlayerId::new(1).unwrap(),
+        pos: Pos::new(3, 1),
+        ticks_left: 30,
+        range: 2,
+        flight: Some(Flight {
+            dir: Dir::Right,
+            hop_left: 1,
+            origin: Pos::new(2, 1),
+        }),
+    };
+    s.bombs.push(bomb);
+    let msg = ServerMsg::Snapshot {
+        tick: 1,
+        state: Box::new(s.observe(PlayerId::new(0).unwrap())),
+        events: vec![
+            Event::BombPunched {
+                player: PlayerId::new(1).unwrap(),
+                from: Pos::new(2, 1),
+                dir: Dir::Right,
+            },
+            Event::BombHopped {
+                pos: Pos::new(3, 1),
+            },
+            Event::MalusStarted {
+                player: PlayerId::new(1).unwrap(),
+                kind: PowerUpKind::Slow,
+            },
+        ],
+    };
+    let text = String::from_utf8(encode(&msg).unwrap()).unwrap();
+    assert!(text.contains(r#""has_punch":true"#), "{text}");
+    assert!(
+        text.contains(r#""malus":{"kind":"Slow","ticks_left":120}"#),
+        "{text}"
+    );
+    assert!(
+        text.contains(r#""flight":{"dir":"Right","hop_left":1"#),
+        "{text}"
+    );
+    roundtrip(msg);
+}
+
+#[test]
+fn old_config_json_without_the_new_values_still_decodes() {
+    let mut value = serde_json::to_value(Config::default()).unwrap();
+    let map = value.as_object_mut().unwrap();
+    map.remove("malus_ticks");
+    map.remove("punch_hop_ticks");
+    let config: Config = serde_json::from_value(value).unwrap();
+    assert_eq!((config.malus_ticks, config.punch_hop_ticks), (200, 2));
 }

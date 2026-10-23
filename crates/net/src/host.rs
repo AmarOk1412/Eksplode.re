@@ -409,7 +409,12 @@ impl Server {
             ClientMsg::Leave => self.remove(id),
             ClientMsg::SetLook { look } => self.set_look(id, &look),
             ClientMsg::SetReady { ready } => self.set_ready(id, ready),
-            ClientMsg::Input { tick, mv, bomb } => self.input(id, tick, PlayerInput { mv, bomb }),
+            ClientMsg::Input {
+                tick,
+                mv,
+                bomb,
+                punch,
+            } => self.input(id, tick, PlayerInput { mv, bomb, punch }),
             ClientMsg::Start => self.owner_command(id, OwnerCommand::Start),
             ClientMsg::AddBot => self.owner_command(id, OwnerCommand::AddBot),
             ClientMsg::RemoveBot => self.owner_command(id, OwnerCommand::RemoveBot),
@@ -587,6 +592,7 @@ impl Server {
             Some(old) => PlayerInput {
                 mv: input.mv,
                 bomb: old.bomb || input.bomb,
+                punch: old.punch || input.punch,
             },
             None => input,
         };

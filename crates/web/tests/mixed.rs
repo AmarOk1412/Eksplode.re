@@ -199,6 +199,7 @@ fn a_silent_browser_is_replaced_after_the_silence_timeout() {
                     tick,
                     mv: None,
                     bomb: false,
+                    punch: false,
                 })
                 .unwrap();
             }
@@ -331,6 +332,7 @@ fn drive(mut end: Endpoint, slot: usize) -> Vec<Duration> {
                     tick,
                     mv,
                     bomb: false,
+                    punch: false,
                 });
             }
             ServerMsg::Ended { .. } => break,

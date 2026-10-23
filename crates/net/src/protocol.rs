@@ -35,6 +35,9 @@ pub enum ClientMsg {
         tick: u32,
         mv: Option<Dir>,
         bomb: bool,
+        /// Punch the bomb on the faced square; absent from old clients (means no punch).
+        #[serde(default)]
+        punch: bool,
     },
     Leave,
     Ping {

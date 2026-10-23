@@ -33,6 +33,7 @@ fn follow(c: &Client) -> Record {
                     tick,
                     mv: None,
                     bomb: false,
+                    punch: false,
                 });
             }
             ServerMsg::Ended { outcome } => {
@@ -201,6 +202,7 @@ fn us3_as5_malformed_and_out_of_turn_messages_change_nothing() {
         tick: 0,
         mv: Some(Dir::Up),
         bomb: true,
+        punch: false,
     });
     let err = bad.recv_until(|m| matches!(m, ServerMsg::Error { .. }));
     assert!(matches!(err, Some(ServerMsg::Error { code, .. }) if code == "WrongPhase"));
@@ -211,6 +213,7 @@ fn us3_as5_malformed_and_out_of_turn_messages_change_nothing() {
         tick: 1_000_000,
         mv: None,
         bomb: false,
+        punch: false,
     });
     let err = bad.recv_until(|m| matches!(m, ServerMsg::Error { code, .. } if code == "BadTick"));
     assert!(err.is_some());
@@ -337,6 +340,7 @@ fn inputs_from_a_player_move_their_character() {
             tick,
             mv: Some(Dir::Down),
             bomb: false,
+            punch: false,
         });
         if let Ok(ServerMsg::Snapshot {
             tick: t, events, ..

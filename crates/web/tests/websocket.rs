@@ -103,6 +103,7 @@ fn us1_as4_input_moves_the_player() {
             tick,
             mv: Some(Dir::Down),
             bomb: false,
+            punch: false,
         });
         match ws.recv() {
             Some(ServerMsg::Snapshot {
