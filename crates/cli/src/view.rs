@@ -1,6 +1,6 @@
 //! Rendering of a game to a ratatui frame.
 
-use bomberust_core::{Observation, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
+use bomberust_core::{Dir, Observation, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -46,7 +46,16 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
     }
     if let Some(b) = state.bombs.iter().find(|b| b.pos == pos) {
         // a bomb in the air after a punch trails a wave
-        let glyph = if b.flight.is_some() { "(~" } else { "()" };
+        let glyph = match (b.flight, b.slide) {
+            (Some(_), _) => "(~",
+            (None, Some(s)) => match s.dir {
+                Dir::Right => "(>",
+                Dir::Left => "(<",
+                Dir::Up => "(^",
+                Dir::Down => "(v",
+            },
+            (None, None) => "()",
+        };
         return (
             glyph.into(),
             Style::default()
@@ -61,6 +70,7 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
             PowerUpKind::Speed => "+R",
             PowerUpKind::Range => "+F",
             PowerUpKind::Punch => "+P",
+            PowerUpKind::Kick => "+K",
             PowerUpKind::Slow => "-S",
             PowerUpKind::HyperSpeed => "-H",
             PowerUpKind::SmallBomb => "-s",
@@ -145,6 +155,9 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
             let mut effects = String::new();
             if p.has_punch {
                 effects.push_str(" punch");
+            }
+            if p.has_kick {
+                effects.push_str(" kick");
             }
             if let Some(m) = p.malus {
                 let name = match m.kind {

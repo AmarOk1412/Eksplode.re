@@ -66,6 +66,7 @@ fn draws_bombs_flames_and_powerups() {
         ticks_left: 30,
         range: 2,
         flight: None,
+        slide: None,
     });
     st.flames.push(Flame {
         pos: Pos::new(4, 3),
@@ -158,7 +159,7 @@ fn f3_us2_as9_every_power_has_its_letter() {
         });
     }
     let s = screen(&st, &ctx());
-    for glyph in ["+B", "+R", "+F", "+P", "-S", "-H", "-s"] {
+    for glyph in ["+B", "+R", "+F", "+P", "+K", "-S", "-H", "-s"] {
         assert!(s.contains(glyph), "{glyph}\n{s}");
     }
 }
@@ -176,6 +177,7 @@ fn f3_us2_as9_a_bomb_in_flight_looks_different_from_a_landed_one() {
             hop_left: 2,
             origin: Pos::new(3, 3),
         }),
+        slide: None,
     });
     let obs = st.observe(pid(0));
     let (glyph, _) = bomberust_cli::view::cell(&obs, Pos::new(3, 3));
@@ -203,4 +205,37 @@ fn f3_us2_as9_status_lines_list_the_punch_and_the_malus_with_seconds() {
         ticks_left: 9 * 20 - 19,
     });
     assert!(screen(&st, &ctx()).contains("small 9s"));
+}
+
+#[test]
+fn f3_us2_as12_a_sliding_bomb_shows_its_direction() {
+    use bomberust_core::{Dir, Slide};
+    for (dir, glyph) in [
+        (Dir::Right, "(>"),
+        (Dir::Left, "(<"),
+        (Dir::Up, "(^"),
+        (Dir::Down, "(v"),
+    ] {
+        let mut st = base();
+        st.bombs.push(Bomb {
+            owner: pid(0),
+            pos: Pos::new(3, 3),
+            ticks_left: 30,
+            range: 2,
+            flight: None,
+            slide: Some(Slide { dir, step_left: 2 }),
+        });
+        let obs = st.observe(pid(0));
+        let (g, _) = bomberust_cli::view::cell(&obs, Pos::new(3, 3));
+        assert_eq!(g, glyph, "{dir:?}");
+    }
+}
+
+#[test]
+fn f3_us2_as10_the_status_line_lists_the_kick() {
+    let mut st = base();
+    st.players[0].has_kick = true;
+    st.players[0].has_punch = true;
+    let s = screen(&st, &ctx());
+    assert!(s.contains("punch kick") || s.contains("kick"), "{s}");
 }
