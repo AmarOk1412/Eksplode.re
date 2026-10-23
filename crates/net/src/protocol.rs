@@ -54,7 +54,7 @@ pub enum ClientMsg {
         paused: bool,
     },
     /// Developer mode, owner only: the drop chance of each power in the order
-    /// `ExtraBomb, Range, Speed, Punch, Slow, HyperSpeed, SmallBomb`; seven finite values in
+    /// `ExtraBomb, Range, Speed, Punch, Slow, HyperSpeed, SmallBomb, Kick`; eight finite values in
     /// `0.0..=1.0`, otherwise `Error{BadValue}`.
     DevSetDrops {
         chances: Vec<f32>,
@@ -122,7 +122,7 @@ pub enum ServerMsg {
     /// when it changes.
     DevState {
         paused: bool,
-        drops: [f32; 7],
+        drops: [f32; 8],
     },
 }
 

@@ -63,7 +63,7 @@ fn every_server_message_round_trips() {
     });
     roundtrip(ServerMsg::DevState {
         paused: true,
-        drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2],
+        drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2, 0.3],
     });
     roundtrip(ServerMsg::Rejected {
         reason: RejectReason::Full,
@@ -241,8 +241,21 @@ fn the_observation_carries_punch_malus_and_flight() {
             hop_left: 1,
             origin: Pos::new(2, 1),
         }),
+        slide: None,
     };
     s.bombs.push(bomb);
+    s.players[2].has_kick = true;
+    s.bombs.push(bomberust_core::Bomb {
+        owner: PlayerId::new(2).unwrap(),
+        pos: Pos::new(5, 5),
+        ticks_left: 30,
+        range: 2,
+        flight: None,
+        slide: Some(bomberust_core::Slide {
+            dir: Dir::Left,
+            step_left: 2,
+        }),
+    });
     let msg = ServerMsg::Snapshot {
         tick: 1,
         state: Box::new(s.observe(PlayerId::new(0).unwrap())),
@@ -255,6 +268,17 @@ fn the_observation_carries_punch_malus_and_flight() {
             Event::BombHopped {
                 pos: Pos::new(3, 1),
             },
+            Event::BombKicked {
+                player: PlayerId::new(2).unwrap(),
+                from: Pos::new(6, 5),
+                dir: Dir::Left,
+            },
+            Event::BombSlid {
+                pos: Pos::new(5, 5),
+            },
+            Event::BombStopped {
+                pos: Pos::new(4, 5),
+            },
             Event::MalusStarted {
                 player: PlayerId::new(1).unwrap(),
                 kind: PowerUpKind::Slow,
@@ -263,6 +287,11 @@ fn the_observation_carries_punch_malus_and_flight() {
     };
     let text = String::from_utf8(encode(&msg).unwrap()).unwrap();
     assert!(text.contains(r#""has_punch":true"#), "{text}");
+    assert!(text.contains(r#""has_kick":true"#), "{text}");
+    assert!(
+        text.contains(r#""slide":{"dir":"Left","step_left":2}"#),
+        "{text}"
+    );
     assert!(
         text.contains(r#""malus":{"kind":"Slow","ticks_left":120}"#),
         "{text}"
@@ -288,7 +317,7 @@ fn old_config_json_without_the_new_values_still_decodes() {
 fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
     roundtrip(ClientMsg::DevPauseBots { paused: true });
     roundtrip(ClientMsg::DevSetDrops {
-        chances: vec![0.1; 7],
+        chances: vec![0.1; 8],
     });
     roundtrip(ClientMsg::DevResetDrops);
     let old = r#"{"type":"Welcome","slot":0,"config":null}"#;
