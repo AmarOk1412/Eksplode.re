@@ -49,6 +49,18 @@ pub enum ClientMsg {
     AddBot,
     /// Lobby owner only: free the highest bot slot.
     RemoveBot,
+    /// Developer mode, owner only: stop or resume every bot (placed bombs keep burning).
+    DevPauseBots {
+        paused: bool,
+    },
+    /// Developer mode, owner only: the drop chance of each power in the order
+    /// `ExtraBomb, Range, Speed, Punch, Slow, HyperSpeed, SmallBomb`; seven finite values in
+    /// `0.0..=1.0`, otherwise `Error{BadValue}`.
+    DevSetDrops {
+        chances: Vec<f32>,
+    },
+    /// Developer mode, owner only: back to the default drop table.
+    DevResetDrops,
 }
 
 /// Why a join was refused.
@@ -71,6 +83,9 @@ pub enum ServerMsg {
         /// The look of each slot (four entries); absent from old hosts.
         #[serde(default)]
         looks: Vec<Look>,
+        /// The host runs in developer mode; absent from old hosts (means `false`).
+        #[serde(default)]
+        dev: bool,
     },
     Rejected {
         reason: RejectReason,
@@ -103,6 +118,12 @@ pub enum ServerMsg {
     Pong {
         nonce: u64,
     },
+    /// Developer mode: the bot pause and the live drop table; sent to a joiner and to everybody
+    /// when it changes.
+    DevState {
+        paused: bool,
+        drops: [f32; 7],
+    },
 }
 
 impl ServerMsg {
@@ -113,6 +134,10 @@ impl ServerMsg {
         }
     }
 }
+
+/// The line printed when a host starts in developer mode.
+pub const DEV_WARNING: &str = "WARNING: developer mode is on: the owner can pause bots and change \
+drop chances. It is for testing; do not expose it to an untrusted network.";
 
 /// A player name is 1 to 16 printable characters.
 pub fn valid_name(name: &str) -> bool {

@@ -9,4 +9,6 @@ pub mod protocol;
 pub use client::Client;
 pub use codec::NetError;
 pub use host::{Host, HostConfig, HostHandle};
-pub use protocol::{ClientMsg, RejectReason, ServerMsg, DEFAULT_PORT, PROTOCOL_VERSION};
+pub use protocol::{
+    ClientMsg, RejectReason, ServerMsg, DEFAULT_PORT, DEV_WARNING, PROTOCOL_VERSION,
+};

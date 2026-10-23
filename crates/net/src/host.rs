@@ -11,7 +11,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use bomberust_bots::{Bot, DefaultBot};
 use bomberust_core::{
-    step, Config, Controller, GameState, Lobby, Phase, PlayerId, PlayerInput, MAX_PLAYERS,
+    step, Config, Controller, DropTable, GameState, Lobby, Phase, PlayerId, PlayerInput,
+    MAX_PLAYERS,
 };
 use serde_json::Value;
 
@@ -35,6 +36,8 @@ pub struct HostConfig {
     pub game: Config,
     /// While a match runs, a player silent for this long counts as disconnected.
     pub silence_timeout: Duration,
+    /// Developer mode: the owner may pause bots and change the drop table (testing only).
+    pub dev: bool,
 }
 
 impl Default for HostConfig {
@@ -46,6 +49,7 @@ impl Default for HostConfig {
             seed: None,
             game,
             silence_timeout: Duration::from_secs(10),
+            dev: false,
         }
     }
 }
@@ -273,6 +277,12 @@ fn spawn_connection(stream: TcpStream, id: u64, events: &Sender<Ev>) -> Result<(
     Ok(())
 }
 
+enum DevCommand {
+    Pause(bool),
+    Drops(Vec<f32>),
+    Reset,
+}
+
 #[derive(Clone, Copy)]
 enum OwnerCommand {
     Start,
@@ -304,11 +314,16 @@ struct Server {
     matches: u64,
     /// The look of each slot; only the entries of seated slots mean something.
     looks: [Look; MAX_PLAYERS],
+    /// Developer mode: bots give no input while this is set.
+    bots_paused: bool,
+    /// What destroyed blocks drop; changed live in developer mode and applied to every match.
+    drops: DropTable,
 }
 
 impl Server {
     fn new(cfg: HostConfig, rx: Receiver<Ev>) -> Self {
         Self {
+            drops: DropTable::defaults(cfg.game.powerup_chance),
             cfg,
             rx,
             lobby: Lobby::new(),
@@ -317,6 +332,7 @@ impl Server {
             next_tick: Instant::now(),
             matches: 0,
             looks: [0, 1, 2, 3].map(Look::default_for),
+            bots_paused: false,
         }
     }
 
@@ -418,7 +434,75 @@ impl Server {
             ClientMsg::Start => self.owner_command(id, OwnerCommand::Start),
             ClientMsg::AddBot => self.owner_command(id, OwnerCommand::AddBot),
             ClientMsg::RemoveBot => self.owner_command(id, OwnerCommand::RemoveBot),
+            ClientMsg::DevPauseBots { paused } => self.dev_command(id, DevCommand::Pause(paused)),
+            ClientMsg::DevSetDrops { chances } => self.dev_command(id, DevCommand::Drops(chances)),
+            ClientMsg::DevResetDrops => self.dev_command(id, DevCommand::Reset),
         }
+    }
+
+    /// Developer commands: refused unless the host runs in developer mode and the sender is
+    /// the owner; values are validated before anything changes.
+    fn dev_command(&mut self, id: u64, command: DevCommand) {
+        if !self.cfg.dev {
+            return self.error(
+                id,
+                "DevDisabled",
+                "developer mode is off (start with --dev)",
+            );
+        }
+        let Some(slot) = self.conns.get(&id).and_then(|c| c.slot) else {
+            return;
+        };
+        match self.lobby.owner() {
+            Some(owner) if owner == slot => {}
+            Some(owner) => {
+                let message = format!(
+                    "Only {} can use the developer commands",
+                    self.lobby.slots[owner].name
+                );
+                return self.error(id, "NotOwner", &message);
+            }
+            None => return,
+        }
+        match command {
+            DevCommand::Pause(paused) => self.bots_paused = paused,
+            DevCommand::Reset => self.set_drops(DropTable::defaults(self.cfg.game.powerup_chance)),
+            DevCommand::Drops(chances) => {
+                let table = <[f32; 7]>::try_from(chances.as_slice())
+                    .ok()
+                    .and_then(|c| DropTable::new(c).ok());
+                match table {
+                    Some(table) => self.set_drops(table),
+                    None => {
+                        return self.error(
+                            id,
+                            "BadValue",
+                            "send seven drop chances, each between 0 and 1",
+                        )
+                    }
+                }
+            }
+        }
+        self.broadcast_dev_state();
+    }
+
+    /// Stores the table and applies it to the running match for the blocks destroyed from now on.
+    fn set_drops(&mut self, table: DropTable) {
+        if let Some(game) = self.game.as_mut() {
+            let _ = game.state.set_drops(table.clone());
+        }
+        self.drops = table;
+    }
+
+    fn dev_state(&self) -> ServerMsg {
+        ServerMsg::DevState {
+            paused: self.bots_paused,
+            drops: self.drops.chances,
+        }
+    }
+
+    fn broadcast_dev_state(&self) {
+        self.broadcast(self.dev_state());
     }
 
     /// Lobby commands that only the owner (lowest human slot) may give; every refusal is
@@ -509,8 +593,12 @@ impl Server {
                 config: self.cfg.game.clone(),
                 lobby: self.lobby.clone(),
                 looks: self.looks_to_send(),
+                dev: self.cfg.dev,
             },
         );
+        if self.cfg.dev {
+            self.send(id, self.dev_state());
+        }
         if let Some(colour) = adjusted {
             self.send_look_notice(id, colour);
         }
@@ -610,9 +698,10 @@ impl Server {
                 .map_or(0, |d| d.as_nanos() as u64);
             t ^ self.matches
         });
-        let Ok(state) = GameState::new(self.cfg.game.clone(), seed, self.lobby.active()) else {
+        let Ok(mut state) = GameState::new(self.cfg.game.clone(), seed, self.lobby.active()) else {
             return;
         };
+        let _ = state.set_drops(self.drops.clone());
         let bots = bots_for(&self.lobby, seed);
         self.broadcast(ServerMsg::Start {
             seed,
@@ -635,6 +724,7 @@ impl Server {
         let ids = PlayerId::all();
         for (i, input) in inputs.iter_mut().enumerate() {
             *input = match game.bots[i].as_mut() {
+                Some(_) if self.bots_paused => PlayerInput::default(),
                 Some(bot) => bot.decide(&game.state.observe(ids[i])),
                 None => game.pending[i].take().unwrap_or_default(),
             };

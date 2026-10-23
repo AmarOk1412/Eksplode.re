@@ -59,6 +59,11 @@ fn every_server_message_round_trips() {
         slot: 1,
         config: Config::default(),
         lobby: lobby.clone(),
+        dev: true,
+    });
+    roundtrip(ServerMsg::DevState {
+        paused: true,
+        drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2],
     });
     roundtrip(ServerMsg::Rejected {
         reason: RejectReason::Full,
@@ -277,4 +282,31 @@ fn old_config_json_without_the_new_values_still_decodes() {
     map.remove("punch_hop_ticks");
     let config: Config = serde_json::from_value(value).unwrap();
     assert_eq!((config.malus_ticks, config.punch_hop_ticks), (200, 2));
+}
+
+#[test]
+fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
+    roundtrip(ClientMsg::DevPauseBots { paused: true });
+    roundtrip(ClientMsg::DevSetDrops {
+        chances: vec![0.1; 7],
+    });
+    roundtrip(ClientMsg::DevResetDrops);
+    let old = r#"{"type":"Welcome","slot":0,"config":null}"#;
+    assert!(
+        decode::<ServerMsg>(old.as_bytes()).is_err(),
+        "config is still required"
+    );
+    let mut value = serde_json::to_value(ServerMsg::Welcome {
+        slot: 0,
+        config: Config::default(),
+        lobby: Lobby::new(),
+        looks: vec![],
+        dev: true,
+    })
+    .unwrap();
+    value.as_object_mut().unwrap().remove("dev");
+    match serde_json::from_value::<ServerMsg>(value).unwrap() {
+        ServerMsg::Welcome { dev, .. } => assert!(!dev),
+        other => panic!("{other:?}"),
+    }
 }
