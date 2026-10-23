@@ -8,8 +8,9 @@ pixel-art view are all small, tested crates.
 
 - Four players per match: any mix of people (terminal or browser) and bots.
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
-  grey pillars, red-brick blocks, bombs and flames, a round timer and character cards in the
-  lobby, all drawn by a Rust module compiled to WebAssembly.
+  grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
+  animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. Players
+  choose colour, gender look and accessories in a character editor.
 - **Terminal version** for local play on one keyboard, with a lobby screen.
 - **Network play:** an authoritative host, `join` by address, or a server that hosts the match
   and serves the web page.

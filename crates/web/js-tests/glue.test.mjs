@@ -93,3 +93,14 @@ test("the glue paints character portraits", async () => {
   paintCommands(ctx, p);
   assert.equal(ctx.ops.filter((o) => o[0] === "fill").length, p.count);
 });
+
+test("the glue paints 3d character portraits", async () => {
+  const r = createRenderer(await exportsOfModule());
+  const p = r.portrait3d(1, 160, 226, 0.5);
+  assert.ok(p.count > 20);
+  assert.equal(p.data.length, p.count * 16);
+  assert.equal(r.portrait3d(0, 0, 226, 0).count, 0);
+  const ctx = new FakeCtx();
+  paintCommands(ctx, p);
+  assert.equal(ctx.ops.filter((o) => o[0] === "fill").length, p.count);
+});

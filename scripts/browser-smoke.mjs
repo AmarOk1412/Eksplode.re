@@ -110,8 +110,16 @@ async function main() {
 
   await evaluate("document.getElementById('name').value = 'SmokeTest'; document.getElementById('join').click(); 1");
   await waitFor("!document.getElementById('lobby-panel').hidden", "the lobby");
+  // fill the lobby with bots so that four cards show characters
+  for (let i = 0; i < 3; i += 1) {
+    await evaluate("document.getElementById('add-bot').click(); 1");
+    await sleep(200);
+  }
+  await sleep(500);
   console.log("lobby:", await evaluate("document.getElementById('slots').innerText"));
   await shot("2-lobby.png");
+  await sleep(1300);
+  await shot("2b-lobby-later.png");
 
   await evaluate("document.getElementById('start').click(); 1");
   await waitFor("!document.getElementById('game-panel').hidden", "the game");

@@ -16,6 +16,7 @@ test("exports the documented functions", async () => {
     "bomberust_stride",
     "bomberust_pick_tile",
     "bomberust_portrait",
+    "bomberust_portrait3d",
   ]) {
     assert.ok(name in ex, `missing export ${name}`);
   }

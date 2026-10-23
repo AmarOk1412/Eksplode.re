@@ -14,6 +14,12 @@ Open the address in a browser, type a name and press Join. The first person to j
 owner and can press Enter (or the Start button) to begin; the Add bot and Remove bot buttons fill
 the other slots.
 
+The lobby shows one tall card per slot: a cubic isometric character that bobs and turns every
+few seconds (`bomberust_portrait3d` in the WebAssembly module), a coloured `PLAYER n` banner, the
+player name below and small marks for you, the owner and ready. Empty slots are plain cards. The
+animation runs only while the lobby is on screen and the tab is visible, and it is a still image
+when the system asks for reduced motion.
+
 ## Options
 
 <!-- options:begin -->

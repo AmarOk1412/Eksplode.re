@@ -153,6 +153,56 @@ export function lobbyOwner(lobby) {
   return i === undefined || i < 0 ? null : i;
 }
 
+/** The lobby as cards, one per slot: banner, name caption and the owner/you/ready marks. */
+export function lobbyCards(lobby, you) {
+  const owner = lobbyOwner(lobby);
+  return (lobby?.slots ?? []).map((slot, i) => {
+    const empty = slot.controller === "Empty";
+    const name = empty ? "empty" : slot.controller === "Bot" ? "bot" : slot.name || `player ${i + 1}`;
+    const marks = [i === you ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : ""].filter(Boolean);
+    return {
+      slot: i,
+      empty,
+      banner: empty ? "EMPTY" : `PLAYER ${i + 1}`,
+      name,
+      marks,
+      caption: marks.length ? `${name} (${marks.join(", ")})` : name,
+    };
+  });
+}
+
+/** Calls `paint(seconds)` on every animation frame while it is active, and not a frame longer. */
+export class Animator {
+  constructor(raf, caf, paint) {
+    this.raf = raf;
+    this.caf = caf;
+    this.paint = paint;
+    this.active = false;
+    this.handle = null;
+    this.origin = null;
+  }
+
+  setActive(on) {
+    if (on === this.active) return;
+    this.active = on;
+    if (on) {
+      this.origin = null;
+      this.handle = this.raf((t) => this.frame(t));
+    } else {
+      if (this.handle !== null) this.caf(this.handle);
+      this.handle = null;
+    }
+  }
+
+  frame(t) {
+    this.handle = null;
+    if (!this.active) return;
+    this.origin ??= t;
+    this.paint((t - this.origin) / 1000);
+    if (this.active) this.handle = this.raf((next) => this.frame(next));
+  }
+}
+
 /** One row per participant for the status list next to the canvas. */
 export function hudRows(state) {
   const players = state.observation?.players;
@@ -254,6 +304,12 @@ export function createRenderer(ex) {
       ex.bomberust_free(ptr, size);
       return code;
     },
+    /** The semi-3D character of a slot, `phase` seconds into its animation. */
+    portrait3d(slot, width, height, phase) {
+      const count = ex.bomberust_portrait3d ? ex.bomberust_portrait3d(slot, width, height, phase) : 0;
+      const data = new Float32Array(ex.memory.buffer, count ? ex.bomberust_output_ptr() : 0, count * stride);
+      return { count, stride, data };
+    },
     /** Commands of a character fitted into width x height pixels; `rows` 0 is the whole figure. */
     portrait(slot, width, height, rows) {
       const count = ex.bomberust_portrait(slot, width, height, rows);
@@ -333,7 +389,32 @@ function start() {
   let renderer = null;
   let lastSnapshotAt = 0;
   let logoPainted = false;
-  const pendingPortraits = [];
+  let lobbyCanvases = [];
+  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+  /** Paints the semi-3D characters of the lobby cards `seconds` into their animation. */
+  function paintLobby(seconds) {
+    if (!renderer) return;
+    const dpr = window.devicePixelRatio || 1;
+    for (const [canvas, slot] of lobbyCanvases) {
+      if (!canvas.clientWidth || !canvas.clientHeight) continue;
+      const w = Math.max(16, Math.round(canvas.clientWidth * dpr));
+      const h = Math.max(16, Math.round(canvas.clientHeight * dpr));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      const g = canvas.getContext("2d");
+      g.clearRect(0, 0, w, h);
+      paintCommands(g, renderer.portrait3d(slot, w, h, seconds));
+    }
+  }
+  const animator = new Animator(
+    (fn) => window.requestAnimationFrame(fn),
+    (id) => window.cancelAnimationFrame(id),
+    paintLobby,
+  );
+  document.addEventListener("visibilitychange", () => animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion()));
 
   /** Paints a character into a canvas whose CSS size is set by the stylesheet. */
   function paintPortrait(canvas, slot, rows) {
@@ -384,39 +465,44 @@ function start() {
     el.start.disabled = !isOwner;
     el.addBot.disabled = !isOwner;
     el.removeBot.disabled = !isOwner;
+    lobbyCanvases = [];
     el.slots.replaceChildren(
-      ...(state.lobby?.slots ?? []).map((slot, i) => {
+      ...lobbyCards(state.lobby, state.slot).map((c) => {
         const li = document.createElement("li");
         li.className = "slot";
         const card = document.createElement("div");
-        card.className = `card slot-${i}${slot.controller === "Empty" ? " empty" : ""}`;
+        card.className = `card slot-${c.slot}${c.empty ? " empty" : ""}`;
         const portrait = document.createElement("canvas");
         portrait.className = "portrait";
         card.append(portrait);
+        if (c.marks.length > 0) {
+          const marks = document.createElement("div");
+          marks.className = "marks";
+          for (const m of c.marks) {
+            const mark = document.createElement("span");
+            mark.className = `mark mark-${m}`;
+            mark.textContent = m;
+            marks.append(mark);
+          }
+          card.append(marks);
+        }
         const banner = document.createElement("div");
         banner.className = "banner";
-        banner.textContent = slot.controller === "Empty" ? "EMPTY" : `PLAYER ${i + 1}`;
+        banner.textContent = c.banner;
         card.append(banner);
         li.append(card);
-        if (slot.controller !== "Empty") pendingPortraits.push([portrait, i]);
+        if (!c.empty) lobbyCanvases.push([portrait, c.slot]);
         const caption = document.createElement("span");
         caption.className = "caption";
-        const who =
-          slot.controller === "Empty"
-            ? "empty"
-            : slot.controller === "Bot"
-              ? "bot"
-              : slot.name || `player ${i + 1}`;
-        const tags = [i === state.slot ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : ""]
-          .filter(Boolean)
-          .join(", ");
-        caption.textContent = tags ? `${who} (${tags})` : who;
+        caption.textContent = c.caption;
+        caption.title = c.caption;
         li.append(caption);
         return li;
       }),
     );
     // canvases need a layout before their size is known, so paint once they are in the page
-    for (const [canvas, slot] of pendingPortraits.splice(0)) paintPortrait(canvas, slot, CARD_ROWS);
+    paintLobby(0);
+    animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion());
     el.timer.textContent = timerText(state.observation);
     if (renderer && !logoPainted && !el.joinPanel.hidden) {
       paintPortrait(el.logo, 0, 0);

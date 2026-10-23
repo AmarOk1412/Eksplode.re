@@ -131,9 +131,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .slot { display: grid; justify-items: center; gap: 8px; }
 
 .card {
-  width: 160px;
-  height: 288px;
-  border-radius: 6px;
+  position: relative;
+  width: 170px;
+  height: 300px;
+  border-radius: 14px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   display: grid;
   grid-template-rows: 1fr 62px;
@@ -145,7 +147,22 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .card.slot-3 { background: #e6bdfc; --banner: var(--slot3); }
 .card.empty { background: #e8e6e9; --banner: #bdbbc0; }
 
-.portrait { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.portrait { width: 100%; height: 100%; display: block; }
+
+.marks { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.mark {
+  font-size: 0.7rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+}
+.mark-owner { background: #f2c230; }
+.mark-ready { background: #5fbf6a; color: #fff; }
+.mark-you { background: #fff; }
 
 .banner {
   display: grid;
@@ -157,7 +174,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   letter-spacing: 0.02em;
 }
 
-.caption { font-size: 0.95rem; color: var(--muted); }
+.caption { font-size: 0.95rem; color: var(--muted); max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .slots { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: center; }
 .slots li { display: flex; align-items: center; gap: 8px; font-size: 0.9rem; }
