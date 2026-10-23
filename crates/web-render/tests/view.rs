@@ -106,3 +106,20 @@ fn every_template_character_has_a_colour() {
 fn the_bomb_spark_blinks() {
     assert_ne!(bomb_colour('o', true), bomb_colour('o', false));
 }
+
+#[test]
+fn f4_every_board_size_fits_a_desktop_and_a_phone_canvas() {
+    for (w, h) in [(15u8, 13u8), (19, 15), (25, 19)] {
+        // the page canvas is 64vh high: 512 px on an 800 px window
+        for (cw, ch, min_scale) in [(1053.0f32, 512.0f32, 16.0f32), (360.0, 410.0, 8.0)] {
+            let v = fit(w, h, (cw, ch));
+            assert!(v.scale >= min_scale, "{w}x{h} on {cw}x{ch}: {}", v.scale);
+            let (x0, y0) = v.project(0.0, 0.0);
+            let (x1, y1) = v.project(f32::from(w), f32::from(h) + 0.18);
+            assert!(
+                x0 >= 0.0 && y0 >= 0.0 && x1 <= cw && y1 <= ch,
+                "{w}x{h} on {cw}x{ch} stays inside"
+            );
+        }
+    }
+}

@@ -138,3 +138,89 @@ fn out_of_bounds_reads_as_wall() {
     let a = Arena::from_rows(&OPEN).unwrap();
     assert_eq!(a.tile(pos(200, 200)), Tile::Wall);
 }
+
+/// Squares reachable from `from` over tiles accepted by `open`.
+fn reach(
+    s: &bomberust_core::GameState,
+    from: bomberust_core::Pos,
+    open: impl Fn(Tile) -> bool,
+) -> usize {
+    let mut seen = std::collections::BTreeSet::from([from]);
+    let mut queue = std::collections::VecDeque::from([from]);
+    while let Some(p) = queue.pop_front() {
+        for d in bomberust_core::Dir::ALL {
+            let Some(n) = p.step(d, s.arena.width(), s.arena.height()) else {
+                continue;
+            };
+            if open(s.arena.tile(n)) && seen.insert(n) {
+                queue.push_back(n);
+            }
+        }
+    }
+    seen.len()
+}
+
+#[test]
+fn f4_us1_as6_the_chosen_size_gives_a_fair_reachable_arena_with_the_players_in_the_corners() {
+    use bomberust_core::{BoardSize, RoomSettings};
+    for size in BoardSize::ALL {
+        let (w, h) = size.dimensions();
+        let config = RoomSettings {
+            size,
+            ..RoomSettings::default()
+        }
+        .to_config(&Config::default());
+        assert_eq!((config.width, config.height), (w, h));
+        assert!(w % 2 == 1 && h % 2 == 1, "{size:?} has odd sides");
+        for seed in 1..=50u64 {
+            let s = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+            assert_eq!((s.arena.width(), s.arena.height()), (w, h));
+            let at = |x: u8, y: u8| bomberust_core::Pos::new(x, y);
+            for y in 0..h {
+                for x in 0..w {
+                    let border = x == 0 || y == 0 || x == w - 1 || y == h - 1;
+                    let pillar = x % 2 == 0 && y % 2 == 0;
+                    if border || pillar {
+                        assert_eq!(s.arena.tile(at(x, y)), Tile::Wall, "{size:?} {x},{y}");
+                    }
+                }
+            }
+            let corners = [at(1, 1), at(w - 2, 1), at(1, h - 2), at(w - 2, h - 2)];
+            let non_wall = (0..h)
+                .flat_map(|y| (0..w).map(move |x| at(x, y)))
+                .filter(|p| s.arena.tile(*p) != Tile::Wall)
+                .count();
+            for (slot, corner) in corners.iter().enumerate() {
+                assert_eq!(
+                    s.players[slot].pos, *corner,
+                    "{size:?} slot {slot} starts in its corner"
+                );
+                // the corner and its two neighbours are free
+                let dx: i16 = if corner.x == 1 { 1 } else { -1 };
+                let dy: i16 = if corner.y == 1 { 1 } else { -1 };
+                for p in [
+                    *corner,
+                    at((i16::from(corner.x) + dx) as u8, corner.y),
+                    at(corner.x, (i16::from(corner.y) + dy) as u8),
+                ] {
+                    assert_eq!(
+                        s.arena.tile(p),
+                        Tile::Floor,
+                        "{size:?} seed {seed} start area {p:?}"
+                    );
+                }
+                // every square that is not a wall can be reached from every start (blocks can be
+                // blown up), and a player is never closed in by blocks
+                assert_eq!(
+                    reach(&s, *corner, |t| t != Tile::Wall),
+                    non_wall,
+                    "{size:?} seed {seed} slot {slot}"
+                );
+                assert!(
+                    reach(&s, *corner, |t| t == Tile::Floor) >= 3,
+                    "{size:?} seed {seed} closed in"
+                );
+            }
+        }
+    }
+}

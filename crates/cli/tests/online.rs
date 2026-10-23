@@ -572,3 +572,31 @@ fn a_terminal_player_who_joins_an_empty_room_gets_the_defaults() {
         screen(&a)
     );
 }
+
+#[test]
+fn the_lobby_shows_the_settings_on_the_smallest_terminal() {
+    let host = room_host(Default::default());
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    h.handle_key(KeyCode::Char('s'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.size
+        == bomberust_core::BoardSize::Medium));
+    h.handle_key(KeyCode::Char('s'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.size
+        == bomberust_core::BoardSize::Large));
+    let mut t = Terminal::new(TestBackend::new(40, 20)).unwrap();
+    t.draw(|f| render(f, &h)).unwrap();
+    let buf = t.backend().buffer().clone();
+    let text: String = (0..20)
+        .map(|y| {
+            (0..40)
+                .map(|x| buf[(x, y)].symbol().to_string())
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains("Hosty") && text.contains("Large") || text.contains("25 x"),
+        "{text}"
+    );
+}

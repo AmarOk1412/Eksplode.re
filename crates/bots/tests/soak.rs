@@ -161,3 +161,37 @@ fn f4_us2_four_bot_normal_rounds_end_in_the_pattern_with_one_survivor_or_a_draw(
         assert!(s.alive_count() <= 1, "seed {seed}");
     }
 }
+
+#[test]
+fn f4_sc010_the_large_board_keeps_the_tick_rate_with_four_bots() {
+    use bomberust_core::{BoardSize, RoomSettings};
+    let config = RoomSettings {
+        size: BoardSize::Large,
+        ..RoomSettings::default()
+    }
+    .to_config(&Config::default());
+    let started = std::time::Instant::now();
+    let mut ticks = 0u32;
+    // five minutes of play at 20 Hz: 6000 ticks, over as many rounds as it takes
+    for seed in 0u64.. {
+        let mut s = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+        let mut bots: Vec<DefaultBot> = (0..4).map(|i| DefaultBot::new(seed * 4 + i)).collect();
+        while s.phase == Phase::Playing {
+            let mut inputs = [PlayerInput::default(); 4];
+            for (i, bot) in bots.iter_mut().enumerate() {
+                inputs[i] = bot.decide(&s.observe(pid(i as u8)));
+            }
+            step(&mut s, &inputs);
+            ticks += 1;
+        }
+        if ticks >= 6000 {
+            break;
+        }
+    }
+    let per_tick = started.elapsed() / ticks;
+    println!("{ticks} ticks, {per_tick:?} per tick (four bots, large board)");
+    assert!(
+        per_tick < std::time::Duration::from_millis(25),
+        "{per_tick:?} per tick"
+    );
+}

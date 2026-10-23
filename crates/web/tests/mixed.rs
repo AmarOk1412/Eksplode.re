@@ -344,12 +344,28 @@ fn drive(mut end: Endpoint, slot: usize) -> Vec<Duration> {
 
 #[test]
 fn sc003_key_to_snapshot_latency_with_two_browsers_and_two_terminals() {
+    p95_latency(|_| {});
+}
+
+#[test]
+fn f4_sc010_key_to_snapshot_latency_on_the_large_board() {
+    // the room created by the first join uses the server's defaults: the large board
+    p95_latency(|o| {
+        o.room = bomberust_core::RoomSettings {
+            size: bomberust_core::BoardSize::Large,
+            ..Default::default()
+        }
+    });
+}
+
+fn p95_latency(configure: impl FnOnce(&mut bomberust_web::ServerOptions)) {
     // the real 20 Hz tick; a one-tick move cooldown so a step does not wait for the cooldown
     let s = server(|o| {
         o.tick = Duration::from_millis(50);
         o.game.block_density = 0.0;
         o.game.base_move_cooldown = 1;
         o.game.min_move_cooldown = 1;
+        configure(o);
     });
     let mut ws0 = Ws::open(s.http_addr());
     ws0.join("w0");

@@ -83,7 +83,7 @@ capture PNGs).
 addresses such as `http://host:8080/` work; for a web address only the host is kept. A refused
 or full match ends with a one-line explanation and exit status 1.
 
-The terminal must be at least 40x20. Wrong usage exits with status 2.
+The terminal must be at least 40x20; a medium board needs 40x22 and a large one 52x26 (the game says so when the terminal is too small). Wrong usage exits with status 2.
 
 ### Server options
 

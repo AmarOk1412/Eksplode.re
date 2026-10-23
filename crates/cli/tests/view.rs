@@ -286,3 +286,35 @@ fn a_player_on_an_announced_square_is_still_drawn_and_marked() {
     let s = screen(&st, &ctx());
     assert!(s.contains("P1"));
 }
+
+fn state_of(size: bomberust_core::BoardSize) -> GameState {
+    let config = bomberust_core::RoomSettings {
+        size,
+        ..Default::default()
+    }
+    .to_config(&Config::default());
+    GameState::new(config, 3, [true; 4]).unwrap()
+}
+
+#[test]
+fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
+    use bomberust_core::BoardSize;
+    let need = |size| required_size(&state_of(size).observe(pid(0)));
+    assert_eq!(need(BoardSize::Small), (40, 20));
+    assert_eq!(need(BoardSize::Medium), (40, 22));
+    assert_eq!(need(BoardSize::Large), (52, 26));
+
+    let large = state_of(BoardSize::Large);
+    let small_terminal = draw(&large, &ctx(), 40, 20).join("\n");
+    assert!(
+        small_terminal.contains("terminal too small"),
+        "{small_terminal}"
+    );
+    assert!(small_terminal.contains("need 52x26"), "{small_terminal}");
+    assert!(small_terminal.contains("have 40x20"), "{small_terminal}");
+
+    // a terminal of the needed size draws the whole board
+    let fits = draw(&large, &ctx(), 52, 26).join("\n");
+    assert!(!fits.contains("terminal too small"), "{fits}");
+    assert!(fits.contains("P1") && fits.contains("P4"));
+}

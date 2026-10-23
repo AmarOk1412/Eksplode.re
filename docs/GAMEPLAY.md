@@ -16,7 +16,7 @@ stay for the rematch. The room closes when the last person leaves.
 
 | Setting | Values | Default |
 |---------|--------|---------|
-| Board size | small 15 x 13, medium 19 x 15, large 25 x 19 | small |
+| Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x20, 40x22 and 52x26) | small |
 | Round time | 2, 3, 5 or 10 minutes | 3 |
 | Friendly fire | on or off (Team mode only) | on |
 | Mode | Normal | Normal |

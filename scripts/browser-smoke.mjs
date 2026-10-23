@@ -2,6 +2,7 @@
 // starts a match, plays a few keys and saves screenshots. Optional manual-style check, not part of
 // `cargo test`. Usage:
 //   node scripts/browser-smoke.mjs http://127.0.0.1:8080/ [out-dir]
+// SIZE=small|medium|large picks the board of the room (default medium).
 // CLOSING=1 plays a 2-minute round and saves screenshots of the end pattern (takes about 80 s).
 // Needs a Chromium based browser (BROWSER=/path/to/browser, default chromium-browser).
 import { spawn } from "node:child_process";
@@ -31,6 +32,9 @@ const child = spawn(
 );
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const size = process.env.SIZE ?? "medium";
+const other = size === "large" ? "small" : "large";
+const dimensions = { small: "15 x 13", medium: "19 x 15", large: "25 x 19" };
 
 async function targetSocket() {
   for (let i = 0; i < 50; i += 1) {
@@ -100,7 +104,7 @@ async function main() {
   await evaluate(`(() => {
     document.getElementById('room-name').value = 'Smoke room';
     document.getElementById('room-name').dispatchEvent(new Event('input'));
-    for (const [id, value] of [['room-size', 'medium'], ['room-minutes', '${process.env.CLOSING ? 2 : 5}']]) {
+    for (const [id, value] of [['room-size', '${size}'], ['room-minutes', '${process.env.CLOSING ? 2 : 5}']]) {
       const select = document.getElementById(id);
       select.value = value;
       select.dispatchEvent(new Event('change'));
@@ -161,21 +165,21 @@ async function main() {
   peer.send(JSON.stringify({ type: "Join", version: 1, name: "Peer" }));
   const welcome = await until((m) => m.type === "Welcome", "Welcome");
   console.log("peer lobby settings:", JSON.stringify(welcome.lobby.settings));
-  peer.send(JSON.stringify({ type: "SetRoom", settings: { size: "large" } }));
+  peer.send(JSON.stringify({ type: "SetRoom", settings: { size: other } }));
   const refused = await until((m) => m.type === "Error" && m.code === "NotOwner", "NotOwner");
   console.log("peer refused:", refused.message);
   await evaluate(`(() => {
     const s = document.getElementById('lobby-size');
-    s.value = 'large';
+    s.value = '${other}';
     s.dispatchEvent(new Event('change'));
     return 1;
   })()`);
-  const changed = await until((m) => m.type === "Lobby" && m.lobby.settings.size === "large", "the owner's change");
+  const changed = await until((m) => m.type === "Lobby" && m.lobby.settings.size === other, "the owner's change");
   console.log("peer sees the change:", changed.lobby.settings.size);
-  await waitFor("document.getElementById('room-summary').innerText.includes('25 x 19')", "the summary of the new size");
+  await waitFor(`document.getElementById('room-summary').innerText.includes('${dimensions[other]}')`, "the summary of the new size");
   await evaluate(`(() => {
     const s = document.getElementById('lobby-size');
-    s.value = 'medium';
+    s.value = '${size}';
     s.dispatchEvent(new Event('change'));
     return 1;
   })()`);

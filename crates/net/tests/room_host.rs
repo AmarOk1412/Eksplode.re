@@ -233,3 +233,59 @@ fn a_hostile_room_never_breaks_the_join() {
     assert_eq!(lobby.settings.minutes, 3);
     assert_eq!(lobby.settings.size, BoardSize::Small);
 }
+
+#[test]
+fn f4_us1_as6_the_match_uses_the_room_size_and_time() {
+    let sizes = [("small", 15u8, 13u8), ("medium", 19, 15), ("large", 25, 19)];
+    for (size, w, h) in sizes {
+        for minutes in [2u32, 3, 5, 10] {
+            let host = host();
+            let room = json!({"size": size, "minutes": minutes});
+            let (mut a, _, _) = join(&host, "Ann", Some(room));
+            a.send(&ClientMsg::Start);
+            let config = match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
+                Some(ServerMsg::Start { config, .. }) => config,
+                other => panic!("{other:?}"),
+            };
+            assert_eq!((config.width, config.height), (w, h), "{size}");
+            assert_eq!(
+                config.round_limit_ticks,
+                minutes * 60 * 20,
+                "{size} {minutes}"
+            );
+            // the pattern always starts 60 seconds before the end
+            assert_eq!(
+                config.round_limit_ticks - config.closing_ticks,
+                (minutes - 1) * 60 * 20
+            );
+            // the first snapshot carries the same configuration and the arena of that size
+            match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
+                Some(ServerMsg::Snapshot { state, .. }) => {
+                    assert_eq!((state.arena.width(), state.arena.height()), (w, h));
+                    assert_eq!(state.config.round_limit_ticks, config.round_limit_ticks);
+                }
+                other => panic!("{other:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn a_change_by_the_owner_before_the_start_is_used() {
+    let host = host();
+    let (mut a, _, _) = join(&host, "Ann", None);
+    a.send_line(r#"{"type":"SetRoom","settings":{"size":"medium","minutes":5}}"#);
+    lobby_settings(&mut a, |s| s.minutes == 5);
+    a.send_line(r#"{"type":"SetRoom","settings":{"size":"large","minutes":2}}"#);
+    lobby_settings(&mut a, |s| s.minutes == 2);
+    a.send(&ClientMsg::Start);
+    match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
+        Some(ServerMsg::Start { config, .. }) => {
+            assert_eq!(
+                (config.width, config.height, config.round_limit_ticks),
+                (25, 19, 2400)
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}
