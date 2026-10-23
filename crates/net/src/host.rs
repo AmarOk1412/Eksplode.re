@@ -13,9 +13,11 @@ use bomberust_bots::{Bot, DefaultBot};
 use bomberust_core::{
     step, Config, Controller, GameState, Lobby, Phase, PlayerId, PlayerInput, MAX_PLAYERS,
 };
+use serde_json::Value;
 
 use crate::client::Client;
 use crate::codec::{decode, encode, LineReader, NetError};
+use crate::look::{resolve_colour, Colour, Look};
 use crate::protocol::{valid_name, ClientMsg, RejectReason, ServerMsg, PROTOCOL_VERSION};
 
 /// Connections that cause this many errors are closed.
@@ -164,6 +166,7 @@ impl Host {
         client.send(ClientMsg::Join {
             version: PROTOCOL_VERSION,
             name: name.to_string(),
+            look: None,
         })?;
         Ok(client)
     }
@@ -299,6 +302,8 @@ struct Server {
     game: Option<Running>,
     next_tick: Instant,
     matches: u64,
+    /// The look of each slot; only the entries of seated slots mean something.
+    looks: [Look; MAX_PLAYERS],
 }
 
 impl Server {
@@ -311,6 +316,7 @@ impl Server {
             game: None,
             next_tick: Instant::now(),
             matches: 0,
+            looks: [0, 1, 2, 3].map(Look::default_for),
         }
     }
 
@@ -361,7 +367,11 @@ impl Server {
             Ev::Bad { id, err } => self.error(id, "Malformed", &err),
             Ev::Gone { id } => self.remove(id),
             Ev::AddBot => {
-                if self.game.is_none() && self.lobby.add_bot().is_ok() {
+                if self.game.is_some() {
+                    return;
+                }
+                if let Ok(slot) = self.lobby.add_bot() {
+                    self.seat_look(slot, None);
                     self.broadcast_lobby();
                 }
             }
@@ -386,13 +396,18 @@ impl Server {
         conn.last_seen = Instant::now();
         let joined = conn.slot.is_some();
         match msg {
-            ClientMsg::Join { version, name } => self.join(id, version, &name),
+            ClientMsg::Join {
+                version,
+                name,
+                look,
+            } => self.join(id, version, &name, look.as_ref()),
             ClientMsg::Ping { nonce } => self.send(id, ServerMsg::Pong { nonce }),
             _ if !joined => {
                 self.send(id, ServerMsg::error("NotJoined", "send Join first"));
                 self.remove(id);
             }
             ClientMsg::Leave => self.remove(id),
+            ClientMsg::SetLook { look } => self.set_look(id, &look),
             ClientMsg::SetReady { ready } => self.set_ready(id, ready),
             ClientMsg::Input { tick, mv, bomb } => self.input(id, tick, PlayerInput { mv, bomb }),
             ClientMsg::Start => self.owner_command(id, OwnerCommand::Start),
@@ -428,7 +443,10 @@ impl Server {
                 self.error(id, "WrongPhase", "bots can only be changed in the lobby")
             }
             OwnerCommand::AddBot => match self.lobby.add_bot() {
-                Ok(_) => self.broadcast_lobby(),
+                Ok(slot) => {
+                    self.seat_look(slot, None);
+                    self.broadcast_lobby();
+                }
                 Err(_) => self.error(id, "NoSlot", "all slots are taken"),
             },
             OwnerCommand::RemoveBot => {
@@ -440,7 +458,7 @@ impl Server {
         }
     }
 
-    fn join(&mut self, id: u64, version: u32, name: &str) {
+    fn join(&mut self, id: u64, version: u32, name: &str, look: Option<&Value>) {
         let Some(conn) = self.conns.get(&id) else {
             return;
         };
@@ -478,14 +496,65 @@ impl Server {
         if let Some(c) = self.conns.get_mut(&id) {
             c.slot = Some(slot);
         }
+        let adjusted = self.seat_look(slot, look);
         self.send(
             id,
             ServerMsg::Welcome {
                 slot: slot as u8,
                 config: self.cfg.game.clone(),
                 lobby: self.lobby.clone(),
+                looks: self.looks_to_send(),
             },
         );
+        if let Some(colour) = adjusted {
+            self.send_look_notice(id, colour);
+        }
+        self.broadcast_lobby();
+    }
+
+    /// Gives `slot` the requested look (`None` means its default) with a colour no other seated
+    /// participant has; returns the colour it had to be moved to, if any.
+    fn seat_look(&mut self, slot: usize, requested: Option<&Value>) -> Option<Colour> {
+        let wanted = requested.map_or_else(
+            || Look::default_for(slot),
+            |value| Look::from_wire(value, slot),
+        );
+        let taken: Vec<Colour> = (0..MAX_PLAYERS)
+            .filter(|i| *i != slot && self.lobby.slots[*i].controller != Controller::Empty)
+            .map(|i| self.looks[i].colour)
+            .collect();
+        let (colour, adjusted) = resolve_colour(wanted.colour, &taken);
+        self.looks[slot] = Look { colour, ..wanted };
+        adjusted.then_some(colour)
+    }
+
+    fn looks_to_send(&self) -> Vec<Look> {
+        (0..MAX_PLAYERS)
+            .map(|i| {
+                if self.lobby.slots[i].controller == Controller::Empty {
+                    Look::default_for(i)
+                } else {
+                    self.looks[i]
+                }
+            })
+            .collect()
+    }
+
+    fn send_look_notice(&self, id: u64, colour: Colour) {
+        let message = format!("That colour is taken: you are {} instead", colour.name());
+        self.send(id, ServerMsg::error("LookAdjusted", &message));
+    }
+
+    fn set_look(&mut self, id: u64, look: &Value) {
+        let Some(slot) = self.conns.get(&id).and_then(|c| c.slot) else {
+            return;
+        };
+        if self.game.is_some() {
+            return self.error(id, "WrongPhase", "the look can only change in the lobby");
+        }
+        if let Some(colour) = self.seat_look(slot, Some(look)) {
+            self.send_look_notice(id, colour);
+        }
         self.broadcast_lobby();
     }
 
@@ -654,6 +723,7 @@ impl Server {
     fn broadcast_lobby(&self) {
         self.broadcast(ServerMsg::Lobby {
             lobby: self.lobby.clone(),
+            looks: self.looks_to_send(),
         });
     }
 

@@ -128,6 +128,16 @@ impl Ws {
         self.send(&ClientMsg::Join {
             version: PROTOCOL_VERSION,
             name: name.into(),
+            look: None,
+        });
+    }
+
+    /// Joins with a look given as loose JSON.
+    pub fn join_with_look(&mut self, name: &str, look: serde_json::Value) {
+        self.send(&ClientMsg::Join {
+            version: PROTOCOL_VERSION,
+            name: name.into(),
+            look: Some(look),
         });
     }
 

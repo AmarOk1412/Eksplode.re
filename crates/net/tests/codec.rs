@@ -26,6 +26,7 @@ fn every_client_message_round_trips() {
     roundtrip(ClientMsg::Join {
         version: 1,
         name: "Ann".into(),
+        look: None,
     });
     roundtrip(ClientMsg::SetReady { ready: true });
     roundtrip(ClientMsg::Input {
@@ -52,6 +53,7 @@ fn every_server_message_round_trips() {
     let state = GameState::new(Config::default(), 3, [true; 4]).unwrap();
     let me = PlayerId::new(2).unwrap();
     roundtrip(ServerMsg::Welcome {
+        looks: vec![],
         slot: 1,
         config: Config::default(),
         lobby: lobby.clone(),
@@ -59,7 +61,10 @@ fn every_server_message_round_trips() {
     roundtrip(ServerMsg::Rejected {
         reason: RejectReason::Full,
     });
-    roundtrip(ServerMsg::Lobby { lobby });
+    roundtrip(ServerMsg::Lobby {
+        lobby,
+        looks: vec![],
+    });
     roundtrip(ServerMsg::Start {
         seed: 5,
         config: Config::default(),

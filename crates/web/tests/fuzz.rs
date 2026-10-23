@@ -104,7 +104,10 @@ fn the_websocket_bridge_survives_random_frames_and_stays_fair() {
                         "{\"type\":null}",
                         "{\"type\":\"Join\"}",
                         "\u{0}",
-                    ][rng.below(6)],
+                        "{\"type\":\"SetLook\",\"look\":{\"colour\":7}}",
+                        "{\"type\":\"SetLook\"}",
+                        "{\"type\":\"Join\",\"version\":1,\"name\":\"F\",\"look\":[[]]}",
+                    ][rng.below(9)],
                 ),
             };
             if bad.socket.send(frame).is_err() {

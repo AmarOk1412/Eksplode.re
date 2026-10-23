@@ -183,6 +183,7 @@ fn us3_as5_malformed_and_out_of_turn_messages_change_nothing() {
     bad.send(&ClientMsg::Join {
         version: 1,
         name: "Mal".into(),
+        look: None,
     });
     bad.recv_until(|m| matches!(m, ServerMsg::Welcome { .. }))
         .unwrap();
@@ -225,6 +226,7 @@ fn ten_errors_close_the_connection() {
     bad.send(&ClientMsg::Join {
         version: 1,
         name: "Mal".into(),
+        look: None,
     });
     bad.recv_until(|m| matches!(m, ServerMsg::Welcome { .. }))
         .unwrap();
@@ -260,6 +262,7 @@ fn us3_as6_a_fifth_player_is_refused_while_the_others_play_on() {
     late.send(&ClientMsg::Join {
         version: 1,
         name: "late".into(),
+        look: None,
     });
     assert!(matches!(late.recv(), Some(ServerMsg::Rejected { .. })));
     assert!(wait_for(&clients[0], |m| matches!(m, ServerMsg::Snapshot { .. })).is_some());

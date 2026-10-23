@@ -58,6 +58,7 @@ impl Client {
         client.send(ClientMsg::Join {
             version: PROTOCOL_VERSION,
             name: name.to_string(),
+            look: None,
         })?;
         Ok(client)
     }

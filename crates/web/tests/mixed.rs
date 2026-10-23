@@ -231,9 +231,9 @@ fn us2_as4_a_fifth_participant_is_refused() {
     assert_eq!(slot, 3);
 
     let lobby =
-        a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby } if lobby.participants() == 4));
+        a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4));
     match lobby {
-        Some(ServerMsg::Lobby { lobby }) => {
+        Some(ServerMsg::Lobby { lobby, .. }) => {
             let names: Vec<&str> = lobby.slots.iter().map(|s| s.name.as_str()).collect();
             assert_eq!(names, ["Ann", "Ann", "Ann", "Bob"]);
         }

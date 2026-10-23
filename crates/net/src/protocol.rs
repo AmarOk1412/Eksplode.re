@@ -2,6 +2,9 @@
 
 use bomberust_core::{Config, Dir, Event, Lobby, Observation, Outcome};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use crate::look::Look;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 /// Longest accepted line, in bytes.
@@ -13,9 +16,16 @@ pub const DEFAULT_PORT: u16 = 7878;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMsg {
+    /// `look` is read leniently (see [`Look::from_wire`]); old clients send none.
     Join {
         version: u32,
         name: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        look: Option<Value>,
+    },
+    /// Lobby only: change the sender's look.
+    SetLook {
+        look: Value,
     },
     SetReady {
         ready: bool,
@@ -55,12 +65,17 @@ pub enum ServerMsg {
         slot: u8,
         config: Config,
         lobby: Lobby,
+        /// The look of each slot (four entries); absent from old hosts.
+        #[serde(default)]
+        looks: Vec<Look>,
     },
     Rejected {
         reason: RejectReason,
     },
     Lobby {
         lobby: Lobby,
+        #[serde(default)]
+        looks: Vec<Look>,
     },
     Start {
         seed: u64,

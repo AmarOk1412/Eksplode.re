@@ -8,6 +8,7 @@ fn join_msg(name: &str) -> ClientMsg {
     ClientMsg::Join {
         version: PROTOCOL_VERSION,
         name: name.into(),
+        look: None,
     }
 }
 
@@ -30,6 +31,7 @@ fn a_wrong_protocol_version_is_rejected() {
     raw.send(&ClientMsg::Join {
         version: PROTOCOL_VERSION + 1,
         name: "Ann".into(),
+        look: None,
     });
     assert_eq!(
         raw.recv(),
@@ -66,7 +68,7 @@ fn joining_assigns_slots_in_order_and_welcomes() {
     // everyone sees the updated lobby
     let seen = wait_for(
         &a,
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Remote),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Remote),
     );
     assert!(seen.is_some());
 }
@@ -145,14 +147,14 @@ fn ready_flags_are_shared_and_leaving_frees_the_slot() {
     b.send(ClientMsg::SetReady { ready: true }).unwrap();
     let seen = wait_for(
         &a,
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].ready),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].ready),
     );
     assert!(seen.is_some());
 
     b.send(ClientMsg::Leave).unwrap();
     let freed = wait_for(
         &a,
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Empty),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Empty),
     );
     assert!(freed.is_some());
 }
@@ -166,7 +168,7 @@ fn the_host_player_takes_a_local_slot() {
     assert_eq!(welcome_slot(&other), 1);
     let lobby = wait_for(
         &other,
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[0].controller == Controller::Local),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[0].controller == Controller::Local),
     );
     assert!(lobby.is_some());
 }
@@ -214,12 +216,12 @@ fn the_owner_can_start_and_add_or_remove_bots() {
     let mut owner = joined_raw(&host, "Ann");
     owner.send(&ClientMsg::AddBot);
     let lobby = owner.recv_until(
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Bot),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Bot),
     );
     assert!(lobby.is_some());
     owner.send(&ClientMsg::RemoveBot);
     let lobby = owner.recv_until(
-        |m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[1].controller == Controller::Empty),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Empty),
     );
     assert!(lobby.is_some());
     owner.send(&ClientMsg::Start);
@@ -284,7 +286,7 @@ fn ownership_moves_when_the_owner_leaves() {
     first.send(&ClientMsg::Leave);
     // wait until the lobby shows slot 0 as empty
     assert!(second
-        .recv_until(|m| matches!(m, ServerMsg::Lobby { lobby } if lobby.slots[0].controller == Controller::Empty))
+        .recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[0].controller == Controller::Empty))
         .is_some());
     second.send(&ClientMsg::Start);
     assert!(second

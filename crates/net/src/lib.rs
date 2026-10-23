@@ -3,6 +3,7 @@
 pub mod client;
 pub mod codec;
 pub mod host;
+pub mod look;
 pub mod protocol;
 
 pub use client::Client;

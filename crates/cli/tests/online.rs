@@ -438,3 +438,26 @@ fn us3_as3_names_and_running_matches_are_refused_with_a_reason() {
         Some(RejectReason::InMatch)
     );
 }
+
+#[test]
+fn f3_us1_as7_terminal_players_get_a_default_look_and_keep_working() {
+    use std::io::Write;
+    let host = host_with(open_game(1000));
+    // a browser-like participant joins first and chooses a look
+    let mut raw = std::net::TcpStream::connect(host.addr()).unwrap();
+    raw.write_all(
+        br#"{"type":"Join","version":1,"name":"Web","look":{"colour":"Green","head":"Crown"}}
+"#,
+    )
+    .unwrap();
+    std::thread::sleep(Duration::from_millis(150));
+    let mut a = joined(&host, "Term");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1) && o.stage == Stage::Lobby));
+    let s = screen(&a);
+    assert!(s.contains("Web") && s.contains("Term"), "{s}");
+    // later lobby messages carry looks too and are applied without trouble
+    a.handle_key(KeyCode::Char('r'));
+    assert!(pump_until(&mut a, |o| o.lobby.slots[1].ready));
+    assert_eq!(a.stage, Stage::Lobby);
+    drop(raw);
+}

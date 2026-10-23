@@ -122,7 +122,7 @@ impl Online {
                     RejectReason::InMatch => "join refused: a match is running",
                 });
             }
-            ServerMsg::Lobby { lobby } => {
+            ServerMsg::Lobby { lobby, .. } => {
                 self.lobby = lobby;
                 if self.stage != Stage::Closed && self.stage != Stage::Playing {
                     self.stage = Stage::Lobby;

@@ -42,6 +42,7 @@ fn invalid_names_and_versions_are_rejected() {
     ws.send(&ClientMsg::Join {
         version: 99,
         name: "Ann".into(),
+        look: None,
     });
     assert_eq!(
         ws.recv(),
