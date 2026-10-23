@@ -151,6 +151,18 @@ pub extern "C" fn bomberust_portrait(slot: u32, width: f32, height: f32, rows: u
     })
 }
 
+/// Builds the commands of the semi-3D character of slot `slot` inside `width` x `height`
+/// pixels, `phase` seconds into its animation. Returns how many; bad sizes give 0.
+#[no_mangle]
+pub extern "C" fn bomberust_portrait3d(slot: u32, width: f32, height: f32, phase: f32) -> usize {
+    STATE.with(|s| {
+        let mut s = s.borrow_mut();
+        let list = crate::iso3d::portrait3d(&s.looks[(slot % 4) as usize], (width, height), phase);
+        s.out = flatten(&list);
+        list.len()
+    })
+}
+
 /// Pointer to the command buffer, valid until the next [`bomberust_frame`] or portrait call.
 #[no_mangle]
 pub extern "C" fn bomberust_output_ptr() -> *const f32 {

@@ -208,3 +208,19 @@ fn f3_us1_as5_frames_and_portraits_use_the_loaded_looks() {
     let p = bomberust_portrait(1, 160.0, 226.0, 7);
     assert_eq!(crowns(p), 0);
 }
+
+#[test]
+fn f3_us1_as3_the_3d_portrait_export_draws_quads_and_rejects_bad_sizes() {
+    let n = bomberust_portrait3d(1, 160.0, 226.0, 0.0);
+    assert!(n > 20, "{n}");
+    let ptr = bomberust_output_ptr();
+    let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
+    assert_eq!(first[0], 0.0, "made of quads");
+    assert_eq!(bomberust_portrait3d(0, 0.0, 10.0, 0.0), 0);
+    assert_eq!(bomberust_portrait3d(0, -1.0, 10.0, 0.0), 0);
+    assert_eq!(bomberust_portrait3d(u32::MAX, f32::NAN, 10.0, f32::NAN), 0);
+    assert!(
+        bomberust_portrait3d(7, 50.0, 50.0, f32::NAN) > 0,
+        "slot is clamped and a bad phase is harmless"
+    );
+}
