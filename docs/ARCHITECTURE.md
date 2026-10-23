@@ -67,14 +67,20 @@ Pure rules in [`crates/core`](../crates/core).
   drop table. Bots and the render module consume only this.
 - `Lobby` and `Controller` (`Local`, `Remote`, `Bot`, `Empty`) describe who holds each slot; the
   lobby owner is the lowest slot held by a person.
+- `drops` holds the `DropTable`: seven chances in `PowerUpKind::ALL` order, rolled with the seeded
+  generator when a block is destroyed (so the table can change live in developer mode).
+  `punch` has the hop and landing rules of a punched bomb and `predict_landing`, which bots use
+  to see where a flying bomb will explode. Maluses (slow, hyper speed, small bomb) are timers on
+  the participant.
 
 ### `bots`
 
 [`crates/bots`](../crates/bots) holds `DefaultBot`, which implements the `Bot` trait: given an
 `Observation`, return a `PlayerInput`. It builds a `DangerMap` (where flames will be, including
 chain reactions), finds paths with `find_path`, flees fire, collects power-ups, hunts opponents,
-digs through blocks and only drops a bomb when it has a way out. A bot sees exactly what a human
-sees.
+digs through blocks and only drops a bomb when it has a way out. It dodges flying bombs (the
+landing square and the current square both count as dangerous), prefers bonuses, walks around
+maluses unless fleeing and never punches. A bot sees exactly what a human sees.
 
 ### `net`
 
@@ -89,6 +95,10 @@ input of each slot (bots decide from their `Observation`), call `core::step`, se
 connected client a `Snapshot` of its own view, announce `Ended`, and return to the lobby.
 `HostHandle::connect` attaches an in-process client without TCP; the local terminal player and the
 WebSocket bridge use it.
+
+Looks (`look`): a player's colour, gender look and accessories, read leniently and resolved so
+that no two participants share a colour. Developer mode (`HostConfig.dev`): the owner may pause
+bots and change the live drop table; everything else is refused with `DevDisabled`.
 
 Disconnects: a closed connection or 10 s of silence during a match hands the slot to a bot and
 tells the others (`PlayerLeft`). In the lobby the slot is freed.
@@ -117,6 +127,7 @@ tells the others (`PlayerLeft`). In the lobby the slot is freed.
 | `origin` | the `Origin` check and the start-up warnings |
 | `ws` | the WebSocket bridge: one browser tab is one in-process client of the host |
 | `addr` | the start-up banner and the addresses it prints |
+| `audio.js`, `look.js` (page assets) | generated sound and music, and the look editor model; see [AUDIO.md](AUDIO.md) |
 | `lib` | `Server::start` (owns a host) and `Server::attach` (shares someone else's host) |
 
 The page itself is in `crates/web/assets`; see [WEB.md](WEB.md).
@@ -125,7 +136,8 @@ The page itself is in `crates/web/assets`; see [WEB.md](WEB.md).
 
 [`crates/web-render`](../crates/web-render) holds every graphics decision as safe, natively
 testable Rust: `view` (fitting the board to the canvas on whole pixels), `sprites` (pixel-art
-characters, bomb and colour palette), `depth` (draw order: layer, then row), `interp` (smooth
+characters, bomb and colour palette), `look` (colour, gender and accessory pixels), `iso3d` (the
+isometric cube character of the lobby cards), `depth` (draw order: layer, then row), `interp` (smooth
 motion between ticks), `commands` (the flat draw list and the character portraits). Only
 `ffi.rs` uses `unsafe` (allocate, free, expose the buffer) so the module can
 exchange memory with JavaScript without generated glue. It compiles to
@@ -172,7 +184,7 @@ it. With the headless server nobody sits at the host, so the first person to joi
 | `crates/cli/tests` | arguments, key mapping, lobby, online sessions, join errors, a real pseudo-terminal check of Enter |
 | `crates/web/tests` | routes and headers, origin policy, WebSocket flows, mixed browser and terminal matches, shutdown, documentation |
 | `crates/web-render/tests` | view fitting, sprites, draw order, commands, portraits, interpolation, the FFI |
-| `crates/web/js-tests` | `node --test`: helpers of `app.js` and the compiled wasm module |
+| `crates/web/js-tests` | `node --test`: helpers of `app.js`, the compiled wasm module, the audio engine with a fake Web Audio, the developer panel |
 | `scripts/browser-smoke.mjs` | a real headless browser joins, starts and plays |
 
 Tests come first: a rule or behaviour gets a failing test before its code.
@@ -189,6 +201,7 @@ Tests come first: a rule or behaviour gets a failing test before its code.
   additive and keep protocol version 1.
 - **A screen or notice in the page:** add a case to `reduce` in `app.js` with a test in
   `crates/web/js-tests`, then render it.
+- **A look option, a power or a sound:** see "How to add things" in [DEVELOPMENT.md](DEVELOPMENT.md).
 - **A graphical change:** edit `web-render`, run its tests, rebuild the wasm
   (`./scripts/build-wasm.sh`) and commit the artifact.
 

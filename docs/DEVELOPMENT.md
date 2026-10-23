@@ -118,6 +118,22 @@ describe it in [PROTOCOL.md](PROTOCOL.md) (a test fails until every variant is d
 inline scripts (the Content Security Policy forbids them) and free of game rules. Check the
 result in a browser or with the smoke script, and record manual checks in a checklist.
 
+**A power.** Add the kind to `PowerUpKind` (and `ALL`, `is_malus`), its pickup effect in
+`crates/core/src/step.rs`, its share in `drops::DEFAULT_SHARES`, then core tests (`powerups`,
+`malus`, `drops`). Bots score it in `crates/bots`, the terminal needs a letter in `view.rs`, the
+render module an icon in `commands.rs`, the page a label in `devPanel` and the guide
+[GAMEPLAY.md](GAMEPLAY.md) a table row. Rebuild the wasm.
+
+**A look option.** Add the name to `crates/net/src/look.rs` and `crates/web-render/src/look.rs`
+(the wire names must match), the pixels or boxes in `look.rs` and `iso3d.rs`, the option in
+`crates/web/assets/look.js`, and tests in `crates/net/tests/look.rs` and
+`crates/web-render/tests/look.rs`.
+
+**A sound.** Add the id to `SOUND_IDS` and its recipe to `RECIPES` in
+`crates/web/assets/audio.js`, map the event in `soundsForEvents`, test it in
+`crates/web/js-tests/sounds.test.mjs` and add a row with its recipe to [AUDIO.md](AUDIO.md) (the
+docs test checks it). Never add an audio file.
+
 **A server option.** Add it to `crates/web/src/args.rs` (and its `USAGE` text), test it in
 `crates/web/tests/args.rs`, and paste the table that `cargo test -p bomberust-web --test docs`
 prints into [WEB.md](WEB.md).
@@ -138,10 +154,13 @@ prints into [WEB.md](WEB.md).
 | Criterion | Result | Where it is checked |
 |-----------|--------|---------------------|
 | Key press to the snapshot that shows it, p95, two browsers and two terminals at 20 Hz | about 100 ms (limit 200 ms) | `cargo test -p bomberust-web --test mixed sc003 -- --nocapture` |
-| WebAssembly module size | 153 KB (limit 300 KB) | `scripts/build-wasm.sh` fails above the limit; `sc005_the_whole_page_stays_small` |
-| Whole page (HTML, JS, CSS, wasm) | 171 KB (limit 500 KB) | `sc005_the_whole_page_stays_small` in `crates/web/tests/http.rs` |
+| WebAssembly module size | 193 KB (limit 300 KB) | `scripts/build-wasm.sh` fails above the limit; `sc005_the_whole_page_stays_small` |
+| Whole page (HTML, JS, CSS, wasm) | 255 KB (limit 500 KB) | `sc005_the_whole_page_stays_small` in `crates/web/tests/http.rs` |
 | Cross-origin WebSocket upgrades refused by default | 100 of 100 | `sc007_cross_origin_upgrades_are_refused_by_default` |
 | Enter starts a match in a real pseudo-terminal | 20 of 20 for each Enter variant | `python3 scripts/pty-enter-check.py --attempts 20` |
+
+With the powers of feature 003 the same latency test gives a p95 of about 100 ms. Sixty frames per
+second in the animated lobby and in a match is checked by eye (SC-010).
 
 Smooth drawing is not machine-measured: the page paints once per `requestAnimationFrame` and
 interpolates between the 20 Hz snapshots; check it by eye with a running server.
