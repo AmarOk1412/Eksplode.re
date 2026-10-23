@@ -72,6 +72,17 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       <canvas id="view" aria-label="Game arena"></canvas>
       <ul id="hud" class="slots"></ul>
     </section>
+
+    <section id="dev-panel" class="dialog dev" aria-label="Developer mode" hidden>
+      <p class="dev-marker">DEV MODE</p>
+      <p id="dev-hint" class="hint"></p>
+      <div class="buttons">
+        <button id="dev-pause" type="button">Pause bots</button>
+        <button id="dev-reset" type="button">Reset drops</button>
+      </div>
+      <h2>Drop chance per destroyed block</h2>
+      <ul id="dev-sliders" class="dev-sliders"></ul>
+    </section>
   </main>
   <script type="module" src="/app.js"></script>
 </body>

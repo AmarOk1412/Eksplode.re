@@ -75,7 +75,7 @@ export class KeyTracker {
 }
 
 export function initialState() {
-  return { stage: "idle", slot: null, lobby: null, notice: "", observation: null, tick: 0, looks: defaultLooks() };
+  return { stage: "idle", slot: null, lobby: null, notice: "", observation: null, tick: 0, looks: defaultLooks(), dev: false, devState: null };
 }
 
 function defaultLooks() {
@@ -123,7 +123,9 @@ export function reduce(state, event) {
     case "retry":
       return initialState();
     case "Welcome":
-      return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "", looks: looksOf(event, null) };
+      return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "", looks: looksOf(event, null), dev: event.dev === true, devState: null };
+    case "DevState":
+      return { ...state, devState: { paused: event.paused === true, drops: event.drops } };
     case "Rejected":
       return { ...state, stage: "closed", notice: rejectText(event.reason) };
     case "Lobby": {
@@ -152,6 +154,50 @@ export function reduce(state, event) {
 export function lobbyOwner(lobby) {
   const i = lobby?.slots.findIndex((s) => s.controller === "Local" || s.controller === "Remote");
   return i === undefined || i < 0 ? null : i;
+}
+
+// ---- developer mode ----
+
+/** The seven powers in the order of `DevSetDrops.chances`. */
+export const DROP_KINDS = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb"];
+export const DROP_LABELS = ["Extra bomb", "Flame", "Roller", "Punch", "Slow", "Hyper speed", "Small bomb"];
+
+const unit = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
+
+/** Slider percentages (0-100) as drop chances (0.0-1.0), one per power. */
+export function chancesFromPercents(percents) {
+  return DROP_KINDS.map((_, i) => unit(percents?.[i] / 100));
+}
+
+/** Drop chances as whole slider percentages. */
+export function percentsFromChances(chances) {
+  return DROP_KINDS.map((_, i) => Math.round(unit(chances?.[i]) * 100));
+}
+
+/** What the developer panel shows, or `null` when the host is not in developer mode. */
+export function devPanel(state) {
+  if (!state.dev) return null;
+  const owner = lobbyOwner(state.lobby);
+  const enabled = owner !== null && owner === state.slot;
+  const paused = state.devState?.paused === true;
+  const percents = percentsFromChances(state.devState?.drops);
+  return {
+    marker: "DEV MODE",
+    enabled,
+    hint: enabled ? "Developer mode: testing only." : "Only the lobby owner can use the developer panel.",
+    pause: { paused, label: paused ? "Resume bots" : "Pause bots" },
+    sliders: DROP_KINDS.map((kind, i) => ({ kind, label: DROP_LABELS[i], percent: percents[i] })),
+    reset: { label: "Reset drops" },
+  };
+}
+
+/** The messages the developer panel sends. */
+export function devMessages() {
+  return {
+    pause: (paused) => ({ type: "DevPauseBots", paused: paused === true }),
+    drops: (percents) => ({ type: "DevSetDrops", chances: chancesFromPercents(percents) }),
+    reset: () => ({ type: "DevResetDrops" }),
+  };
 }
 
 /** The lobby as cards, one per slot: banner, name caption and the owner/you/ready marks. */
@@ -389,6 +435,11 @@ function start() {
     mute: $("mute"),
     testSound: $("test-sound"),
     closeSound: $("close-sound"),
+    devPanel: $("dev-panel"),
+    devHint: $("dev-hint"),
+    devPause: $("dev-pause"),
+    devReset: $("dev-reset"),
+    devSliders: $("dev-sliders"),
   };
   const ctx = el.canvas.getContext("2d");
   const keys = new KeyTracker();
@@ -455,7 +506,52 @@ function start() {
     updateUi();
   }
 
+  // ---- developer mode: the panel exists only when the host said `dev` ----
+  const devSend = devMessages();
+  const devRows = DROP_KINDS.map((kind, i) => {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    label.textContent = DROP_LABELS[i];
+    const input = document.createElement("input");
+    input.type = "range";
+    input.min = "0";
+    input.max = "100";
+    input.step = "1";
+    input.id = `dev-drop-${kind}`;
+    label.htmlFor = input.id;
+    const value = document.createElement("output");
+    input.addEventListener("input", () => {
+      value.textContent = `${input.value}%`;
+    });
+    input.addEventListener("change", () => send(devSend.drops(devRows.map((r) => Number(r.input.value)))));
+    li.append(label, input, value);
+    el.devSliders.append(li);
+    return { input, value };
+  });
+  el.devPause.addEventListener("click", () => {
+    const panel = devPanel(state);
+    if (panel) send(devSend.pause(!panel.pause.paused));
+  });
+  el.devReset.addEventListener("click", () => send(devSend.reset()));
+
+  function renderDev() {
+    const panel = devPanel(state);
+    el.devPanel.hidden = !panel || !(state.stage === "lobby" || state.stage === "playing");
+    if (!panel) return;
+    el.devHint.textContent = panel.hint;
+    el.devPause.textContent = panel.pause.label;
+    el.devPause.disabled = !panel.enabled;
+    el.devReset.disabled = !panel.enabled;
+    panel.sliders.forEach((s, i) => {
+      const row = devRows[i];
+      row.input.disabled = !panel.enabled;
+      if (document.activeElement !== row.input) row.input.value = String(s.percent);
+      row.value.textContent = `${row.input.value}%`;
+    });
+  }
+
   function updateUi() {
+    renderDev();
     el.notice.textContent = state.notice;
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";

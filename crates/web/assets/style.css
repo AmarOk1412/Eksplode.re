@@ -224,3 +224,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .sound { display: grid; gap: 8px; width: min(360px, 100%); justify-items: stretch; }
 .sound input[type="range"] { width: 100%; }
 .sound .check { display: flex; align-items: center; justify-content: flex-start; justify-self: start; gap: 8px; color: var(--ink); }
+
+.dev { display: grid; gap: 8px; border: 4px dashed #c0392b; }
+.dev-marker { margin: 0; font-family: var(--title); font-size: 1.4rem; color: #c0392b; letter-spacing: 0.08em; }
+.dev-sliders { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.dev-sliders li { display: grid; grid-template-columns: 110px 1fr 48px; gap: 8px; align-items: center; }
+.dev-sliders output { text-align: right; }

@@ -135,6 +135,26 @@ async function main() {
   await sleep(1300);
   await shot("2b-lobby-later.png");
 
+  // developer mode (feature 003): the panel exists only when the server runs with --dev
+  const devVisible = await evaluate("!document.getElementById('dev-panel').hidden");
+  console.log("dev panel visible:", devVisible);
+  if (devVisible) {
+    await evaluate(`(() => {
+      ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb"].forEach((k) => {
+        const r = document.getElementById("dev-drop-" + k);
+        r.value = k === "Punch" ? "100" : "0";
+        r.dispatchEvent(new Event("input"));
+        r.dispatchEvent(new Event("change"));
+      });
+      document.getElementById("dev-pause").click();
+      return 1;
+    })()`);
+    await sleep(500);
+    console.log("dev pause button:", await evaluate("document.getElementById('dev-pause').textContent"));
+    console.log("dev sliders:", await evaluate("[...document.querySelectorAll('#dev-sliders input')].map((i) => i.value).join(',')"));
+    await shot("2c-dev-panel.png");
+  }
+
   await evaluate("document.getElementById('start').click(); 1");
   await waitFor("!document.getElementById('game-panel').hidden", "the game");
   await sleep(1500);
