@@ -210,3 +210,17 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   display: block;
   background: transparent;
 }
+
+.sound-button {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.3rem;
+}
+.sound { display: grid; gap: 8px; width: min(360px, 100%); justify-items: stretch; }
+.sound input[type="range"] { width: 100%; }
+.sound .check { display: flex; align-items: center; justify-content: flex-start; justify-self: start; gap: 8px; color: var(--ink); }

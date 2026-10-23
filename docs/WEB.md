@@ -20,6 +20,9 @@ player name below and small marks for you, the owner and ready. Empty slots are 
 animation runs only while the lobby is on screen and the tab is visible, and it is a still image
 when the system asks for reduced motion.
 
+Sound effects and music are generated in the page; the speaker button opens the volume settings.
+See [AUDIO.md](AUDIO.md).
+
 ## Options
 
 <!-- options:begin -->

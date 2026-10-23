@@ -4,6 +4,7 @@
 //
 // The helpers before `start()` are pure and exported for the node tests (crates/web/js-tests).
 
+import { AudioEngine, tuneForStage } from "./audio.js";
 import {
   COLOUR_CSS,
   COLOUR_NAMES,
@@ -381,6 +382,13 @@ function start() {
     randomLook: $("random-look"),
     doneLook: $("done-look"),
     changeLook: $("change-look"),
+    soundButton: $("sound-button"),
+    soundPanel: $("sound-panel"),
+    musicVolume: $("music-volume"),
+    effectsVolume: $("effects-volume"),
+    mute: $("mute"),
+    testSound: $("test-sound"),
+    closeSound: $("close-sound"),
   };
   const ctx = el.canvas.getContext("2d");
   const keys = new KeyTracker();
@@ -436,6 +444,8 @@ function start() {
 
   function dispatch(event) {
     state = reduce(state, event);
+    if (event.type === "Snapshot") audio.handleEvents(event.events);
+    audio.setTune(tuneForStage(state.stage));
     if ((event.type === "Welcome" || event.type === "Lobby") && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
       const code = renderer.load(JSON.stringify(event.state));
@@ -575,6 +585,33 @@ function start() {
       return undefined;
     }
   })();
+
+  // ---- sound: generated effects and music, started by the first key press or click ----
+  const audio = new AudioEngine({ storage });
+  audio.attach(window);
+  audio.setTune(tuneForStage(state.stage));
+  el.musicVolume.value = String(Math.round(audio.settings.music * 100));
+  el.effectsVolume.value = String(Math.round(audio.settings.effects * 100));
+  el.mute.checked = audio.settings.muted;
+  el.soundButton.addEventListener("click", () => {
+    el.soundPanel.hidden = !el.soundPanel.hidden;
+    el.soundButton.setAttribute("aria-expanded", String(!el.soundPanel.hidden));
+  });
+  el.closeSound.addEventListener("click", () => {
+    el.soundPanel.hidden = true;
+    el.soundButton.setAttribute("aria-expanded", "false");
+  });
+  el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
+  el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
+  el.mute.addEventListener("change", () => audio.setSettings({ muted: el.mute.checked }));
+  el.testSound.addEventListener("click", () => audio.testSound());
+  // every button of the menu and lobby clicks (the test button plays its own sound)
+  document.addEventListener("click", (e) => {
+    const button = e.target instanceof Element ? e.target.closest("button") : null;
+    if (button && button !== el.testSound && state.stage !== "playing") audio.play("click");
+  });
+  document.addEventListener("visibilitychange", () => audio.setHidden(document.hidden));
+
   let draft = loadLook(storage, 0);
   let editing = false;
 
@@ -646,6 +683,8 @@ function start() {
 
   window.addEventListener("keydown", (e) => {
     if (state.stage === "playing") {
+      // the sliders of the sound panel keep their arrow keys
+      if (e.target instanceof HTMLInputElement) return;
       if (e.code in DIRECTIONS || BOMB_KEYS.has(e.code)) e.preventDefault();
       keys.press(e.code);
     } else if (state.stage === "lobby" && e.key === "Enter") {

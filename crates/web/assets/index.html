@@ -11,7 +11,21 @@
     <header>
       <h1>Bomberust</h1>
       <p id="notice" role="status" aria-live="polite">Loading...</p>
+      <button id="sound-button" class="sound-button" type="button" aria-label="Sound settings" aria-controls="sound-panel" aria-expanded="false">&#9835;</button>
     </header>
+
+    <section id="sound-panel" class="dialog sound" aria-label="Sound settings" hidden>
+      <h2>Sound</h2>
+      <label for="music-volume">Music</label>
+      <input id="music-volume" type="range" min="0" max="100" step="1">
+      <label for="effects-volume">Effects</label>
+      <input id="effects-volume" type="range" min="0" max="100" step="1">
+      <label class="check"><input id="mute" type="checkbox"> Mute</label>
+      <div class="buttons">
+        <button id="test-sound" type="button">Test sound</button>
+        <button id="close-sound" type="button">Close</button>
+      </div>
+    </section>
 
     <section id="join-panel" class="menu">
       <canvas id="logo" aria-hidden="true"></canvas>

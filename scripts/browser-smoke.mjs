@@ -94,6 +94,20 @@ async function main() {
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
   await shot("1-join.png");
 
+  // the sound settings (feature 003): open the panel, move a slider, check that it is stored
+  await evaluate("document.getElementById('sound-button').click(); 1");
+  await evaluate(`(() => {
+    const m = document.getElementById('music-volume');
+    m.value = '60';
+    m.dispatchEvent(new Event('input'));
+    document.getElementById('mute').click();
+    return 1;
+  })()`);
+  await sleep(200);
+  await shot("1a-sound.png");
+  console.log("audio settings:", await evaluate("localStorage.getItem('bomberust.audio.v1')"));
+  await evaluate("document.getElementById('mute').click(); document.getElementById('close-sound').click(); 1");
+
   // pick a look in the character editor (feature 003) and save a screenshot of it
   await evaluate(`(() => {
     document.querySelector('#swatches [data-colour="Teal"]').click();

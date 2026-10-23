@@ -175,3 +175,72 @@ fn us4_as2_the_options_table_in_the_web_guide_is_generated_from_the_usage_text()
         "the options table of docs/WEB.md is out of date; replace the text between the markers with:\n{expected}"
     );
 }
+
+/// The quoted names of `export const <name> = [ ... ];` in `audio.js`.
+fn js_list(source: &str, name: &str) -> Vec<String> {
+    let start = source
+        .find(&format!("export const {name} = ["))
+        .unwrap_or_else(|| panic!("{name} not found in audio.js"));
+    let rest = &source[start..];
+    let body = &rest[rest.find('[').unwrap() + 1..rest.find(']').unwrap()];
+    body.split('"')
+        .enumerate()
+        .filter(|(i, _)| i % 2 == 1)
+        .map(|(_, s)| s.to_string())
+        .collect()
+}
+
+#[test]
+fn f3_sc009_the_audio_guide_lists_every_sound_and_tune_as_generated() {
+    let js = read("crates/web/assets/audio.js");
+    let guide = read("docs/AUDIO.md");
+    assert!(
+        guide.contains("generated"),
+        "the guide must say that the audio is generated"
+    );
+    for name in ["SOUND_IDS", "TUNE_NAMES"] {
+        let list = js_list(&js, name);
+        assert!(list.len() >= 2, "{name}: {list:?}");
+        for id in list {
+            let row = guide
+                .lines()
+                .find(|l| l.starts_with('|') && l.contains(&format!("`{id}`")))
+                .unwrap_or_else(|| panic!("docs/AUDIO.md has no table row for `{id}`"));
+            let cells: Vec<&str> = row.split('|').map(str::trim).collect();
+            assert!(
+                cells.iter().filter(|c| !c.is_empty()).count() >= 2
+                    && cells.last().is_some_and(|_| row.len() > id.len() + 12),
+                "`{id}` needs a recipe in docs/AUDIO.md"
+            );
+        }
+    }
+}
+
+#[test]
+fn f3_sc009_no_audio_file_is_referenced_or_embedded() {
+    let extensions = [".mp3", ".ogg", ".wav", ".flac", ".m4a", ".aac"];
+    for file in [
+        "crates/web/assets/audio.js",
+        "crates/web/assets/app.js",
+        "crates/web/assets/index.html",
+        "crates/web/assets/style.css",
+        "crates/web/src/assets.rs",
+    ] {
+        let text = read(file).to_lowercase();
+        for ext in extensions {
+            assert!(!text.contains(ext), "{file} mentions {ext}");
+        }
+    }
+    let assets = fs::read_dir(root().join("crates/web/assets")).unwrap();
+    for entry in assets {
+        let name = entry.unwrap().file_name().to_string_lossy().to_lowercase();
+        assert!(
+            !extensions.iter().any(|e| name.ends_with(e)),
+            "audio file {name}"
+        );
+    }
+    assert!(
+        !read("crates/web/assets/audio.js").contains("fetch("),
+        "audio.js must not fetch anything"
+    );
+}
