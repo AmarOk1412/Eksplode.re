@@ -207,3 +207,47 @@ fn bots_survive_every_power_on_the_board_and_never_punch() {
         step(&mut s, &inputs);
     }
 }
+
+/// 7x7 open arena whose pattern starts at tick 100 and announces a square every 4 ticks with a
+/// lead of 20 ticks.
+fn pattern_state(starts: [Option<(u8, u8)>; 4]) -> GameState {
+    let config = bomberust_core::Config {
+        round_limit_ticks: 200,
+        closing_ticks: 100,
+        closing_lead_ticks: 20,
+        ..bomberust_core::Config::default()
+    };
+    state_with(config, &OPEN, starts)
+}
+
+#[test]
+fn f4_us2_a_bot_on_an_announced_square_moves_off_it_in_time() {
+    // (1,1) is the first square of the spiral: announced at tick 100, lands at tick 120
+    let mut s = pattern_state([Some((1, 1)), Some((3, 3)), Some((4, 3)), None]);
+    let mut bot = DefaultBot::new(1);
+    while s.tick < 100 {
+        step(&mut s, &[PlayerInput::default(); 4]);
+    }
+    let mut dodged = false;
+    for _ in 0..40 {
+        let mut inputs = [PlayerInput::default(); 4];
+        inputs[0] = bot.decide(&s.observe(pid(0)));
+        let ev = step(&mut s, &inputs);
+        dodged |= ev.contains(&Event::BlockLanded { pos: pos(1, 1) });
+        assert!(s.players[0].alive, "crushed at tick {}", s.tick);
+    }
+    assert!(dodged, "the first block landed while the bot lived");
+    assert_ne!(s.players[0].pos, pos(1, 1));
+}
+
+#[test]
+fn f4_us2_a_bot_keeps_moving_inward_ahead_of_the_pattern() {
+    let mut s = pattern_state([Some((1, 1)), Some((3, 3)), Some((4, 3)), None]);
+    let mut bot = DefaultBot::new(2);
+    let mut inputs = [PlayerInput::default(); 4];
+    while s.tick < 170 && s.players[0].alive && s.players[1].alive && s.players[2].alive {
+        inputs[0] = bot.decide(&s.observe(pid(0)));
+        step(&mut s, &inputs);
+    }
+    assert!(s.players[0].alive, "dead at tick {}", s.tick);
+}

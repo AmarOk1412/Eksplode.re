@@ -30,10 +30,15 @@ pub fn required_size(state: &Observation) -> (u16, u16) {
 
 /// Glyph and style of one tile. Priority: player, flame, bomb, power-up, terrain.
 pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
+    let announced = state.falling.iter().any(|f| f.pos == pos);
     if let Some(p) = state.players.iter().find(|p| p.alive && p.pos == pos) {
-        let style = Style::default()
+        let mut style = Style::default()
             .fg(player_color(p.id))
             .add_modifier(Modifier::BOLD);
+        if announced {
+            // a block is about to land on this player
+            style = style.add_modifier(Modifier::REVERSED);
+        }
         return (format!("P{}", p.id.index() + 1), style);
     }
     if state.flames.iter().any(|f| f.pos == pos) {
@@ -81,6 +86,15 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
             Color::Green
         };
         return (glyph.into(), Style::default().fg(colour));
+    }
+    if announced {
+        // the end pattern is about to cover this square
+        return (
+            "!!".into(),
+            Style::default()
+                .fg(Color::Red)
+                .add_modifier(Modifier::BOLD | Modifier::SLOW_BLINK),
+        );
     }
     match state.arena.tile(pos) {
         Tile::Wall => ("##".into(), Style::default().fg(Color::DarkGray)),
@@ -136,6 +150,25 @@ pub fn render(frame: &mut Frame, state: &Observation, ctx: &ViewContext) {
 
     let msg_rect = Rect::new(area.x, area.y + arena_h + STATUS_LINES, area.width, 1);
     frame.render_widget(Paragraph::new(message(state, ctx)), msg_rect);
+}
+
+/// The time left, or `CLOSING` once the end pattern has started and the round ends when one is
+/// left, however long it takes.
+pub fn clock(state: &Observation) -> String {
+    let c = &state.config;
+    let pattern = matches!(
+        c.mode,
+        bomberust_core::Mode::Normal | bomberust_core::Mode::Team
+    ) && c.closing_ticks > 0
+        && c.closing_ticks < c.round_limit_ticks;
+    if pattern && state.tick >= c.round_limit_ticks - c.closing_ticks {
+        return "CLOSING".to_string();
+    }
+    let left = c
+        .round_limit_ticks
+        .saturating_sub(state.tick)
+        .div_ceil(c.tick_hz.max(1));
+    format!("{:02}:{:02}", left / 60, left % 60)
 }
 
 fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
@@ -206,7 +239,7 @@ fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
             "The runners win!  r: rematch  q: quit".to_string()
         }
         (None, Phase::Playing) if ctx.paused => "PAUSED  p: resume  q: quit".to_string(),
-        (None, Phase::Playing) => "p: pause  q: quit".to_string(),
+        (None, Phase::Playing) => format!("{}  p: pause  q: quit", clock(state)),
     };
     Line::from(Span::styled(
         text,

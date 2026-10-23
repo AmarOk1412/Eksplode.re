@@ -240,3 +240,49 @@ fn f3_us2_as10_the_status_line_lists_the_kick() {
     let s = screen(&st, &ctx());
     assert!(s.contains("punch kick") || s.contains("kick"), "{s}");
 }
+
+#[test]
+fn f4_us2_as6_the_announcement_the_landed_blocks_and_the_time_left_are_drawn() {
+    let mut st = base();
+    st.config.round_limit_ticks = 3600;
+    st.tick = 20;
+    let plain = screen(&st, &ctx());
+    assert!(!plain.contains("!!"), "nothing announced, nothing marked");
+    assert!(
+        plain.contains("02:59"),
+        "time left in minutes and seconds:\n{plain}"
+    );
+
+    st.closing.falling.push(bomberust_core::Falling {
+        pos: Pos::new(3, 3),
+        ticks_left: 12,
+    });
+    let marked = screen(&st, &ctx());
+    assert!(marked.contains("!!"), "announced square:\n{marked}");
+
+    // a landed block is an ordinary wall
+    st.closing.falling.clear();
+    st.arena
+        .set_tile(Pos::new(3, 3), bomberust_core::Tile::Wall);
+    let landed = screen(&st, &ctx());
+    assert!(!landed.contains("!!"));
+    assert_eq!(
+        landed.matches("##").count(),
+        plain.matches("##").count() + 1
+    );
+
+    // the pattern time: the clock says so
+    st.tick = 3600 - 1200;
+    assert!(screen(&st, &ctx()).contains("CLOSING"));
+}
+
+#[test]
+fn a_player_on_an_announced_square_is_still_drawn_and_marked() {
+    let mut st = base();
+    st.closing.falling.push(bomberust_core::Falling {
+        pos: Pos::new(1, 1),
+        ticks_left: 5,
+    });
+    let s = screen(&st, &ctx());
+    assert!(s.contains("P1"));
+}

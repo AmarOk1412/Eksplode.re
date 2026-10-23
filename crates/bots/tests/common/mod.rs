@@ -20,6 +20,12 @@ pub fn state(rows: &[&str], starts: [Option<(u8, u8)>; 4]) -> GameState {
     GameState::custom(Config::default(), arena, starts, 1).expect("valid state")
 }
 
+pub fn state_with(config: Config, rows: &[&str], starts: [Option<(u8, u8)>; 4]) -> GameState {
+    let arena = Arena::from_rows(rows).expect("valid arena");
+    let starts = starts.map(|s| s.map(|(x, y)| Pos::new(x, y)));
+    GameState::custom(config, arena, starts, 1).expect("valid state")
+}
+
 /// Player 0 at `me`, player 1 at `other`.
 pub fn duel(rows: &[&str], me: (u8, u8), other: (u8, u8)) -> GameState {
     state(rows, [Some(me), Some(other), None, None])

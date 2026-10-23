@@ -3,6 +3,7 @@
 use crate::action::{PlayerInput, MAX_PLAYERS};
 use crate::arena::Tile;
 use crate::bomb;
+use crate::closing;
 use crate::kick;
 use crate::punch;
 use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind};
@@ -51,6 +52,7 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
     }
 
     bomb::detonate(state, &mut events);
+    closing::advance(state, &mut events);
     eliminate(state, &mut events);
 
     state.tick += 1;
@@ -160,6 +162,8 @@ fn outcome(state: &GameState) -> Option<Outcome> {
     match alive.as_slice() {
         [] => Some(Outcome::Draw),
         [only] if state.started > 1 => Some(Outcome::Winner(only.id)),
+        // with the end pattern the round ends when at most one is left, however long it takes
+        _ if closing::enabled(state) => None,
         _ if state.tick >= state.config.round_limit_ticks => Some(Outcome::Draw),
         _ => None,
     }

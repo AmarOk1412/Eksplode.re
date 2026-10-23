@@ -4,6 +4,9 @@ use bomberust_core::kick::{predict_slide_explosion, predict_slide_stop};
 use bomberust_core::punch::predict_landing;
 use bomberust_core::{blast, Observation, Pos};
 
+/// The last step of a window that never ends.
+const FOREVER: u32 = u32::MAX / 2;
+
 /// Burning windows per tile, in steps counted from the observation (step 1 is the next tick).
 #[derive(Clone, Debug)]
 pub struct DangerMap {
@@ -89,6 +92,10 @@ impl DangerMap {
             if f.ticks_left > 1 {
                 map.add(f.pos, 1, f.ticks_left - 1);
             }
+        }
+        // an announced square is walkable until its block lands and lethal for good after
+        for f in &obs.falling {
+            map.add(f.pos, f.ticks_left.max(1), FOREVER);
         }
         map
     }

@@ -214,6 +214,8 @@ pub struct Closing {
     pub next: usize,
     /// Ticks since the pattern started.
     pub elapsed: u32,
+    /// Ticks between two announcements, fixed when the pattern starts.
+    pub every: u32,
     /// Whether the pattern has started.
     pub started: bool,
     /// Announced squares.

@@ -220,3 +220,68 @@ test("the engine plays the sounds of a snapshot's events, capped and without rep
   engine.handleEvents(undefined);
   assert.doesNotThrow(() => engine.handleEvents([null, 3]));
 });
+
+// --- the end pattern (feature 004) --------------------------------------------------------
+
+const closing = {
+  started: "PatternStarted",
+  warned: { BlockWarned: { pos: P } },
+  landed: { BlockLanded: { pos: P } },
+};
+
+test("f4_us2_as6_the_pattern_has_a_warning_and_an_impact_sound", () => {
+  assert.deepEqual(ids([closing.started]), ["warning"]);
+  assert.deepEqual(ids([closing.warned]), ["warning"]);
+  assert.deepEqual(ids([closing.landed]), ["impact"]);
+  assert.ok(SOUND_IDS.includes("warning") && SOUND_IDS.includes("impact"));
+  // one warning and one impact per snapshot, however many squares changed
+  assert.deepEqual(ids([closing.warned, closing.warned, closing.landed, closing.landed]), ["warning", "impact"]);
+  const alarm = soundsForEvents([closing.started])[0].volume;
+  const tick = soundsForEvents([closing.warned])[0].volume;
+  assert.ok(alarm > tick, "the start of the pattern is louder than one announced square");
+  assert.equal(soundsForEvents([closing.warned, closing.started])[0].volume, alarm, "the loudest asked wins");
+});
+
+test("f4_us2_as6_the_impact_is_louder_when_a_player_was_crushed_in_that_snapshot", () => {
+  const soft = soundsForEvents([closing.landed])[0].volume;
+  const crush = soundsForEvents([closing.landed, ev.out])[0].volume;
+  assert.ok(soft > 0 && soft < crush && crush <= 1, `${soft} < ${crush}`);
+  assert.deepEqual(ids([closing.landed, ev.out]).sort(), ["eliminated", "impact"]);
+});
+
+test("warning is a short square beep and impact is a low thud with noise", () => {
+  const w = play("warning");
+  assert.equal(w.osc.length, 1);
+  assert.equal(w.osc[0].type, "square");
+  assert.ok(w.osc[0].dur <= 0.1);
+  const i = play("impact");
+  assert.ok(i.osc.length >= 1 && i.noise.length === 1);
+  assert.ok(i.osc.every((o) => o.f0 < 200), "low");
+});
+
+test("warnings are limited to one every 250 ms, impacts are not", () => {
+  const fake = fakeAudio();
+  const engine = new AudioEngine({ AudioContext: fake.AudioContext, storage: fakeStorage(), timer: fakeTimer() });
+  engine.unlock();
+  const ctx = fake.log.contexts[0];
+  ctx.currentTime = 10;
+  const count = () => fake.log.oscillators.length;
+  const before = count();
+  engine.handleEvents([closing.warned]);
+  const one = count() - before;
+  assert.ok(one > 0);
+  ctx.currentTime = 10.1;
+  engine.handleEvents([closing.warned]);
+  assert.equal(count() - before, one, "a second warning 100 ms later is dropped");
+  ctx.currentTime = 10.3;
+  engine.handleEvents([closing.warned]);
+  assert.equal(count() - before, 2 * one, "and one 300 ms after the first is played");
+  const start = count();
+  engine.handleEvents([closing.landed]);
+  ctx.currentTime = 10.31;
+  engine.handleEvents([closing.landed]);
+  assert.ok(count() - start >= 2, "impacts are never dropped");
+  ctx.currentTime = 10.32;
+  engine.handleEvents([closing.started]);
+  assert.ok(count() > start + 2, "the start of the pattern always sounds");
+});

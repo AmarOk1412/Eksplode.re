@@ -333,3 +333,84 @@ fn portraits_of_odd_sizes_are_empty_or_finite() {
         .iter()
         .all(|c| c.points.iter().all(|p| p.0.is_finite())));
 }
+
+/// Quads of the warning on one square: the red frame pieces and the dark block shadow.
+fn warning_quads(list: &[Command]) -> (Vec<&Command>, Vec<&Command>) {
+    let frame = list
+        .iter()
+        .filter(|c| c.kind == Kind::Quad && c.color[..3] == WARNING_FRAME)
+        .collect();
+    let shadow = list
+        .iter()
+        .filter(|c| c.kind == Kind::Quad && c.color[..3] == WARNING_SHADOW)
+        .collect();
+    (frame, shadow)
+}
+
+fn width_of(c: &Command) -> f32 {
+    c.points[1].0 - c.points[0].0
+}
+
+#[test]
+fn f4_us2_as6_an_announced_square_is_a_red_frame_with_a_growing_block_shadow() {
+    let mut quiet = standard();
+    let none = commands(&quiet);
+    assert!(
+        warning_quads(&none).0.is_empty(),
+        "nothing announced, nothing red"
+    );
+
+    let lead = quiet.config.closing_lead_ticks;
+    quiet.closing.falling.push(bomberust_core::Falling {
+        pos: bomberust_core::Pos::new(7, 6),
+        ticks_left: lead,
+    });
+    let early = commands(&quiet);
+    let (frame, shadow_early) = warning_quads(&early);
+    assert_eq!(frame.len(), 4, "a frame of four bars");
+    assert_eq!(shadow_early.len(), 1);
+    assert!(frame.iter().all(|c| c.color[3] > 0.0 && c.color[3] <= 1.0));
+
+    quiet.closing.falling[0].ticks_left = 2;
+    let late = commands(&quiet);
+    let (_, shadow_late) = warning_quads(&late);
+    assert!(
+        width_of(shadow_late[0]) > width_of(shadow_early[0]) * 1.5,
+        "the block shadow grows as the landing comes closer: {} vs {}",
+        width_of(shadow_late[0]),
+        width_of(shadow_early[0])
+    );
+    assert_eq!(
+        commands(&quiet),
+        late,
+        "the same observation draws the same frame"
+    );
+}
+
+#[test]
+fn f4_us2_as6_a_landed_block_is_an_ordinary_wall() {
+    let mut s = standard();
+    let before = quads_with(&commands(&s), WALL_BASE).len();
+    s.arena
+        .set_tile(bomberust_core::Pos::new(7, 6), bomberust_core::Tile::Wall);
+    s.arena
+        .set_tile(bomberust_core::Pos::new(7, 5), bomberust_core::Tile::Wall);
+    let after = quads_with(&commands(&s), WALL_BASE).len();
+    assert!(after > before, "{before} -> {after}");
+}
+
+#[test]
+fn announced_squares_are_drawn_below_players_and_bombs() {
+    let mut s = standard();
+    s.closing.falling.push(bomberust_core::Falling {
+        pos: s.players[0].pos,
+        ticks_left: 10,
+    });
+    let list = commands(&s);
+    let (frame, _) = warning_quads(&list);
+    let helmet = quads_with(&list, player_skin(0).helmet);
+    assert!(!helmet.is_empty());
+    let top_frame = frame.iter().map(|c| c.layer).fold(f32::MIN, f32::max);
+    let low_player = helmet.iter().map(|c| c.layer).fold(f32::MAX, f32::min);
+    assert!(top_frame < low_player, "the warning is under the player");
+}

@@ -1,6 +1,7 @@
 //! The default bot: flee fire, grab power-ups, hunt opponents, break blocks.
 
-use bomberust_core::{blast, Dir, Observation, Participant, Phase, PlayerInput, Pos, Rng};
+use bomberust_core::closing::closing_order;
+use bomberust_core::{blast, Dir, Mode, Observation, Participant, Phase, PlayerInput, Pos, Rng};
 
 use crate::danger::DangerMap;
 use crate::pathing::{find_path, has_malus, passable, PathRequest};
@@ -100,6 +101,12 @@ impl Bot for DefaultBot {
             return step_to(find_path(&req, &|_| true))
                 .unwrap_or_else(|| self.desperate(obs, me, &danger));
         }
+        if let Some(progress) = closing_progress(obs) {
+            req.max_depth = 14;
+            if let Some(i) = step_to(move_inward(obs, me, &req, progress)) {
+                return i;
+            }
+        }
         if can_bomb_here(obs, me) {
             return PlayerInput {
                 mv: None,
@@ -148,6 +155,47 @@ impl Bot for DefaultBot {
         }
         self.wander(obs, me, &danger)
     }
+}
+
+/// How far the end pattern has got, from 0.0 at its start to 1.0 at the end of its time; `None`
+/// before it starts and in rounds that have none.
+fn closing_progress(obs: &Observation) -> Option<f32> {
+    let c = &obs.config;
+    if !matches!(c.mode, Mode::Normal | Mode::Team)
+        || c.closing_ticks == 0
+        || c.closing_ticks >= c.round_limit_ticks
+    {
+        return None;
+    }
+    let start = c.round_limit_ticks - c.closing_ticks;
+    (obs.tick >= start).then(|| ((obs.tick - start) as f32 / c.closing_ticks as f32).min(1.0))
+}
+
+/// The squares are covered from the outside in, so a bot whose square is due soon walks toward
+/// squares that come later: the path to the nearest one, or `None` when it is safe where it is.
+fn move_inward(
+    obs: &Observation,
+    me: &Participant,
+    req: &PathRequest,
+    progress: f32,
+) -> Option<Vec<Dir>> {
+    let order = closing_order(obs.arena.width(), obs.arena.height());
+    let width = usize::from(obs.arena.width());
+    let mut rank = vec![None; width * usize::from(obs.arena.height())];
+    for (i, p) in order.iter().enumerate() {
+        rank[usize::from(p.y) * width + usize::from(p.x)] = Some(i);
+    }
+    let rank_of = |p: Pos| rank[usize::from(p.y) * width + usize::from(p.x)];
+    let mine = rank_of(me.pos)?;
+    // the announcement reaches this fifth of the order within a few seconds
+    let horizon = ((progress + 0.2) * order.len() as f32).ceil() as usize;
+    if mine >= horizon {
+        return None;
+    }
+    let target = horizon.max(mine + 1);
+    find_path(req, &|t| rank_of(t).is_some_and(|r| r >= target))
+        .or_else(|| find_path(req, &|t| rank_of(t).is_some_and(|r| r > mine)))
+        .filter(|p| !p.is_empty())
 }
 
 /// A tile with at least two open neighbours is not a dead end.

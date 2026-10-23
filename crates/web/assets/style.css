@@ -242,6 +242,16 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   width: min(270px, 100%);
 }
 
+.banner {
+  margin: 8px auto;
+  padding: 6px 16px;
+  width: fit-content;
+  background: #a52c2c;
+  color: #fff;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
 .mode-cards { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .mode-cards button { width: auto; font-size: 1.1rem; padding: 6px 14px; }
 .mode-cards button[aria-checked="true"] { background: var(--ink); color: #fff; }

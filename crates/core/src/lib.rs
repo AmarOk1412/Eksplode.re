@@ -6,6 +6,7 @@
 pub mod action;
 pub mod arena;
 pub mod bomb;
+pub mod closing;
 pub mod config;
 pub mod drops;
 pub mod error;

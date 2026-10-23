@@ -183,3 +183,20 @@ test("the timer is empty without a snapshot or a limit", () => {
   assert.equal(timerText({ tick: 1, config: {} }), "");
   assert.equal(timerText({ config: { round_limit_ticks: 10, tick_hz: 20 } }), "");
 });
+
+import { patternBanner } from "../assets/app.js";
+
+test("f4_us2_as6_the_banner_appears_when_the_pattern_starts_and_the_clock_says_closing", () => {
+  assert.equal(patternBanner(["PatternStarted"]), "The walls close in!");
+  assert.equal(patternBanner([{ Moved: {} }, "PatternStarted"]), "The walls close in!");
+  assert.equal(patternBanner([{ BlockWarned: { pos: { x: 1, y: 1 } } }]), "");
+  assert.equal(patternBanner(undefined), "");
+  assert.equal(patternBanner("PatternStarted"), "");
+
+  const config = { round_limit_ticks: 3600, closing_ticks: 1200, tick_hz: 20, mode: "normal" };
+  assert.equal(timerText({ tick: 2399, config }), "01:01");
+  assert.equal(timerText({ tick: 2400, config }), "CLOSING");
+  assert.equal(timerText({ tick: 5000, config }), "CLOSING", "past the limit while two live");
+  assert.equal(timerText({ tick: 2400, config: { ...config, closing_ticks: 0 } }), "01:00", "no pattern, no word");
+  assert.equal(timerText({ tick: 2400, config: { ...config, mode: "chaser" } }), "01:00");
+});

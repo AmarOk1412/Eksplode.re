@@ -2,6 +2,7 @@
 // starts a match, plays a few keys and saves screenshots. Optional manual-style check, not part of
 // `cargo test`. Usage:
 //   node scripts/browser-smoke.mjs http://127.0.0.1:8080/ [out-dir]
+// CLOSING=1 plays a 2-minute round and saves screenshots of the end pattern (takes about 80 s).
 // Needs a Chromium based browser (BROWSER=/path/to/browser, default chromium-browser).
 import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
@@ -99,7 +100,7 @@ async function main() {
   await evaluate(`(() => {
     document.getElementById('room-name').value = 'Smoke room';
     document.getElementById('room-name').dispatchEvent(new Event('input'));
-    for (const [id, value] of [['room-size', 'medium'], ['room-minutes', '5']]) {
+    for (const [id, value] of [['room-size', 'medium'], ['room-minutes', '${process.env.CLOSING ? 2 : 5}']]) {
       const select = document.getElementById(id);
       select.value = value;
       select.dispatchEvent(new Event('change'));
@@ -229,6 +230,22 @@ async function main() {
   await sleep(800);
   await shot("4-after-keys.png");
   console.log("hud:", await evaluate("document.getElementById('hud').innerText"));
+
+  // end pattern (feature 004): CLOSING=1 plays a 2-minute round and waits for the last minute
+  if (process.env.CLOSING) {
+    // walk toward the middle, which is covered last
+    for (let i = 0; i < 4; i += 1) {
+      await key("ArrowRight", "ArrowRight", 39);
+      await key("ArrowDown", "ArrowDown", 40);
+    }
+    await waitFor("document.getElementById('timer').innerText === 'CLOSING'", "the end pattern", 90000);
+    await sleep(600);
+    console.log("banner:", await evaluate("document.getElementById('banner').hidden + ' ' + document.getElementById('banner').innerText"));
+    await shot("5-closing-start.png");
+    await sleep(8000);
+    await shot("6-closing-later.png");
+    console.log("timer:", await evaluate("document.getElementById('timer').innerText"));
+  }
   console.log("notice:", await evaluate("document.getElementById('notice').textContent"));
   console.log("canvas:", await evaluate("document.getElementById('view').width + 'x' + document.getElementById('view').height"));
   console.log("console:", consoleLines.length ? consoleLines.join(" | ") : "(clean)");

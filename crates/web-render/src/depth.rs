@@ -10,6 +10,8 @@ use crate::look::{Frame, View};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Layer {
     Box,
+    /// The announcement of a falling block: on the floor, under everything that stands on it.
+    Warning,
     Flame,
     PowerUp,
     Bomb,
@@ -21,6 +23,11 @@ pub enum Sprite {
     Wall,
     Block,
     Flame,
+    /// A block that lands in `ticks_left` ticks; `lead` is the whole countdown.
+    Falling {
+        ticks_left: u32,
+        lead: u32,
+    },
     PowerUp(PowerUpKind),
     /// `flying` bombs are in the air after a punch and cast a shadow on the ground.
     Bomb {
@@ -82,6 +89,13 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
         }
     }
     let centre = |x: u8, y: u8| (f32::from(x) + 0.5, f32::from(y) + 0.5);
+    for f in &obs.falling {
+        let sprite = Sprite::Falling {
+            ticks_left: f.ticks_left,
+            lead: obs.config.closing_lead_ticks,
+        };
+        objects.push(item(centre(f.pos.x, f.pos.y), Layer::Warning, sprite));
+    }
     for f in &obs.flames {
         objects.push(item(centre(f.pos.x, f.pos.y), Layer::Flame, Sprite::Flame));
     }

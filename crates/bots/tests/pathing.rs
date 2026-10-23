@@ -89,3 +89,26 @@ fn goals_are_respected() {
     let p = path(&s, &|t| t == pos(3, 1)).expect("reachable");
     assert_eq!(p, vec![Dir::Right, Dir::Right]);
 }
+
+#[test]
+fn f4_a_path_never_ends_on_an_announced_square() {
+    let mut s = duel(&OPEN, (3, 3), (5, 5));
+    for (x, y) in [(3, 3), (3, 2), (2, 3), (4, 3), (3, 4)] {
+        s.closing.falling.push(bomberust_core::Falling {
+            pos: pos(x, y),
+            ticks_left: 30,
+        });
+    }
+    let o = obs(&s, 0);
+    let d = DangerMap::from_observation(&o);
+    let req = PathRequest::new(&o, &d);
+    let path = find_path(&req, &|_| true).expect("a way out of the cross");
+    let mut at = pos(3, 3);
+    for dir in &path {
+        at = at.step(*dir, 7, 7).unwrap();
+    }
+    assert!(
+        s.closing.falling.iter().all(|f| f.pos != at),
+        "ended on announced square {at:?}"
+    );
+}

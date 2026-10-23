@@ -29,6 +29,9 @@ pub const BOMB_FUSE: Rgb = [0.55, 0.36, 0.2];
 pub const SPARK_A: Rgb = [1.0, 0.6, 0.1];
 pub const SPARK_B: Rgb = [1.0, 0.9, 0.3];
 pub const WHITE: Rgb = [1.0, 1.0, 1.0];
+/// The frame and the block shadow of a square the end pattern is about to cover.
+pub const WARNING_FRAME: Rgb = [0.86, 0.12, 0.12];
+pub const WARNING_SHADOW: Rgb = [0.08, 0.08, 0.1];
 /// Frame of a malus power-up.
 pub const MALUS_FRAME: Rgb = [0.42, 0.06, 0.08];
 /// Tints of the pulse around a player with a malus.

@@ -9,7 +9,7 @@ use crate::sprites::{
     bomb_colour, hex, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
     BRICK_LINE, FLAME_CORE, FLAME_MID, FLAME_OUTER, ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE,
     MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER, WALL_BASE, WALL_SHADE, WALL_WINDOW,
-    WALL_WINDOW_EDGE, WHITE,
+    WALL_WINDOW_EDGE, WARNING_FRAME, WARNING_SHADOW, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -107,6 +107,12 @@ impl Pen<'_> {
         self.out.push(quad(solid(c), p, self.layer));
     }
 
+    fn tint(&mut self, c: Rgb, alpha: f32, x0: f32, y0: f32, x1: f32, y1: f32) {
+        let p = self.view.rect(x0, y0, x1, y1);
+        self.out
+            .push(quad([c[0], c[1], c[2], alpha], p, self.layer));
+    }
+
     fn shadow(&mut self, x0: f32, y0: f32, x1: f32, y1: f32) {
         let p = self.view.rect(x0, y0, x1, y1);
         self.out.push(quad([0.0, 0.0, 0.0, 0.14], p, self.layer));
@@ -199,6 +205,33 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
                     );
                 }
             }
+        }
+        Sprite::Falling { ticks_left, lead } => {
+            // the block shadow grows as the landing comes closer; the frame blinks faster
+            let closeness = 1.0 - ticks_left as f32 / lead.max(1) as f32;
+            let closeness = closeness.clamp(0.0, 1.0);
+            let half = 0.12 + 0.34 * closeness;
+            pen.tint(
+                WARNING_SHADOW,
+                0.35 + 0.25 * closeness,
+                tx + 0.5 - half,
+                ty + 0.5 - half,
+                tx + 0.5 + half,
+                ty + 0.5 + half,
+            );
+            let blink = if ticks_left % 4 < 2 { 0.95 } else { 0.55 };
+            let bar = 0.09;
+            pen.tint(WARNING_FRAME, blink, tx, ty, tx + 1.0, ty + bar);
+            pen.tint(WARNING_FRAME, blink, tx, ty + 1.0 - bar, tx + 1.0, ty + 1.0);
+            pen.tint(WARNING_FRAME, blink, tx, ty + bar, tx + bar, ty + 1.0 - bar);
+            pen.tint(
+                WARNING_FRAME,
+                blink,
+                tx + 1.0 - bar,
+                ty + bar,
+                tx + 1.0,
+                ty + 1.0 - bar,
+            );
         }
         Sprite::Flame => {
             pen.rect(FLAME_OUTER, tx, ty, tx + 1.0, ty + 1.0);

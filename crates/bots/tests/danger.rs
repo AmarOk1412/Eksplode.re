@@ -167,3 +167,26 @@ fn f3_us2_as12_the_stop_square_follows_blockers_on_the_way() {
     let d = DangerMap::from_observation(&obs(&s, 0));
     assert_eq!(d.first_danger(pos(3, 2)), Some(12));
 }
+
+#[test]
+fn an_announced_square_is_lethal_from_its_landing_on() {
+    let mut s = duel(&OPEN, (1, 5), (5, 1));
+    s.closing.falling.push(bomberust_core::Falling {
+        pos: pos(3, 3),
+        ticks_left: 7,
+    });
+    let d = DangerMap::from_observation(&obs(&s, 0));
+    assert_eq!(d.first_danger(pos(3, 3)), Some(7));
+    assert!(
+        !d.dangerous_during(pos(3, 3), 1, 6),
+        "walkable until it lands"
+    );
+    assert!(d.dangerous_during(pos(3, 3), 7, 7));
+    assert!(
+        d.dangerous_during(pos(3, 3), 5000, 5000),
+        "and for good after"
+    );
+    assert!(!d.safe_from(pos(3, 3), 1));
+    assert!(!d.safe_from(pos(3, 3), 100_000));
+    assert_eq!(d.first_danger(pos(3, 2)), None);
+}

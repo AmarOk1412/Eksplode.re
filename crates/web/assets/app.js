@@ -337,11 +337,20 @@ export function inputMessage(state, keys) {
   return { type: "Input", tick: state.tick, mv: keys.mv, bomb: keys.bomb, punch: keys.punch === true };
 }
 
-/** Time left in the round as `MM:SS`, or an empty string when the snapshot has no limit. */
+/** The banner shown for two seconds when the end pattern starts; empty for any other events. */
+export function patternBanner(events) {
+  return Array.isArray(events) && events.includes("PatternStarted") ? "The walls close in!" : "";
+}
+
+/** Time left in the round as `MM:SS`, `CLOSING` while the end pattern runs, or an empty string. */
 export function timerText(obs) {
   const limit = obs?.config?.round_limit_ticks;
   const hz = obs?.config?.tick_hz;
   if (!(limit > 0) || !(hz > 0) || typeof obs.tick !== "number") return "";
+  const closing = obs.config.closing_ticks;
+  const mode = obs.config.mode;
+  const pattern = (mode === undefined || mode === "normal" || mode === "team") && closing > 0 && closing < limit;
+  if (pattern && obs.tick >= limit - closing) return "CLOSING";
   const left = Math.max(0, Math.ceil((limit - obs.tick) / hz));
   const two = (n) => String(n).padStart(2, "0");
   return `${two(Math.floor(left / 60))}:${two(left % 60)}`;
@@ -477,6 +486,7 @@ function start() {
     canvas: $("view"),
     hud: $("hud"),
     timer: $("timer"),
+    banner: $("banner"),
     logo: $("logo"),
     editor: $("editor"),
     preview: $("preview"),
@@ -508,6 +518,7 @@ function start() {
   let lastSnapshotAt = 0;
   let logoPainted = false;
   let lobbyCanvases = [];
+  let bannerTimer = null;
   const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
   /** Paints the semi-3D characters of the lobby cards `seconds` into their animation. */
@@ -554,7 +565,18 @@ function start() {
 
   function dispatch(event) {
     state = reduce(state, event);
-    if (event.type === "Snapshot") audio.handleEvents(event.events);
+    if (event.type === "Snapshot") {
+      audio.handleEvents(event.events);
+      const text = patternBanner(event.events);
+      if (text) {
+        el.banner.textContent = text;
+        el.banner.hidden = false;
+        clearTimeout(bannerTimer);
+        bannerTimer = setTimeout(() => {
+          el.banner.hidden = true;
+        }, 2000);
+      }
+    }
     audio.setTune(tuneForStage(state.stage));
     if ((event.type === "Welcome" || event.type === "Lobby") && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
@@ -619,6 +641,7 @@ function start() {
     el.joinPanel.hidden = inLobby || playing || roomMenu;
     el.lobbyPanel.hidden = !inLobby;
     el.gamePanel.hidden = !playing;
+    if (!playing) el.banner.hidden = true;
     el.editor.hidden = roomMenu || (!(!inLobby && !playing) && !(inLobby && editing));
     renderRoom();
     el.doneLook.hidden = !inLobby;

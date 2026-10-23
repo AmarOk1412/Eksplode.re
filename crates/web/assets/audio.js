@@ -10,6 +10,8 @@ export const STORAGE_KEY = "bomberust.audio.v1";
 export const DEFAULT_SETTINGS = Object.freeze({ music: 0.35, effects: 0.7, muted: false });
 const RAMP_SECONDS = 0.05;
 const FADE_SECONDS = 0.3;
+/** Seconds between two announcement beeps. */
+const WARNING_GAP = 0.25;
 
 const level = (value, fallback) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback;
@@ -48,7 +50,7 @@ export function effectiveGain(value, muted) {
 
 // --- sound effects --------------------------------------------------------------------------
 
-export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw"];
+export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw", "warning", "impact"];
 export const MAX_SOUNDS_PER_SNAPSHOT = 8;
 const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb"]);
 
@@ -59,10 +61,22 @@ const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb"]);
 export function soundsForEvents(events) {
   if (!Array.isArray(events)) return [];
   const counts = new Map();
-  const add = (id) => counts.set(id, (counts.get(id) ?? 0) + 1);
+  const loudest = new Map();
+  const add = (id, volume = 1) => {
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+    loudest.set(id, Math.max(loudest.get(id) ?? 0, volume));
+  };
+  // a block landing on someone is louder than one landing on the floor
+  const crushed = events.some((e) => e !== null && typeof e === "object" && "BlockLanded" in e) && events.some((e) => e !== null && typeof e === "object" && "PlayerEliminated" in e);
   for (const e of events) {
+    if (e === "PatternStarted") {
+      add("warning", 1);
+      continue;
+    }
     if (e === null || typeof e !== "object" || Array.isArray(e)) continue;
-    if ("BombPlaced" in e) add("bombPlace");
+    if ("BlockWarned" in e) add("warning", 0.4);
+    else if ("BlockLanded" in e) add("impact", crushed ? 1 : 0.6);
+    else if ("BombPlaced" in e) add("bombPlace");
     else if ("BombExploded" in e) add("explosion");
     else if ("BombPunched" in e) add("punch");
     else if ("BombKicked" in e) add("kick");
@@ -76,7 +90,7 @@ export function soundsForEvents(events) {
   }
   return [...counts]
     .slice(0, MAX_SOUNDS_PER_SNAPSHOT)
-    .map(([id, n]) => ({ id, volume: id === "explosion" ? 1 / Math.sqrt(n) : 1 }));
+    .map(([id, n]) => ({ id, volume: id === "explosion" ? 1 / Math.sqrt(n) : loudest.get(id) ?? 1 }));
 }
 
 const hz = (midi) => 440 * 2 ** ((midi - 69) / 12);
@@ -160,6 +174,11 @@ const RECIPES = {
     [523.25, 659.25, 783.99, 1046.5].forEach((f0, i) =>
       tone(c, o, { type: "triangle", f0, start: t + 0.1 * i, dur: i === 3 ? 0.35 : 0.1, gain: 0.45 * v }),
     );
+  },
+  warning: (c, o, t, v) => tone(c, o, { type: "square", f0: 880, f1: 660, start: t, dur: 0.07, gain: 0.3 * v }),
+  impact: (c, o, t, v) => {
+    noise(c, o, { type: "lowpass", f0: 900, f1: 90, start: t, dur: 0.18, gain: 0.7 * v });
+    tone(c, o, { type: "sine", f0: 90, f1: 45, start: t, dur: 0.2, gain: 0.9 * v });
   },
   draw: (c, o, t, v) => {
     tone(c, o, { type: "triangle", f0: 196, start: t, dur: 0.2, gain: 0.45 * v });
@@ -406,6 +425,15 @@ export class AudioEngine {
   play(id, volume = 1) {
     if (!this.ctx || !(id in RECIPES)) return;
     const v = Number.isFinite(volume) ? Math.min(1, Math.max(0, volume)) : 1;
+    // a short beep per announced square would be a buzz: at most one every 250 ms, except the
+    // louder alarm of the pattern start
+    if (id === "warning" && v < 1) {
+      const now = this.ctx.currentTime;
+      if (this.lastWarning !== undefined && now - this.lastWarning < WARNING_GAP) return;
+      this.lastWarning = now;
+    } else if (id === "warning") {
+      this.lastWarning = this.ctx.currentTime;
+    }
     try {
       RECIPES[id](this.ctx, this.buses.effects, this.ctx.currentTime + 0.005, v);
     } catch {

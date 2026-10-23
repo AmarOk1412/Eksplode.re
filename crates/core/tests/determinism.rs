@@ -73,10 +73,11 @@ fn random_play_never_panics_and_keeps_invariants() {
 }
 
 #[test]
-fn the_round_always_ends_within_the_limit() {
+fn the_round_always_ends_within_the_limit_plus_the_last_announcement() {
     let mut s = GameState::new(Config::default(), 1, [true; 4]).unwrap();
     let mut rng = Rng::new(1);
-    for _ in 0..s.config.round_limit_ticks {
+    // the end pattern covers the board within the limit plus the announcement of the last block
+    for _ in 0..s.config.round_limit_ticks + s.config.closing_lead_ticks + 1 {
         step(&mut s, &random_inputs(&mut rng));
     }
     assert_ne!(s.phase, bomberust_core::Phase::Playing);
@@ -145,4 +146,40 @@ fn f4_sc003_default_settings_play_as_before() {
         .map(|(seed, _)| (*seed, fingerprint(*seed)))
         .collect();
     assert_eq!(now, golden.to_vec());
+}
+
+#[test]
+fn f4_us2_as7_the_same_seed_settings_and_inputs_give_the_same_pattern_and_result() {
+    let config = Config {
+        round_limit_ticks: 600,
+        closing_ticks: 300,
+        ..Config::default()
+    };
+    let mut started = 0;
+    for seed in 0..20u64 {
+        let mut a = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+        let mut b = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+        let mut ra = Rng::new(seed ^ 0x77);
+        let mut rb = Rng::new(seed ^ 0x77);
+        for _ in 0..700 {
+            // walking only, so that everybody is alive when the pattern starts
+            let (mut ia, mut ib) = (random_inputs(&mut ra), random_inputs(&mut rb));
+            for input in ia.iter_mut().chain(ib.iter_mut()) {
+                input.bomb = false;
+            }
+            let ea = step(&mut a, &ia);
+            let eb = step(&mut b, &ib);
+            assert_eq!(ea, eb, "seed {seed}");
+            if ea.contains(&bomberust_core::Event::PatternStarted) {
+                started += 1;
+            }
+        }
+        assert_eq!(a, b, "seed {seed}");
+        assert_ne!(
+            a.phase,
+            bomberust_core::Phase::Playing,
+            "seed {seed} must end"
+        );
+    }
+    assert!(started > 0, "the pattern ran in at least one round");
 }

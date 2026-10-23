@@ -1,8 +1,41 @@
-# Gameplay: powers, maluses, the punch and the kick
+# Gameplay: rooms, modes, powers, maluses, the punch and the kick
 
 Blocks that burn down may drop a power. At most one item per block, decided at the moment the
 block is destroyed. Walk onto an item to pick it up; bonuses last for the round, maluses for 10
 seconds.
+
+## Rooms and settings
+
+A room is described by one set of settings that the owner (the first person who opens the room,
+later the lowest slot held by a person) chooses before the match: a name of at most 24
+characters, the mode, the board size, the round time and, for Team mode, friendly fire. The page
+shows a creation menu on an empty server, the terminal host a setup screen; in the lobby everybody
+sees the settings and only the owner changes them (page: the controls above the cards; terminal:
+`m` mode, `s` size, `t` time, `f` friendly fire). Nobody can change them during a match, and they
+stay for the rematch. The room closes when the last person leaves.
+
+| Setting | Values | Default |
+|---------|--------|---------|
+| Board size | small 15 x 13, medium 19 x 15, large 25 x 19 | small |
+| Round time | 2, 3, 5 or 10 minutes | 3 |
+| Friendly fire | on or off (Team mode only) | on |
+| Mode | Normal | Normal |
+
+## Normal mode and the end pattern
+
+Everybody plays against everybody with the rules below. During the last 60 seconds of the round
+time the board closes in: blocks fall in a clockwise spiral that starts at the outer ring and
+ends in the middle, until at most one player is left. A falling block is announced on its square
+for one second (the page draws a blinking red frame and a growing dark block, the terminal `!!`),
+then it lands and the square is a wall that explosions cannot destroy. A player on the square is
+eliminated, a bomb or a power on it is destroyed (a bomb does not explode, and its owner may place
+it again), a bomb in the air is not touched. The pace is set so that every free square is covered
+about a minute after the pattern starts, on every board size, so a Normal round always ends: with
+the last player as the winner, or as a draw if the last players are eliminated in the same tick.
+The round never ends by time while two players are alive. The page plays a warning sound and an
+impact sound and shows "The walls close in!"; the clock then says `CLOSING`.
+
+A round with a single participant (practice) has no end pattern and ends at the time limit.
 
 ## Powers
 
