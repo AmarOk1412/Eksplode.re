@@ -1,6 +1,6 @@
 //! Bomb placement and detonation, including chain reactions.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::action::{Dir, Pos};
 use crate::arena::{Arena, Tile};
@@ -39,7 +39,8 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
         return;
     }
 
-    let mut tiles = BTreeSet::new();
+    // burning tile -> slots of the bombs that light it
+    let mut tiles: BTreeMap<Pos, u8> = BTreeMap::new();
     let mut destroyed = BTreeSet::new();
     let mut done = vec![false; exploding.len()];
     loop {
@@ -61,7 +62,9 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
             if b.flight.is_some() && state.arena.tile(b.pos) == Tile::Block {
                 destroyed.insert(b.pos);
             }
-            tiles.extend(hit.tiles);
+            for tile in hit.tiles {
+                *tiles.entry(tile).or_insert(0) |= 1 << b.owner.index();
+            }
             destroyed.extend(hit.destroyed);
         }
         if !progressed {
@@ -92,7 +95,7 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
     }
 
     state.powerups.retain(|u| {
-        let burns = tiles.contains(&u.pos);
+        let burns = tiles.contains_key(&u.pos);
         if burns {
             events.push(Event::PowerUpDestroyed { pos: u.pos });
         }
@@ -106,12 +109,16 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
         state.powerups.push(u);
     }
 
-    for pos in tiles {
+    for (pos, owners) in tiles {
         match state.flames.iter_mut().find(|f| f.pos == pos) {
-            Some(f) => f.ticks_left = state.config.flame_ticks,
+            Some(f) => {
+                f.ticks_left = state.config.flame_ticks;
+                f.owners |= owners;
+            }
             None => state.flames.push(Flame {
                 pos,
                 ticks_left: state.config.flame_ticks,
+                owners,
             }),
         }
     }

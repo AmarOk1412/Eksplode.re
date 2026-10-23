@@ -3,7 +3,7 @@
 use crate::action::{PlayerId, MAX_PLAYERS};
 use crate::arena::Arena;
 use crate::config::Config;
-use crate::state::{Bomb, Flame, GameState, Participant, Phase, PowerUp};
+use crate::state::{Bomb, Falling, Flame, GameState, Participant, Phase, PowerUp};
 
 /// A read-only snapshot without the RNG and without power-ups still hidden under blocks.
 #[derive(Clone, Debug, PartialEq)]
@@ -18,6 +18,9 @@ pub struct Observation {
     pub flames: Vec<Flame>,
     pub powerups: Vec<PowerUp>,
     pub phase: Phase,
+    /// Blocks announced by the end pattern.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub falling: Vec<Falling>,
 }
 
 impl GameState {
@@ -33,6 +36,7 @@ impl GameState {
             flames: self.flames.clone(),
             powerups: self.powerups.clone(),
             phase: self.phase,
+            falling: self.closing.falling.clone(),
         }
     }
 }

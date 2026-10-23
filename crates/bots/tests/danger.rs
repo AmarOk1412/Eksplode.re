@@ -67,6 +67,7 @@ fn existing_flames_are_dangerous_until_they_expire() {
     s.flames.push(bomberust_core::Flame {
         pos: pos(2, 2),
         ticks_left: 4,
+        owners: 0,
     });
     let d = DangerMap::from_observation(&obs(&s, 0));
     assert!(d.dangerous_during(pos(2, 2), 1, 3));

@@ -14,6 +14,7 @@ pub mod lobby;
 pub mod observation;
 pub mod punch;
 pub mod rng;
+pub mod room;
 pub mod state;
 pub mod step;
 
@@ -26,8 +27,9 @@ pub use error::CoreError;
 pub use lobby::{Controller, Lobby, LobbyError, Slot};
 pub use observation::Observation;
 pub use rng::Rng;
+pub use room::{BoardSize, Mode, RoomSettings, MINUTES, PLAYABLE};
 pub use state::{
-    ActiveMalus, Bomb, Event, Flame, Flight, GameState, Outcome, Participant, Phase, PowerUp,
-    PowerUpKind, Slide,
+    ActiveMalus, Bomb, Closing, Event, Falling, Flame, Flight, GameState, Outcome, Participant,
+    Phase, PowerUp, PowerUpKind, Role, Slide,
 };
 pub use step::step;

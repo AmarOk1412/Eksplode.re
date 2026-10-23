@@ -18,7 +18,18 @@
     "powerup_chance": 0.3,
     "malus_ticks": 200,
     "punch_hop_ticks": 2,
-    "slide_ticks": 3
+    "slide_ticks": 3,
+    "mode": "normal",
+    "friendly_fire": true,
+    "closing_ticks": 1200,
+    "closing_lead_ticks": 20,
+    "chaser_bombs": 2,
+    "chaser_hearts": 3,
+    "shield_ticks": 40,
+    "chaser_pillar_mod": 3,
+    "chaser_block_density": 0.12,
+    "bonus_every_ticks": 100,
+    "bonus_cap": 6
   },
   "arena": {
     "width": 15,
@@ -237,7 +248,11 @@
       "cooldown_left": 0,
       "has_punch": false,
       "has_kick": false,
-      "malus": null
+      "malus": null,
+      "team": null,
+      "role": "Normal",
+      "hearts": 1,
+      "shield_left": 0
     },
     {
       "id": 1,
@@ -254,7 +269,11 @@
       "cooldown_left": 0,
       "has_punch": false,
       "has_kick": false,
-      "malus": null
+      "malus": null,
+      "team": null,
+      "role": "Normal",
+      "hearts": 1,
+      "shield_left": 0
     },
     {
       "id": 2,
@@ -271,7 +290,11 @@
       "cooldown_left": 0,
       "has_punch": false,
       "has_kick": false,
-      "malus": null
+      "malus": null,
+      "team": null,
+      "role": "Normal",
+      "hearts": 1,
+      "shield_left": 0
     },
     {
       "id": 3,
@@ -288,11 +311,16 @@
       "cooldown_left": 0,
       "has_punch": false,
       "has_kick": false,
-      "malus": null
+      "malus": null,
+      "team": null,
+      "role": "Normal",
+      "hearts": 1,
+      "shield_left": 0
     }
   ],
   "bombs": [],
   "flames": [],
   "powerups": [],
-  "phase": "Playing"
+  "phase": "Playing",
+  "falling": []
 }

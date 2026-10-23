@@ -254,6 +254,7 @@ fn elimination_clears_the_malus() {
     s.flames.push(Flame {
         pos: at,
         ticks_left: 5,
+        owners: 0,
     });
     step(&mut s, &idle());
     assert!(!s.players[0].alive);

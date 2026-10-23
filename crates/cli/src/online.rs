@@ -15,7 +15,7 @@ use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
 use crate::input::{map_key, normalize, InputState, KeyAction};
-use crate::view::{self, player_color, ViewContext};
+use crate::view::{self, player_color, team_letter, ViewContext};
 
 /// Where an online session is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -148,6 +148,9 @@ impl Online {
                     Outcome::Winner(id) if Some(id.index()) == self.slot => "You won!".to_string(),
                     Outcome::Winner(id) => format!("Player {} won", id.index() + 1),
                     Outcome::Draw => "Draw".to_string(),
+                    Outcome::TeamWin(t) => format!("Team {} won", team_letter(t)),
+                    Outcome::ChaserWins => "The chaser wins".to_string(),
+                    Outcome::RunnersWin => "The runners win".to_string(),
                 });
                 self.stage = Stage::Lobby;
             }

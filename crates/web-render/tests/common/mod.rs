@@ -48,6 +48,7 @@ pub fn flame(s: &mut GameState, x: u8, y: u8) {
     s.flames.push(Flame {
         pos: Pos::new(x, y),
         ticks_left: 5,
+        owners: 0,
     });
 }
 

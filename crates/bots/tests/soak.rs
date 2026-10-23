@@ -31,7 +31,7 @@ fn us2_as4_four_bot_matches_always_finish() {
         let s = play(seed);
         match s.phase {
             Phase::Ended(Outcome::Winner(_)) => winners += 1,
-            Phase::Ended(Outcome::Draw) => {}
+            Phase::Ended(_) => {}
             Phase::Playing => panic!("seed {seed} did not finish within the round limit"),
         }
         assert!(s.tick <= s.config.round_limit_ticks, "seed {seed}");

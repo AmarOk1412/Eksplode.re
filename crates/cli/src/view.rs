@@ -180,6 +180,15 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
     lines
 }
 
+/// `A` for team 0 and `B` for team 1.
+pub fn team_letter(team: u8) -> char {
+    if team == 0 {
+        'A'
+    } else {
+        'B'
+    }
+}
+
 fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
     let text = match (&ctx.notice, state.phase) {
         (Some(n), _) => n.clone(),
@@ -187,6 +196,15 @@ fn message(state: &Observation, ctx: &ViewContext) -> Line<'static> {
             format!("Player {} wins!  r: rematch  q: quit", id.index() + 1)
         }
         (None, Phase::Ended(Outcome::Draw)) => "Draw!  r: rematch  q: quit".to_string(),
+        (None, Phase::Ended(Outcome::TeamWin(t))) => {
+            format!("Team {} wins!  r: rematch  q: quit", team_letter(t))
+        }
+        (None, Phase::Ended(Outcome::ChaserWins)) => {
+            "The chaser wins!  r: rematch  q: quit".to_string()
+        }
+        (None, Phase::Ended(Outcome::RunnersWin)) => {
+            "The runners win!  r: rematch  q: quit".to_string()
+        }
         (None, Phase::Playing) if ctx.paused => "PAUSED  p: resume  q: quit".to_string(),
         (None, Phase::Playing) => "p: pause  q: quit".to_string(),
     };

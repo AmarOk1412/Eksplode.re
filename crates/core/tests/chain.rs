@@ -1,3 +1,5 @@
+#![allow(clippy::expect_used)]
+
 mod common;
 
 use bomberust_core::{step, Dir, Event, PlayerInput};
@@ -95,4 +97,44 @@ fn walls_shield_players_from_blasts() {
     add_bomb(&mut s, 0, 2, 3, 1);
     step(&mut s, &idle());
     assert!(s.players[2].alive, "wall at (3,3) blocks the ray to (4,3)");
+}
+
+fn owners_at(s: &bomberust_core::GameState, x: u8, y: u8) -> Vec<u8> {
+    let f = s
+        .flames
+        .iter()
+        .find(|f| f.pos == pos(x, y))
+        .expect("a flame");
+    (0..4).filter(|i| f.owned_by(pid(*i))).collect()
+}
+
+#[test]
+fn a_flame_is_owned_by_the_owner_of_its_bomb() {
+    let mut s = state(&OPEN, [Some((1, 5)), Some((5, 5)), None, None]);
+    add_bomb(&mut s, 1, 3, 3, 1);
+    step(&mut s, &idle());
+    for (x, y) in [(3, 3), (2, 3), (3, 1), (5, 3)] {
+        assert_eq!(owners_at(&s, x, y), vec![1], "flame at {x},{y}");
+    }
+}
+
+#[test]
+fn chain_flames_keep_the_owner_of_the_bomb_that_made_them() {
+    let mut s = state(&OPEN, [Some((1, 5)), Some((5, 5)), None, None]);
+    add_bomb(&mut s, 0, 1, 1, 1);
+    add_bomb(&mut s, 1, 3, 1, 50);
+    step(&mut s, &idle());
+    assert_eq!(
+        owners_at(&s, 1, 2),
+        vec![0],
+        "only the first bomb reaches it"
+    );
+    assert_eq!(
+        owners_at(&s, 3, 2),
+        vec![1],
+        "only the chained bomb reaches it"
+    );
+    assert_eq!(owners_at(&s, 4, 1), vec![1]);
+    assert_eq!(owners_at(&s, 2, 1), vec![0, 1], "both bombs reach it");
+    assert_eq!(owners_at(&s, 3, 1), vec![0, 1]);
 }

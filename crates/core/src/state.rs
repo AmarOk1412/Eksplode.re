@@ -68,6 +68,19 @@ pub struct PowerUp {
     pub kind: PowerUpKind,
 }
 
+/// What a participant does in the round.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Role {
+    /// Every participant of Normal and Team mode.
+    #[default]
+    Normal,
+    /// The one participant with bombs and hearts in Chaser mode.
+    Chaser,
+    /// A participant without bombs in Chaser mode.
+    Runner,
+}
+
 /// One of the four player slots.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -90,6 +103,22 @@ pub struct Participant {
     pub has_kick: bool,
     /// The malus that applies now, if any.
     pub malus: Option<ActiveMalus>,
+    /// The team (0 or 1) in Team mode.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub team: Option<u8>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub role: Role,
+    /// Explosions the participant survives; only the chaser has more than one.
+    #[cfg_attr(feature = "serde", serde(default = "one"))]
+    pub hearts: u8,
+    /// Ticks of protection left after a heart was lost.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub shield_left: u32,
+}
+
+#[cfg(feature = "serde")]
+fn one() -> u8 {
+    1
 }
 
 impl Participant {
@@ -155,6 +184,40 @@ pub struct Bomb {
 pub struct Flame {
     pub pos: Pos,
     pub ticks_left: u32,
+    /// Bit `i` is set when a bomb of slot `i` lit this tile; used by friendly fire.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub owners: u8,
+}
+
+impl Flame {
+    /// Whether a bomb of `player` lit this tile.
+    pub fn owned_by(&self, player: PlayerId) -> bool {
+        self.owners & (1 << player.index()) != 0
+    }
+}
+
+/// A block that is about to land during the end pattern.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Falling {
+    pub pos: Pos,
+    /// Ticks until the block lands.
+    pub ticks_left: u32,
+}
+
+/// The end pattern of a round: which squares are covered next and which are announced.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Closing {
+    /// The squares in the order they are covered; empty until the pattern starts.
+    pub order: Vec<Pos>,
+    /// Index of the next square of `order` to announce.
+    pub next: usize,
+    /// Ticks since the pattern started.
+    pub elapsed: u32,
+    /// Whether the pattern has started.
+    pub started: bool,
+    /// Announced squares.
+    pub falling: Vec<Falling>,
 }
 
 /// How a round ended.
@@ -163,6 +226,12 @@ pub struct Flame {
 pub enum Outcome {
     Winner(PlayerId),
     Draw,
+    /// Team mode: the winning team (0 or 1).
+    TeamWin(u8),
+    /// Chaser mode: every runner is eliminated.
+    ChaserWins,
+    /// Chaser mode: the chaser is eliminated or the time ran out with a runner alive.
+    RunnersWin,
 }
 
 /// Whether the round is still running.
@@ -238,6 +307,26 @@ pub enum Event {
     PlayerEliminated {
         player: PlayerId,
     },
+    /// The end pattern started.
+    PatternStarted,
+    /// A block is announced on `pos`.
+    BlockWarned {
+        pos: Pos,
+    },
+    /// A block landed on `pos` and the tile is a wall now.
+    BlockLanded {
+        pos: Pos,
+    },
+    /// The chaser lost a heart.
+    HeartLost {
+        player: PlayerId,
+        hearts_left: u8,
+    },
+    /// A role was given at the start of a Chaser round.
+    RoleAssigned {
+        player: PlayerId,
+        role: Role,
+    },
     RoundEnded(Outcome),
 }
 
@@ -257,6 +346,10 @@ pub struct GameState {
     pub phase: Phase,
     /// Number of participants that started the round.
     pub started: u8,
+    /// The end pattern (Normal and Team mode).
+    pub closing: Closing,
+    /// Ticks until the next bonus appears (Chaser mode).
+    pub bonus_in: u32,
 }
 
 impl GameState {
@@ -320,8 +413,14 @@ impl GameState {
             has_punch: false,
             has_kick: false,
             malus: None,
+            team: None,
+            role: Role::Normal,
+            hearts: 1,
+            shield_left: 0,
         });
         Ok(GameState {
+            bonus_in: config.bonus_every_ticks,
+            closing: Closing::default(),
             drops: DropTable::defaults(config.powerup_chance),
             config,
             tick: 0,

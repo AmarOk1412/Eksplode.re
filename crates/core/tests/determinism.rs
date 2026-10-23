@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 mod common;
 
 use bomberust_core::{step, Config, Dir, GameState, PlayerInput, Rng, Tile};
@@ -94,4 +96,53 @@ fn observation_shows_no_rng_and_no_drop_table() {
     assert_eq!(obs.arena, s.arena);
     assert_eq!(obs.players, s.players);
     assert_eq!(obs.tick, s.tick);
+}
+
+/// Tiles of the arena as text rows (`#` wall, `b` block, `.` floor).
+fn arena_text(s: &GameState) -> String {
+    let mut out = String::new();
+    for y in 0..s.arena.height() {
+        for x in 0..s.arena.width() {
+            out.push(match s.arena.tile(bomberust_core::Pos::new(x, y)) {
+                Tile::Wall => '#',
+                Tile::Block => 'b',
+                Tile::Floor => '.',
+            });
+        }
+        out.push('\n');
+    }
+    out
+}
+
+fn fnv(text: &str) -> u64 {
+    text.bytes().fold(0xcbf29ce484222325, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x100000001b3)
+    })
+}
+
+/// Fingerprint of the arena and of 300 ticks of scripted play with the default settings.
+fn fingerprint(seed: u64) -> (u64, u64) {
+    let mut s = GameState::new(Config::default(), seed, [true; 4]).unwrap();
+    let arena = fnv(&arena_text(&s));
+    let mut rng = Rng::new(seed ^ 0x5EED);
+    let mut log = String::new();
+    for _ in 0..300 {
+        log.push_str(&format!("{:?}\n", step(&mut s, &random_inputs(&mut rng))));
+    }
+    (arena, fnv(&log))
+}
+
+#[test]
+fn f4_sc003_default_settings_play_as_before() {
+    // Recorded before feature 004 changed the rules; the arena and the events must not change.
+    let golden = [
+        (1u64, (9471797745044963153u64, 9582954862015796507u64)),
+        (7, (12377994668071421445, 4379125904272061920)),
+        (42, (2879090803170658785, 3367478786402810030)),
+    ];
+    let now: Vec<_> = golden
+        .iter()
+        .map(|(seed, _)| (*seed, fingerprint(*seed)))
+        .collect();
+    assert_eq!(now, golden.to_vec());
 }

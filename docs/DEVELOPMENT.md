@@ -41,6 +41,11 @@ apart). Scenarios that need eyes or ears are ticked in a manual checklist next t
 (`- [x] f3_us1_as3 ...`); `F3_ONLY="f3_us1 f3_us2" scripts/check-scenarios.sh` checks only the stages
 that are already built.
 
+Game modes and room settings use the prefix `f4_` (`f4_us2_as3_...`), the manual checklist
+`manual-004.md` next to the specs, and `F4_ONLY="f4_us1 f4_us2_as1"` for the same purpose. The
+terminal host asks for the room settings on a setup screen unless a settings option or
+`--no-setup` is given, so `scripts/pty-enter-check.py` and other scripts pass `--no-setup`.
+
 ## Gates
 
 Everything below must pass before a change is merged (CI runs the same):

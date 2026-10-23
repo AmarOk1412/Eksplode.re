@@ -1,6 +1,7 @@
 //! Tunable game constants. Defaults follow specs/001-bomberman-multiplayer/data-model.md.
 
 use crate::error::CoreError;
+use crate::room::Mode;
 
 /// All tunable rule values of a match.
 #[derive(Clone, Debug, PartialEq)]
@@ -30,6 +31,90 @@ pub struct Config {
     /// Ticks a kicked bomb needs for one square.
     #[cfg_attr(feature = "serde", serde(default = "default_slide_ticks"))]
     pub slide_ticks: u32,
+    /// How the round is played.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub mode: Mode,
+    /// Whether explosions hurt teammates (Team mode).
+    #[cfg_attr(feature = "serde", serde(default = "default_true"))]
+    pub friendly_fire: bool,
+    /// Length of the end pattern before the time limit; 0 turns it off. A pattern that is not
+    /// shorter than the round limit never runs, and the limit ends the round as a draw.
+    #[cfg_attr(feature = "serde", serde(default = "default_closing_ticks"))]
+    pub closing_ticks: u32,
+    /// Ticks a falling block is announced before it lands.
+    #[cfg_attr(feature = "serde", serde(default = "default_closing_lead_ticks"))]
+    pub closing_lead_ticks: u32,
+    /// Bombs the chaser starts with.
+    #[cfg_attr(feature = "serde", serde(default = "default_chaser_bombs"))]
+    pub chaser_bombs: u8,
+    /// Hearts the chaser starts with.
+    #[cfg_attr(feature = "serde", serde(default = "default_chaser_hearts"))]
+    pub chaser_hearts: u8,
+    /// Ticks the chaser is protected after losing a heart.
+    #[cfg_attr(feature = "serde", serde(default = "default_shield_ticks"))]
+    pub shield_ticks: u32,
+    /// The Chaser arena keeps the pillars where `(x / 2 + y / 2) % chaser_pillar_mod == 0`.
+    #[cfg_attr(feature = "serde", serde(default = "default_chaser_pillar_mod"))]
+    pub chaser_pillar_mod: u8,
+    /// Share of free tiles that hold a block in the Chaser arena.
+    #[cfg_attr(feature = "serde", serde(default = "default_chaser_block_density"))]
+    pub chaser_block_density: f32,
+    /// Ticks between two bonuses in Chaser mode.
+    #[cfg_attr(feature = "serde", serde(default = "default_bonus_every_ticks"))]
+    pub bonus_every_ticks: u32,
+    /// Most bonuses lying on the board at once in Chaser mode.
+    #[cfg_attr(feature = "serde", serde(default = "default_bonus_cap"))]
+    pub bonus_cap: u8,
+}
+
+#[cfg(feature = "serde")]
+fn default_true() -> bool {
+    true
+}
+
+#[cfg(feature = "serde")]
+fn default_closing_ticks() -> u32 {
+    1200
+}
+
+#[cfg(feature = "serde")]
+fn default_closing_lead_ticks() -> u32 {
+    20
+}
+
+#[cfg(feature = "serde")]
+fn default_chaser_bombs() -> u8 {
+    2
+}
+
+#[cfg(feature = "serde")]
+fn default_chaser_hearts() -> u8 {
+    3
+}
+
+#[cfg(feature = "serde")]
+fn default_shield_ticks() -> u32 {
+    40
+}
+
+#[cfg(feature = "serde")]
+fn default_chaser_pillar_mod() -> u8 {
+    3
+}
+
+#[cfg(feature = "serde")]
+fn default_chaser_block_density() -> f32 {
+    0.12
+}
+
+#[cfg(feature = "serde")]
+fn default_bonus_every_ticks() -> u32 {
+    100
+}
+
+#[cfg(feature = "serde")]
+fn default_bonus_cap() -> u8 {
+    6
 }
 
 #[cfg(feature = "serde")]
@@ -67,6 +152,17 @@ impl Default for Config {
             malus_ticks: 200,
             punch_hop_ticks: 2,
             slide_ticks: 3,
+            mode: Mode::Normal,
+            friendly_fire: true,
+            closing_ticks: 1200,
+            closing_lead_ticks: 20,
+            chaser_bombs: 2,
+            chaser_hearts: 3,
+            shield_ticks: 40,
+            chaser_pillar_mod: 3,
+            chaser_block_density: 0.12,
+            bonus_every_ticks: 100,
+            bonus_cap: 6,
         }
     }
 }
@@ -102,6 +198,18 @@ impl Config {
         if !(0.0..=1.0).contains(&self.block_density) || !(0.0..=1.0).contains(&self.powerup_chance)
         {
             return bad("block_density and powerup_chance must be in 0.0..=1.0");
+        }
+        if self.closing_lead_ticks == 0 {
+            return bad("closing_lead_ticks must be positive");
+        }
+        if self.chaser_hearts == 0 || self.chaser_bombs == 0 {
+            return bad("chaser_hearts and chaser_bombs must be positive");
+        }
+        if self.chaser_pillar_mod == 0 || self.bonus_every_ticks == 0 {
+            return bad("chaser_pillar_mod and bonus_every_ticks must be positive");
+        }
+        if !(0.0..=1.0).contains(&self.chaser_block_density) {
+            return bad("chaser_block_density must be in 0.0..=1.0");
         }
         Ok(())
     }

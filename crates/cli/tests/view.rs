@@ -71,6 +71,7 @@ fn draws_bombs_flames_and_powerups() {
     st.flames.push(Flame {
         pos: Pos::new(4, 3),
         ticks_left: 5,
+        owners: 0,
     });
     st.powerups.push(PowerUp {
         pos: Pos::new(2, 4),

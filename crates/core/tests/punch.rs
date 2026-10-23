@@ -232,6 +232,7 @@ fn a_flame_or_a_power_up_on_the_landing_square_does_not_stop_the_bomb() {
     s.flames.push(bomberust_core::Flame {
         pos: p(3, 3),
         ticks_left: 50,
+        owners: 0,
     });
     step(&mut s, &punch_input());
     for _ in 0..10 {
