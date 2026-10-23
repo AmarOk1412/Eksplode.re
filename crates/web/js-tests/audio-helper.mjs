@@ -164,3 +164,53 @@ export function fakeStorage({ broken = false } = {}) {
     dump: () => Object.fromEntries(map),
   };
 }
+
+/** Timers that only run when the test says so. */
+export function fakeTimer() {
+  const t = {
+    intervals: new Map(),
+    timeouts: new Map(),
+    n: 0,
+    setInterval(fn, ms) {
+      t.n += 1;
+      t.intervals.set(t.n, { fn, ms });
+      return t.n;
+    },
+    clearInterval(id) {
+      t.intervals.delete(id);
+    },
+    setTimeout(fn, ms) {
+      t.n += 1;
+      t.timeouts.set(t.n, { fn, ms });
+      return t.n;
+    },
+    clearTimeout(id) {
+      t.timeouts.delete(id);
+    },
+    runTimeouts() {
+      for (const [id, x] of [...t.timeouts]) {
+        t.timeouts.delete(id);
+        x.fn();
+      }
+    },
+  };
+  return t;
+}
+
+/** An event target that records listeners and fires them on demand. */
+export function fakeTarget() {
+  const listeners = new Map();
+  return {
+    addEventListener(type, fn) {
+      if (!listeners.has(type)) listeners.set(type, []);
+      listeners.get(type).push(fn);
+    },
+    removeEventListener(type, fn) {
+      listeners.set(type, (listeners.get(type) ?? []).filter((f) => f !== fn));
+    },
+    fire(type) {
+      for (const fn of [...(listeners.get(type) ?? [])]) fn({ type });
+    },
+    count: () => [...listeners.values()].reduce((n, l) => n + l.length, 0),
+  };
+}
