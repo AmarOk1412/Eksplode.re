@@ -17,8 +17,8 @@ us3_as1 us3_as2 us3_as3 us3_as4
 us4_as1 us4_as2 us4_as3"
 
 # Scenario ids of feature 003 whose stage is implemented; extended stage by stage.
-ids_003="f3_us1_as1 f3_us1_as2 f3_us1_as3 f3_us1_as4 f3_us1_as5 f3_us1_as6 f3_us1_as7
-f3_us2_as1 f3_us2_as2 f3_us2_as3 f3_us2_as4 f3_us2_as5 f3_us2_as6 f3_us2_as7 f3_us2_as8 f3_us2_as9
+ids_003="f3_us1_as1 f3_us1_as2 f3_us1_as3 f3_us1_as4 f3_us1_as5 f3_us1_as6 f3_us1_as7 f3_us1_as8 f3_us1_as9
+f3_us2_as1 f3_us2_as2 f3_us2_as3 f3_us2_as4 f3_us2_as5 f3_us2_as6 f3_us2_as7 f3_us2_as8 f3_us2_as9 f3_us2_as10 f3_us2_as11 f3_us2_as12
 f3_us3_as1 f3_us3_as2 f3_us3_as3 f3_us3_as4 f3_us3_as5 f3_us3_as6
 f3_us4_as1 f3_us4_as2 f3_us4_as3 f3_us4_as4 f3_us4_as5 f3_us4_as6"
 
