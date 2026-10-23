@@ -20,8 +20,14 @@ pub enum Sprite {
     Block,
     Flame,
     PowerUp(PowerUpKind),
-    Bomb { ticks_left: u32 },
-    Player { slot: u8 },
+    /// `flying` bombs are in the air after a punch and cast a shadow on the ground.
+    Bomb {
+        ticks_left: u32,
+        flying: bool,
+    },
+    Player {
+        slot: u8,
+    },
 }
 
 /// One thing to draw at a position (the centre of its tile, in tile units).
@@ -30,8 +36,10 @@ pub struct Item {
     pub pos: (f32, f32),
     pub layer: Layer,
     pub sprite: Sprite,
-    /// Vertical offset in tiles (power-ups bob up and down).
+    /// Vertical offset in tiles, negative is up (power-ups bob, punched bombs arc).
     pub lift: f32,
+    /// The malus that tints a player.
+    pub malus: Option<PowerUpKind>,
 }
 
 impl Item {
@@ -47,6 +55,7 @@ fn item(pos: (f32, f32), layer: Layer, sprite: Sprite) -> Item {
         layer,
         sprite,
         lift: 0.0,
+        malus: None,
     }
 }
 
@@ -79,16 +88,39 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
         objects.push(it);
     }
     for b in &obs.bombs {
-        let sprite = Sprite::Bomb {
+        let mut sprite = Sprite::Bomb {
             ticks_left: b.ticks_left,
+            flying: false,
         };
-        objects.push(item(centre(b.pos.x, b.pos.y), Layer::Bomb, sprite));
+        let mut at = centre(b.pos.x, b.pos.y);
+        let mut lift = 0.0;
+        if let Some(f) = b.flight {
+            // the bomb hops one square per `punch_hop_ticks`: half a hop in, it is half a tile
+            // along and at the top of its arc
+            let hop = obs.config.punch_hop_ticks.max(1) as f32;
+            let progress = (1.0 - f.hop_left as f32 / hop).clamp(0.0, 1.0);
+            let (dx, dy) = f.dir.delta();
+            at = (
+                at.0 + f32::from(dx) * progress,
+                at.1 + f32::from(dy) * progress,
+            );
+            lift = -(std::f32::consts::PI * progress).sin() * 0.5;
+            sprite = Sprite::Bomb {
+                ticks_left: b.ticks_left,
+                flying: true,
+            };
+        }
+        let mut it = item(at, Layer::Bomb, sprite);
+        it.lift = lift;
+        objects.push(it);
     }
     for (slot, p) in obs.players.iter().enumerate() {
         if p.alive {
             let (x, y) = interp.position(slot, alpha);
             let sprite = Sprite::Player { slot: slot as u8 };
-            objects.push(item((x + 0.5, y + 0.5), Layer::Player, sprite));
+            let mut it = item((x + 0.5, y + 0.5), Layer::Player, sprite);
+            it.malus = p.malus.map(|m| m.kind);
+            objects.push(it);
         }
     }
     objects.sort_by(|a, b| {

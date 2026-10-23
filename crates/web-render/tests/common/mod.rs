@@ -39,6 +39,7 @@ pub fn bomb(s: &mut GameState, x: u8, y: u8, ticks_left: u32) {
         pos: Pos::new(x, y),
         ticks_left,
         range: 2,
+        flight: None,
     });
 }
 

@@ -27,6 +27,12 @@ pub const BOMB_FUSE: Rgb = [0.55, 0.36, 0.2];
 pub const SPARK_A: Rgb = [1.0, 0.6, 0.1];
 pub const SPARK_B: Rgb = [1.0, 0.9, 0.3];
 pub const WHITE: Rgb = [1.0, 1.0, 1.0];
+/// Frame of a malus power-up.
+pub const MALUS_FRAME: Rgb = [0.42, 0.06, 0.08];
+/// Tints of the pulse around a player with a malus.
+pub const MALUS_SLOW: Rgb = [0.25, 0.5, 0.95];
+pub const MALUS_HYPER: Rgb = [0.98, 0.85, 0.1];
+pub const MALUS_SMALL: Rgb = [0.9, 0.2, 0.2];
 
 /// Characters of the front-facing character, top row first; `.` is transparent.
 ///

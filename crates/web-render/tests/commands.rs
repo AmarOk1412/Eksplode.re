@@ -1,9 +1,10 @@
 mod common;
 
-use bomberust_core::{GameState, PowerUpKind};
+use bomberust_core::{ActiveMalus, Config, Dir, Flight, GameState, Pos, PowerUpKind};
 use bomberust_web_render::commands::{build, flatten, portrait, Command, Kind};
 use bomberust_web_render::interp::Interp;
 use bomberust_web_render::sprites::*;
+use bomberust_web_render::view::fit;
 use common::*;
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
@@ -138,13 +139,111 @@ fn flames_fill_their_tile_in_three_layers() {
 #[test]
 fn powerups_show_their_letter() {
     let mut s = small(&OPEN, (1, 1), (5, 5));
-    powerup(&mut s, 2, 2, PowerUpKind::ExtraBomb);
-    powerup(&mut s, 3, 2, PowerUpKind::Range);
-    powerup(&mut s, 4, 2, PowerUpKind::Speed);
+    for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
+        powerup(&mut s, 1 + (i as u8 % 5), 2 + (i as u8 / 5), *kind);
+    }
     let t = texts(&commands(&s));
-    for letter in ['B', 'R', 'S'] {
+    for letter in ['B', 'R', 'F', 'P', 'S', 'H', 's'] {
         assert!(t.contains(&letter), "{letter}");
     }
+}
+
+fn icon(kind: PowerUpKind) -> Vec<Command> {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    powerup(&mut s, 3, 3, kind);
+    let list = commands(&s);
+    // everything the board and the players draw is the same for every kind
+    let base = commands(&small(&OPEN, (1, 1), (5, 5)));
+    list.into_iter().filter(|c| !base.contains(c)).collect()
+}
+
+#[test]
+fn the_seven_power_icons_are_distinct_per_kind() {
+    let mut seen = std::collections::BTreeSet::new();
+    for kind in PowerUpKind::ALL {
+        let list = icon(kind);
+        let key = (
+            texts(&list),
+            list.iter()
+                .map(|c| c.color.map(|v| (v * 255.0) as u32))
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            seen.insert(format!("{key:?}")),
+            "{kind:?} looks like another kind"
+        );
+    }
+    assert_eq!(seen.len(), 7);
+}
+
+#[test]
+fn bonuses_have_a_white_frame_and_maluses_a_dark_red_one() {
+    for kind in PowerUpKind::ALL {
+        let list = icon(kind);
+        let white = !quads_with(&list, WHITE).is_empty();
+        let red = !quads_with(&list, MALUS_FRAME).is_empty();
+        assert_eq!(white, !kind.is_malus(), "{kind:?}");
+        assert_eq!(red, kind.is_malus(), "{kind:?}");
+    }
+}
+
+fn flying(hop_left: u32) -> GameState {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    bomb(&mut s, 3, 3, 30);
+    s.bombs[0].flight = Some(Flight {
+        dir: Dir::Right,
+        hop_left,
+        origin: Pos::new(3, 3),
+    });
+    s
+}
+
+fn body_box(list: &[Command]) -> (f32, f32) {
+    let body = quads_with(list, BOMB_BODY);
+    let lo_x = body.iter().map(|c| c.points[0].0).fold(f32::MAX, f32::min);
+    let lo_y = body.iter().map(|c| c.points[0].1).fold(f32::MAX, f32::min);
+    (lo_x, lo_y)
+}
+
+#[test]
+fn a_bomb_in_flight_is_lifted_along_an_arc_and_has_a_shadow() {
+    let hop = Config::default().punch_hop_ticks;
+    let landed = {
+        let mut s = small(&OPEN, (1, 1), (5, 5));
+        bomb(&mut s, 3, 3, 30);
+        commands(&s)
+    };
+    let (x0, y0) = body_box(&landed);
+    let scale = fit(7, 7, CANVAS).scale;
+    // halfway through the hop: half a tile on and lifted by sin(pi / 2) * 0.5 tile
+    let list = commands(&flying(hop - hop / 2));
+    let (x1, y1) = body_box(&list);
+    assert!((x1 - x0 - 0.5 * scale).abs() <= 2.0, "moved {}", x1 - x0);
+    assert!((y0 - y1 - 0.5 * scale).abs() <= 2.0, "lifted {}", y0 - y1);
+    assert_eq!(list.len(), landed.len() + 1, "one shadow more");
+    // at the start of a hop it sits on the ground
+    let (x2, y2) = body_box(&commands(&flying(hop)));
+    assert!((x2 - x0).abs() <= 1.0 && (y2 - y0).abs() <= 1.0);
+}
+
+#[test]
+fn a_player_with_a_malus_gets_a_coloured_pulse() {
+    let halo = |kind: Option<PowerUpKind>, tint: Rgb| {
+        let mut s = small(&OPEN, (1, 1), (5, 5));
+        s.players[0].malus = kind.map(|kind| ActiveMalus {
+            kind,
+            ticks_left: 50,
+        });
+        commands(&s)
+            .iter()
+            .filter(|c| c.color[..3] == tint && c.color[3] > 0.0 && c.color[3] < 1.0)
+            .count()
+    };
+    assert!(halo(Some(PowerUpKind::Slow), MALUS_SLOW) > 0);
+    assert!(halo(Some(PowerUpKind::HyperSpeed), MALUS_HYPER) > 0);
+    assert!(halo(Some(PowerUpKind::SmallBomb), MALUS_SMALL) > 0);
+    assert_eq!(halo(None, MALUS_SLOW), 0);
+    assert_eq!(halo(Some(PowerUpKind::Slow), MALUS_HYPER), 0);
 }
 
 #[test]

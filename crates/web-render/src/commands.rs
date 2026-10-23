@@ -7,7 +7,8 @@ use crate::interp::Interp;
 use crate::look::{default_for, runs_for, runs_of, Look, GRID_ROWS, OVERHEAD};
 use crate::sprites::{
     bomb_colour, hex, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE, BRICK_LINE, FLAME_CORE,
-    FLAME_MID, FLAME_OUTER, PLAYER, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WHITE,
+    FLAME_MID, FLAME_OUTER, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER, WALL_BASE,
+    WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -153,12 +154,12 @@ pub fn build_with_looks(
         pen.rect(BOARD, 0.0, 0.0, wf, hf);
     }
     for it in draw_list(obs, interp, alpha, phase) {
-        emit(&mut out, &view, &it, looks);
+        emit(&mut out, &view, &it, looks, phase);
     }
     out
 }
 
-fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4]) {
+fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase: f32) {
     let (cx, cy) = it.pos;
     let (tx, ty) = (cx - 0.5, cy - 0.5);
     let mut pen = Pen {
@@ -204,26 +205,35 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4]) {
             pen.rect(FLAME_CORE, tx + 0.36, ty + 0.36, tx + 0.64, ty + 0.64);
         }
         Sprite::PowerUp(kind) => {
-            let (color, letter) = match kind {
-                PowerUpKind::ExtraBomb => (hex(0x3b4cc0), 'B'),
-                PowerUpKind::Range => (hex(0xe8661a), 'R'),
-                PowerUpKind::Speed => (hex(0x2fa84f), 'S'),
+            // bonuses have a white frame, maluses a dark red one
+            let (frame, color, letter) = match kind {
+                PowerUpKind::ExtraBomb => (WHITE, hex(0x3b4cc0), 'B'),
+                PowerUpKind::Speed => (WHITE, hex(0x2fa84f), 'R'),
+                PowerUpKind::Range => (WHITE, hex(0xe8661a), 'F'),
+                PowerUpKind::Punch => (WHITE, hex(0x8a3fc7), 'P'),
+                PowerUpKind::Slow => (MALUS_FRAME, hex(0x4a78d0), 'S'),
+                PowerUpKind::HyperSpeed => (MALUS_FRAME, hex(0xc9a60a), 'H'),
+                PowerUpKind::SmallBomb => (MALUS_FRAME, hex(0xc03030), 's'),
             };
             let dy = it.lift;
-            pen.rect(WHITE, tx + 0.2, ty + 0.2 + dy, tx + 0.8, ty + 0.8 + dy);
+            pen.rect(frame, tx + 0.2, ty + 0.2 + dy, tx + 0.8, ty + 0.8 + dy);
             pen.rect(color, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
             let at = view.project(cx, cy + dy);
             pen.out
                 .push(text([1.0; 4], at, 0.4 * view.scale, letter, it.key()));
         }
-        Sprite::Bomb { ticks_left } => {
+        Sprite::Bomb { ticks_left, flying } => {
             let pulse = 0.5 * (1.0 + (ticks_left as f32 * 0.8).sin());
             let ps = (0.8 * view.scale / 10.0 * (1.0 + 0.15 * pulse))
                 .round()
                 .max(1.0);
             let blink = ticks_left % 4 < 2;
             let list = runs(&BOMB, BOMB.len(), |c| bomb_colour(c, blink));
-            let (px, py) = view.project(cx, cy);
+            if flying {
+                // the shadow stays on the ground below the arc
+                pen.shadow(cx - 0.3, cy + 0.3, cx + 0.3, cy + 0.4);
+            }
+            let (px, py) = view.project(cx, cy + it.lift);
             pen.sprite(
                 &list,
                 ps,
@@ -236,6 +246,21 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4]) {
             let ps = (1.2 * view.scale / PLAYER.len() as f32).round().max(1.0);
             let (px, py) = view.project(cx, cy);
             pen.shadow(cx - 0.3, cy + 0.34, cx + 0.3, cy + 0.44);
+            if let Some(kind) = it.malus {
+                // a coloured pulse around the player while the malus lasts
+                let tint = match kind {
+                    PowerUpKind::Slow => MALUS_SLOW,
+                    PowerUpKind::HyperSpeed => MALUS_HYPER,
+                    _ => MALUS_SMALL,
+                };
+                let pulse = 0.5 * (1.0 + (phase * 0.5).sin());
+                let p = pen.view.rect(cx - 0.46, cy - 0.46, cx + 0.46, cy + 0.46);
+                pen.out.push(quad(
+                    [tint[0], tint[1], tint[2], 0.18 + 0.22 * pulse],
+                    p,
+                    pen.layer - 0.5,
+                ));
+            }
             let top = py + 0.5 * view.scale - GRID_ROWS as f32 * ps - 0.02 * view.scale;
             pen.sprite(&list, ps, (px - 6.0 * ps).round(), top.round());
         }

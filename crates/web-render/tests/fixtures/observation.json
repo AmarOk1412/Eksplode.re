@@ -15,7 +15,9 @@
     "max_bombs": 6,
     "max_range": 8,
     "block_density": 0.7,
-    "powerup_chance": 0.3
+    "powerup_chance": 0.3,
+    "malus_ticks": 200,
+    "punch_hop_ticks": 2
   },
   "arena": {
     "width": 15,
@@ -231,7 +233,9 @@
       "bombs_active": 0,
       "range": 2,
       "move_cooldown": 4,
-      "cooldown_left": 0
+      "cooldown_left": 0,
+      "has_punch": false,
+      "malus": null
     },
     {
       "id": 1,
@@ -245,7 +249,9 @@
       "bombs_active": 0,
       "range": 2,
       "move_cooldown": 4,
-      "cooldown_left": 0
+      "cooldown_left": 0,
+      "has_punch": false,
+      "malus": null
     },
     {
       "id": 2,
@@ -259,7 +265,9 @@
       "bombs_active": 0,
       "range": 2,
       "move_cooldown": 4,
-      "cooldown_left": 0
+      "cooldown_left": 0,
+      "has_punch": false,
+      "malus": null
     },
     {
       "id": 3,
@@ -273,7 +281,9 @@
       "bombs_active": 0,
       "range": 2,
       "move_cooldown": 4,
-      "cooldown_left": 0
+      "cooldown_left": 0,
+      "has_punch": false,
+      "malus": null
     }
   ],
   "bombs": [],
