@@ -82,13 +82,13 @@ The terminal must be at least 40x20. Wrong usage exits with status 2.
 
 ## Controls
 
-| Where | Move | Bomb |
-|-------|------|------|
-| Browser | arrows or WASD | Space or E |
-| Terminal P1 | arrow keys | Space |
-| Terminal P2 | W A S D | E |
-| Terminal P3 | I J K L | O |
-| Terminal P4 | T F G H | Y |
+| Where | Move | Bomb | Punch |
+|-------|------|------|-------|
+| Browser | arrows or WASD | Space or E | Z or Q |
+| Terminal P1 | arrow keys | Space | Z |
+| Terminal P2 | W A S D | E | C |
+| Terminal P3 | I J K L | O | U |
+| Terminal P4 | T F G H | Y | N |
 
 In the lobby: Enter starts (owner only), `b` adds a bot, `x` removes one, `r` toggles ready, `q`
 quits. In a local match `p` pauses and `r` starts a rematch after a round. The terminal reports
@@ -99,7 +99,8 @@ repeats. In the browser the game keeps moving while a key is held.
 
 Bombs explode after 3 s in a cross, stop at walls and destroy the first block, trigger other
 bombs they reach, and eliminate every player on a burning tile. Blocks may hide power-ups:
-`+B` extra bomb, `+R` longer range, `+S` faster movement. The last player alive wins; a round
+extra bomb, roller (faster), flame (longer range) and a rare punch for bombs, but also maluses
+(slow, hyper speed, small bomb) that last 10 s. See [docs/GAMEPLAY.md](docs/GAMEPLAY.md). The last player alive wins; a round
 without a survivor, or lasting more than 3 minutes, is a draw. With a single player the round
 is a practice round that ends when that player dies.
 

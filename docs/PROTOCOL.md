@@ -30,7 +30,7 @@ runs the simulation and validates every message, whatever the transport.
 | `Join` | `version: u32`, `name: string`, `look` (optional, see [Looks](#looks)) | must be the first message |
 | `SetLook` | `look` | lobby only: change the sender's look; refused during a match with `WrongPhase` |
 | `SetReady` | `ready: bool` | in the lobby |
-| `Input` | `tick: u32`, `mv: "Up"/"Down"/"Left"/"Right"/null`, `bomb: bool` | during a match, at most one per tick; `tick` is the latest snapshot the client has seen |
+| `Input` | `tick: u32`, `mv: "Up"/"Down"/"Left"/"Right"/null`, `bomb: bool`, `punch: bool` (optional, false when missing) | during a match, at most one per tick; `tick` is the latest snapshot the client has seen |
 | `Leave` | none | graceful exit |
 | `Ping` | `nonce: u64` | optional keep-alive, answered with `Pong` |
 | `Start` | none | lobby owner only: start the match |
@@ -41,7 +41,7 @@ Examples:
 
 ```json
 {"type":"Join","version":1,"name":"Ann"}
-{"type":"Input","tick":42,"mv":"Left","bomb":false}
+{"type":"Input","tick":42,"mv":"Left","bomb":false,"punch":false}
 {"type":"Start"}
 ```
 
@@ -72,8 +72,12 @@ Examples:
 ```
 
 An `Observation` is what any participant, human or bot, may see: the arena, the four players,
-bombs, flames and the power-ups that are not hidden under blocks. It never contains the random
-generator.
+bombs, flames and the power-ups lying on the board. It never contains the random generator or
+the drop table. Players carry `has_punch` and `malus` (`{"kind":"Slow","ticks_left":120}` or
+null); a bomb in the air carries `flight` (`{"dir":"Right","hop_left":1,"origin":{"x":3,"y":1}}`).
+The config adds `malus_ticks` and `punch_hop_ticks`; all new fields are optional for older
+peers. Events gain `BombPunched`, `BombHopped`, `BombLanded`, `MalusStarted` and `MalusEnded`.
+Rules: [GAMEPLAY.md](GAMEPLAY.md).
 
 ## Looks
 

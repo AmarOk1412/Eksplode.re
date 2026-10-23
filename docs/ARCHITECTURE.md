@@ -58,12 +58,13 @@ Pure rules in [`crates/core`](../crates/core).
 - `Config` (arena size, timings, tick rate), `Arena` (tiles: floor, wall, block), `Pos`, `Dir`.
 - `GameState::new(config, seed, active)` builds a round; `step(&mut state, &inputs)` advances it by
   one tick and returns the `Event`s that happened. Order inside a tick: cooldowns, flame and fuse
-  timers, moves (with rotating priority so nobody is favoured), bomb placement, detonations with
-  chain reactions, eliminations, end-of-round check.
-- `PlayerInput` (`mv: Option<Dir>`, `bomb: bool`), `PlayerId` (slot 0 to 3), `Outcome`
+  timers, malus timers, moves (with rotating priority so nobody is favoured), bomb flights (hops
+  and landings), punches, bomb placement, detonations with chain reactions (items are decided for
+  destroyed blocks from the `DropTable`), eliminations, end-of-round check.
+- `PlayerInput` (`mv: Option<Dir>`, `bomb: bool`, `punch: bool`), `PlayerId` (slot 0 to 3), `Outcome`
   (`Winner(slot)` or `Draw`).
 - `Observation` is the public view (`GameState::observe(me)`): no random generator and no
-  power-ups still hidden under blocks. Bots and the render module consume only this.
+  drop table. Bots and the render module consume only this.
 - `Lobby` and `Controller` (`Local`, `Remote`, `Bot`, `Empty`) describe who holds each slot; the
   lobby owner is the lowest slot held by a person.
 

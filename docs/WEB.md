@@ -112,7 +112,7 @@ sent with `Join`, and changed in the lobby with `SetLook`; the server settles co
 [PROTOCOL.md](PROTOCOL.md#looks)). During a match the editor is locked.
 
 The page never evaluates game rules. It sends the keys currently held as `Input` messages every
-50 ms and draws the `Snapshot`s it receives. Keys: arrows or WASD to move, Space or E for a bomb;
+50 ms and draws the `Snapshot`s it receives. Keys: arrows or WASD to move, Space or E for a bomb, Z or Q to punch;
 all keys are released when the window loses focus. Messages from the server show up as notices
 (`Only Ann can start the match`, `Player 3 left, a bot took over`, `You won!`), and when the
 connection drops the page says so and offers a Retry button.
