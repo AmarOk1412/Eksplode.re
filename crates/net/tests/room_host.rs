@@ -349,3 +349,62 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
         other => panic!("{other:?}"),
     }
 }
+
+#[test]
+fn f4_us4_dev_commands_still_work_in_a_chaser_room() {
+    let host = host_with(|c| c.dev = true);
+    let (mut a, _, lobby) = join(&host, "Ann", Some(json!({"mode": "chaser"})));
+    assert_eq!(lobby.settings.mode, Mode::Chaser);
+    a.send_line(r#"{"type":"DevPauseBots","paused":true}"#);
+    a.send_line(r#"{"type":"DevSetDrops","chances":[0.5,0,0,0,0,0,0,0]}"#);
+    let state = a.recv_until(|m| matches!(m, ServerMsg::DevState { drops, .. } if drops[0] == 0.5));
+    match state {
+        Some(ServerMsg::DevState { paused, drops }) => {
+            assert!(paused);
+            assert_eq!(drops[0], 0.5);
+        }
+        other => panic!("{other:?}"),
+    }
+}
+
+#[test]
+fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
+    let host = host();
+    let (mut a, _, _) = join(&host, "Ann", Some(json!({"mode": "chaser"})));
+    a.send(&ClientMsg::Start);
+    match a.recv_until(is_error("CannotStart")) {
+        Some(ServerMsg::Error { message, .. }) => assert!(
+            message.contains("Chaser") && message.contains("3 missing"),
+            "{message}"
+        ),
+        other => panic!("{other:?}"),
+    }
+    for _ in 0..3 {
+        a.send(&ClientMsg::AddBot);
+    }
+    a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4))
+        .unwrap();
+    a.send(&ClientMsg::Start);
+    match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
+        Some(ServerMsg::Snapshot { state, .. }) => {
+            use bomberust_core::Role;
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .filter(|p| p.role == Role::Chaser)
+                    .count(),
+                1
+            );
+            assert_eq!(
+                state
+                    .players
+                    .iter()
+                    .filter(|p| p.role == Role::Runner)
+                    .count(),
+                3
+            );
+        }
+        other => panic!("{other:?}"),
+    }
+}

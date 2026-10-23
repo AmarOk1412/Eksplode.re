@@ -50,7 +50,7 @@ export function effectiveGain(value, muted) {
 
 // --- sound effects --------------------------------------------------------------------------
 
-export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw", "warning", "impact"];
+export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw", "warning", "impact", "heart"];
 export const MAX_SOUNDS_PER_SNAPSHOT = 8;
 const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb"]);
 
@@ -76,6 +76,7 @@ export function soundsForEvents(events) {
     if (e === null || typeof e !== "object" || Array.isArray(e)) continue;
     if ("BlockWarned" in e) add("warning", 0.4);
     else if ("BlockLanded" in e) add("impact", crushed ? 1 : 0.6);
+    else if ("HeartLost" in e) add("heart");
     else if ("BombPlaced" in e) add("bombPlace");
     else if ("BombExploded" in e) add("explosion");
     else if ("BombPunched" in e) add("punch");
@@ -176,6 +177,10 @@ const RECIPES = {
     );
   },
   warning: (c, o, t, v) => tone(c, o, { type: "square", f0: 880, f1: 660, start: t, dur: 0.07, gain: 0.3 * v }),
+  heart: (c, o, t, v) => {
+    tone(c, o, { type: "sawtooth", f0: 330, f1: 110, start: t, dur: 0.3, gain: 0.35 * v });
+    tone(c, o, { type: "sine", f0: 70, start: t, dur: 0.12, gain: 0.7 * v });
+  },
   impact: (c, o, t, v) => {
     noise(c, o, { type: "lowpass", f0: 900, f1: 90, start: t, dur: 0.18, gain: 0.7 * v });
     tone(c, o, { type: "sine", f0: 90, f1: 45, start: t, dur: 0.2, gain: 0.9 * v });

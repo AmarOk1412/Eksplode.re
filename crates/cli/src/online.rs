@@ -285,7 +285,13 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
             online.lobby.settings.label(),
             Style::default().add_modifier(Modifier::BOLD),
         )));
-        lines.push(Line::default());
+        if online.lobby.settings.mode == bomberust_core::Mode::Chaser {
+            lines.push(Line::from(
+                "one chaser, three runners: roles are drawn at the start",
+            ));
+        } else {
+            lines.push(Line::default());
+        }
     }
     for (i, slot) in online.lobby.slots.iter().enumerate() {
         let who = match slot.controller {

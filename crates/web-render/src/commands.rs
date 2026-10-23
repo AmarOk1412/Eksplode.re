@@ -7,9 +7,10 @@ use crate::interp::Interp;
 use crate::look::{default_for, runs_of, runs_view, Frame, Look, GRID_ROWS, OVERHEAD};
 use crate::sprites::{
     bomb_colour, hex, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
-    BRICK_LINE, FLAME_CORE, FLAME_MID, FLAME_OUTER, ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE,
-    MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER, TEAM_A_RING, TEAM_B_RING, WALL_BASE,
-    WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WARNING_FRAME, WARNING_SHADOW, WHITE,
+    BRICK_LINE, CROWN_GOLD, FLAME_CORE, FLAME_MID, FLAME_OUTER, HEART_RED, ICON_BONUS_FILL,
+    ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER,
+    TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WARNING_FRAME,
+    WARNING_SHADOW, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -290,6 +291,23 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
                 (px - 5.0 * ps).round(),
                 (py - 5.0 * ps + 0.05 * view.scale).round(),
             );
+        }
+        Sprite::ChaserMark { hearts, hidden } => {
+            // a crown on the head, hearts above it
+            pen.rect(CROWN_GOLD, cx - 0.2, cy - 0.58, cx + 0.2, cy - 0.5);
+            for k in [-0.2f32, -0.03, 0.14] {
+                pen.rect(CROWN_GOLD, cx + k, cy - 0.7, cx + k + 0.06, cy - 0.58);
+            }
+            if !hidden {
+                let n = f32::from(hearts);
+                let left = cx - n * 0.15;
+                for i in 0..hearts {
+                    let x = left + f32::from(i) * 0.3 + 0.03;
+                    pen.rect(HEART_RED, x, cy - 1.0, x + 0.1, cy - 0.9);
+                    pen.rect(HEART_RED, x + 0.14, cy - 1.0, x + 0.24, cy - 0.9);
+                    pen.rect(HEART_RED, x + 0.02, cy - 0.9, x + 0.22, cy - 0.8);
+                }
+            }
         }
         Sprite::TeamRing { team } => {
             let colour = if team == 0 { TEAM_A_RING } else { TEAM_B_RING };

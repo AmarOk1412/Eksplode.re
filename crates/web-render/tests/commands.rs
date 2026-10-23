@@ -452,3 +452,61 @@ fn normal_mode_has_no_team_rings_and_dead_players_lose_theirs() {
     let list = commands(&s);
     assert_eq!(quads_with(&list, TEAM_A_RING).len(), 1);
 }
+
+fn chaser_state() -> GameState {
+    let config = bomberust_core::Config {
+        mode: bomberust_core::Mode::Chaser,
+        ..bomberust_core::Config::default()
+    };
+    with_config(config)
+}
+
+fn chaser_slot(s: &GameState) -> usize {
+    (0..4)
+        .position(|i| s.players[i].role == bomberust_core::Role::Chaser)
+        .unwrap_or(usize::MAX)
+}
+
+#[test]
+fn f4_us4_as9_the_chaser_wears_a_crown_and_hearts_and_nobody_else_does() {
+    let s = chaser_state();
+    let list = commands(&s);
+    assert_eq!(
+        quads_with(&list, CROWN_GOLD).len(),
+        4,
+        "one crown: a base and three spikes"
+    );
+    assert_eq!(
+        quads_with(&list, HEART_RED).len(),
+        3 * 3,
+        "three parts for each of three hearts"
+    );
+    // nothing like it in the other modes
+    let normal = commands(&standard());
+    assert!(
+        quads_with(&normal, CROWN_GOLD).is_empty() && quads_with(&normal, HEART_RED).is_empty()
+    );
+    let team = commands(&team_state());
+    assert!(quads_with(&team, CROWN_GOLD).is_empty());
+}
+
+#[test]
+fn the_hearts_follow_the_count_blink_while_protected_and_vanish_with_the_chaser() {
+    let mut s = chaser_state();
+    let c = chaser_slot(&s);
+    s.players[c].hearts = 1;
+    assert_eq!(quads_with(&commands(&s), HEART_RED).len(), 3);
+    // protected: the hearts blink, shown on some ticks and hidden on others
+    s.players[c].hearts = 2;
+    s.players[c].shield_left = 20;
+    let mut seen = std::collections::BTreeSet::new();
+    for tick in 0..8 {
+        s.tick = tick;
+        seen.insert(quads_with(&commands(&s), HEART_RED).len());
+    }
+    assert!(seen.contains(&0) && seen.contains(&6), "{seen:?}");
+    // eliminated: no crown, no hearts
+    s.players[c].alive = false;
+    let list = commands(&s);
+    assert!(quads_with(&list, CROWN_GOLD).is_empty() && quads_with(&list, HEART_RED).is_empty());
+}

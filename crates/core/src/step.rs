@@ -3,10 +3,11 @@
 use crate::action::{PlayerInput, MAX_PLAYERS};
 use crate::arena::Tile;
 use crate::bomb;
+use crate::chaser;
 use crate::closing;
 use crate::kick;
 use crate::punch;
-use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind};
+use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind, Role};
 use crate::team;
 
 /// Advances the round by one tick and returns what happened.
@@ -21,8 +22,17 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
         return events;
     }
 
+    if state.tick == 0 && chaser::applies(state) {
+        for p in state.players.iter().filter(|p| p.alive) {
+            events.push(Event::RoleAssigned {
+                player: p.id,
+                role: p.role,
+            });
+        }
+    }
     for p in state.players.iter_mut().filter(|p| p.alive) {
         p.cooldown_left = p.cooldown_left.saturating_sub(1);
+        p.shield_left = p.shield_left.saturating_sub(1);
     }
     for f in &mut state.flames {
         f.ticks_left = f.ticks_left.saturating_sub(1);
@@ -54,6 +64,7 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
 
     bomb::detonate(state, &mut events);
     closing::advance(state, &mut events);
+    chaser::spawn_bonus(state, &mut events);
     eliminate(state, &mut events);
 
     state.tick += 1;
@@ -154,6 +165,22 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
             .iter()
             .any(|f| f.pos == p.pos && team::hurts(&state.config, &state.players, f, p));
         if p.alive && burning {
+            if p.role == Role::Chaser && p.hearts > 1 {
+                // a heart per explosion, then a moment of protection
+                if p.shield_left == 0 {
+                    let hearts_left = p.hearts - 1;
+                    events.push(Event::HeartLost {
+                        player: p.id,
+                        hearts_left,
+                    });
+                    state.players[i].hearts = hearts_left;
+                    state.players[i].shield_left = state.config.shield_ticks;
+                }
+                continue;
+            }
+            if p.role == Role::Chaser && p.shield_left > 0 {
+                continue;
+            }
             events.push(Event::PlayerEliminated { player: p.id });
             state.players[i].alive = false;
             state.players[i].malus = None;
@@ -163,6 +190,9 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
 
 /// A single starting participant plays a practice round that only ends by death or time.
 fn outcome(state: &GameState) -> Option<Outcome> {
+    if chaser::applies(state) {
+        return chaser::outcome(state);
+    }
     let alive: Vec<_> = state.players.iter().filter(|p| p.alive).collect();
     let team_round = state.started_teams.count_ones() >= 2;
     match alive.as_slice() {

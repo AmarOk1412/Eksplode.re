@@ -268,3 +268,5 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .mark-team-B { background: #f28c1a; color: #fff; }
 #hud li.team-A .chip { outline: 3px solid #3373f2; }
 #hud li.team-B .chip { outline: 3px solid #f28c1a; }
+
+#hud li.role-chaser { font-weight: bold; }

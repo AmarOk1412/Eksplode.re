@@ -88,7 +88,9 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
         events.push(Event::BlockDestroyed { pos: *pos });
     }
     let mut revealed: Vec<PowerUp> = Vec::new();
-    for pos in &destroyed {
+    // Chaser mode has its own bonuses: blocks hide nothing
+    let drops = state.config.mode != crate::room::Mode::Chaser;
+    for pos in destroyed.iter().filter(|_| drops) {
         if let Some(kind) = state.drops.roll(&mut state.rng) {
             revealed.push(PowerUp { pos: *pos, kind });
         }

@@ -19,7 +19,7 @@ stay for the rematch. The room closes when the last person leaves.
 | Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x20, 40x22 and 52x26) | small |
 | Round time | 2, 3, 5 or 10 minutes | 3 |
 | Friendly fire | on or off (Team mode only) | on |
-| Mode | Normal, Team | Normal |
+| Mode | Normal, Team, Chaser | Normal |
 
 ## Normal mode and the end pattern
 
@@ -53,6 +53,32 @@ work. A Team match cannot start with fewer than four participants; the owner add
 `Add bot` button (`b` in the terminal). A bot that takes over for a player who left plays for the
 same team and never targets a teammate; it also stays out of every explosion, including those of
 its teammates, and does not place a bomb that would reach a teammate while friendly fire is on.
+
+## Chaser mode
+
+Four participants; one of them, drawn with the round's seed (so a rematch can give another one), is
+the chaser and the other three are runners. The arena is nearly open: only about a third of the
+fixed pillars (the squares where `(x/2 + y/2) % 3 == 0`) and a few blocks, and the middle and the
+squares around it are free. The chaser starts in the middle with 2 bombs and 3 hearts; the runners
+start in their corners (the chaser's own corner stays empty) with no bombs and cannot place one by
+any means.
+
+- A runner is eliminated by one explosion. The chaser loses one heart per explosion that reaches
+  them, their own included, and is then protected for 2 seconds (the hearts blink in the page, `[]`
+  shows in the terminal); with no heart left the chaser is eliminated.
+- Bonuses appear by themselves, about every 5 seconds, on a random free square, with at most 6 on
+  the board; blocks hide nothing. They are the roller (3 parts in 10), kick (2), punch (2) and the
+  maluses slow, hyper speed and small bomb (1 each): runners can fight back with the punch and the
+  kick (send the chaser's bombs back) but never get a bomb or a longer flame. The drop sliders of
+  developer mode have no effect in this mode.
+- The chaser wins when every runner is eliminated. The runners win when the chaser is eliminated or
+  when the round time runs out with the chaser and a runner alive; if everybody is eliminated
+  together it is a draw. There is no end pattern.
+- The page marks the chaser with a crown and shows its hearts above it; the terminal marks it `*`
+  with `<3 x2`. The results read "The chaser wins" and "The runners win".
+- A bot chaser hunts the runners and plants bombs when it has a way out; a bot runner keeps away
+  from the chaser (when it comes within five squares), collects bonuses, flees every explosion and
+  sends a bomb in front of it away when it has the punch.
 
 ## Powers
 

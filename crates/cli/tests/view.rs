@@ -381,3 +381,59 @@ fn normal_mode_status_lines_have_no_team_marks() {
     let s = screen(&base(), &ctx());
     assert!(!s.contains("[A]") && !s.contains("[B]"));
 }
+
+fn chaser_game() -> GameState {
+    let config = Config {
+        mode: bomberust_core::Mode::Chaser,
+        ..Config::default()
+    };
+    let arena = Arena::from_rows(&ROWS).unwrap();
+    let starts = [
+        Some(Pos::new(3, 3)),
+        Some(Pos::new(5, 1)),
+        Some(Pos::new(1, 5)),
+        Some(Pos::new(5, 5)),
+    ];
+    GameState::custom(config, arena, starts, 1).unwrap()
+}
+
+#[test]
+fn f4_us4_as9_the_chaser_is_marked_with_hearts_and_the_result_says_who_won() {
+    let mut st = chaser_game();
+    let s = draw(&st, &team_ctx(), 80, 28).join("\n");
+    let status = |p: &str| {
+        s.lines()
+            .find(|l| l.contains(p) && l.contains("bombs"))
+            .unwrap_or_default()
+            .to_string()
+    };
+    assert!(
+        status("P1 ").contains('*') && status("P1 ").contains("<3 x3"),
+        "{s}"
+    );
+    assert!(status("P1 ").contains("bombs 0/2"), "two bombs: {s}");
+    for runner in ["P2 ", "P3 ", "P4 "] {
+        assert!(
+            !status(runner).contains('*') && !status(runner).contains("<3"),
+            "{runner}: {s}"
+        );
+        assert!(status(runner).contains("runner"), "{runner}: {s}");
+    }
+
+    st.players[0].hearts = 2;
+    st.players[0].shield_left = 10;
+    let s = draw(&st, &team_ctx(), 80, 28).join("\n");
+    assert!(
+        s.contains("<3 x2") && s.contains("[]"),
+        "the protection shows: {s}"
+    );
+
+    st.phase = Phase::Ended(Outcome::ChaserWins);
+    assert!(draw(&st, &team_ctx(), 80, 28)
+        .join("\n")
+        .contains("The chaser wins"));
+    st.phase = Phase::Ended(Outcome::RunnersWin);
+    assert!(draw(&st, &team_ctx(), 80, 28)
+        .join("\n")
+        .contains("The runners win"));
+}

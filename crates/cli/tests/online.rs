@@ -632,3 +632,18 @@ fn f4_us3_as5_the_terminal_lobby_shows_the_teams_and_the_result_names_the_winner
         "{s}"
     );
 }
+
+#[test]
+fn f4_us4_as9_the_chaser_lobby_says_the_roles_are_drawn_at_the_start() {
+    use bomberust_core::{Mode, RoomSettings};
+    let host = room_host(RoomSettings {
+        mode: Mode::Chaser,
+        ..Default::default()
+    });
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let s = screen(&h);
+    assert!(s.contains("Chaser"), "{s}");
+    assert!(s.contains("roles are drawn at the start"), "{s}");
+    assert!(!s.contains("[team"), "{s}");
+}

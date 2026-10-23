@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage, timerText } from "../assets/app.js";
+import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage, timerText, devPanel } from "../assets/app.js";
 
 const lobby = (...controllers) => ({
   slots: Array.from({ length: 4 }, (_, i) => ({
@@ -122,7 +122,7 @@ test("the hud lists the participants with their stats", () => {
   const s = run([welcome(1, lobby("Remote", "Remote", "Bot")), { type: "Snapshot", tick: 1, state: { players, config: { base_move_cooldown: 4 } }, events: [] }]);
   const rows = hudRows(s);
   assert.equal(rows.length, 3, "empty slots are not listed");
-  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, effects: [], team: null, you: true });
+  assert.deepEqual(rows[1], { slot: 1, kind: "you", label: "You", alive: true, bombs: "0/2", range: 2, speed: 1, effects: [], team: null, role: null, hearts: 0, shield: false, you: true });
   assert.equal(rows[2].label, "Bot");
   assert.equal(rows[2].kind, "bot");
   assert.equal(rows[2].alive, false);
@@ -233,4 +233,46 @@ test("f4_us3_as5_status_rows_carry_the_team", () => {
   assert.deepEqual(rows.map((r) => r.team), ["A", "A", "B", "B"]);
   const none = hudRows({ ...state, observation: { ...state.observation, players: players.map((p) => ({ ...p, team: undefined })) } });
   assert.ok(none.every((r) => r.team === null));
+});
+
+test("f4_us4_as9_the_hud_shows_roles_and_hearts_and_the_result_says_who_won", () => {
+  const players = [0, 1, 2, 3].map((i) => ({
+    alive: true,
+    bombs_active: 0,
+    bombs_max: i === 2 ? 2 : 0,
+    range: 2,
+    move_cooldown: 4,
+    role: i === 2 ? "Chaser" : "Runner",
+    hearts: i === 2 ? 2 : 1,
+    shield_left: i === 2 ? 10 : 0,
+  }));
+  const lobby = {
+    slots: [0, 1, 2, 3].map((i) => ({ controller: i === 0 ? "Remote" : "Bot", name: "Ann" })),
+    settings: { mode: "chaser" },
+  };
+  const state = { ...initialState(), slot: 0, lobby, observation: { players, config: { base_move_cooldown: 4, tick_hz: 20, mode: "chaser" } } };
+  const rows = hudRows(state);
+  assert.deepEqual(rows.map((r) => r.role), ["runner", "runner", "chaser", "runner"]);
+  assert.equal(rows[2].hearts, 2);
+  assert.equal(rows[2].shield, true);
+  assert.equal(rows[0].hearts, 0, "runners show no hearts");
+
+  const playing = { ...state, stage: "playing" };
+  assert.equal(reduce(playing, { type: "Ended", outcome: "ChaserWins" }).notice, "The chaser wins (Bot 3)");
+  assert.equal(reduce(playing, { type: "Ended", outcome: "RunnersWin" }).notice, "You survived! The runners win");
+  assert.equal(reduce({ ...playing, slot: 2 }, { type: "Ended", outcome: "RunnersWin" }).notice, "The runners win");
+  const chaserMe = { ...playing, slot: 2 };
+  assert.equal(reduce(chaserMe, { type: "Ended", outcome: "ChaserWins" }).notice, "You won! The chaser wins");
+});
+
+test("f4_us4_dev_panel_says_the_drop_sliders_have_no_effect_in_chaser_mode", () => {
+  const lobby = { slots: [{ controller: "Remote", name: "Ann" }, { controller: "Empty" }, { controller: "Empty" }, { controller: "Empty" }], settings: { mode: "chaser" } };
+  const state = { ...initialState(), dev: true, slot: 0, lobby, devState: { paused: false, drops: [0.1, 0, 0, 0, 0, 0, 0, 0] } };
+  const panel = devPanel(state);
+  assert.equal(panel.noDropEffect, true);
+  assert.match(panel.hint, /no effect/i);
+  assert.equal(panel.enabled, true, "pausing bots still works");
+  const normal = devPanel({ ...state, lobby: { ...lobby, settings: { mode: "normal" } } });
+  assert.equal(normal.noDropEffect, false);
+  assert.doesNotMatch(normal.hint, /no effect/i);
 });

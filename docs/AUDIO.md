@@ -45,6 +45,7 @@ sound per snapshot, and at most 8 sounds start per snapshot.
 | `win` | `RoundEnded` with a winner | rising major fanfare C5 E5 G5 C6 |
 | `draw` | `RoundEnded` without a winner | two low triangle tones, 196 Hz then 147 Hz |
 | `warning` | `PatternStarted` (loud) and `BlockWarned` (soft) | 70 ms square beep falling from 880 to 660 Hz; announcement beeps are at most one per 250 ms |
+| `heart` | `HeartLost` | 300 ms sawtooth falling from 330 to 110 Hz plus a 120 ms 70 Hz sine thump |
 | `impact` | `BlockLanded` | 200 ms sine thud falling from 90 to 45 Hz plus 180 ms low-passed noise falling from 900 to 90 Hz; louder when a player was eliminated in the same snapshot |
 
 ## Music

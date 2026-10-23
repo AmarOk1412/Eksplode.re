@@ -10,7 +10,7 @@ pub const MAX_NAME_CHARS: usize = 24;
 pub const MINUTES: [u8; 4] = [2, 3, 5, 10];
 
 /// The modes a room can start today; a mode is added here when its rules exist.
-pub const PLAYABLE: &[Mode] = &[Mode::Normal, Mode::Team];
+pub const PLAYABLE: &[Mode] = &[Mode::Normal, Mode::Team, Mode::Chaser];
 
 /// How a round is played.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

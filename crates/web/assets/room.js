@@ -3,7 +3,7 @@
 
 /** Every mode, by wire name, and the modes whose rules exist (the menu offers only these). */
 export const MODES = ["normal", "team", "chaser"];
-export const PLAYABLE_MODES = ["normal", "team"];
+export const PLAYABLE_MODES = ["normal", "team", "chaser"];
 export const MODE_LABELS = { normal: "Normal", team: "Team", chaser: "Chaser" };
 export const MODE_HINTS = {
   normal: "Everybody against everybody. The board closes in during the last minute.",
@@ -112,5 +112,6 @@ export function roomControls(state) {
     summary: roomLabel(state.lobby?.settings),
     enabled,
     showFriendlyFire: settings.mode === "team",
+    note: settings.mode === "chaser" ? "One chaser with bombs and hearts, three runners without bombs. Roles are drawn at the start." : "",
   };
 }

@@ -1,7 +1,9 @@
 //! The default bot: flee fire, grab power-ups, hunt opponents, break blocks.
 
 use bomberust_core::closing::closing_order;
-use bomberust_core::{blast, Dir, Mode, Observation, Participant, Phase, PlayerInput, Pos, Rng};
+use bomberust_core::{
+    blast, Dir, Mode, Observation, Participant, Phase, PlayerInput, Pos, Rng, Role,
+};
 
 use crate::danger::DangerMap;
 use crate::pathing::{find_path, has_malus, passable, PathRequest};
@@ -95,11 +97,34 @@ impl Bot for DefaultBot {
             })
         };
 
+        if me.role == Role::Runner && me.has_punch {
+            // a bomb in front of a runner with the punch is sent away while its fuse is long
+            let front = me
+                .pos
+                .step(me.facing, obs.arena.width(), obs.arena.height());
+            let threat = front.is_some_and(|f| {
+                obs.bombs
+                    .iter()
+                    .any(|b| b.pos == f && b.flight.is_none() && b.ticks_left > 6)
+            });
+            if threat {
+                return PlayerInput {
+                    punch: true,
+                    ..PlayerInput::default()
+                };
+            }
+        }
         if !danger.safe_from(me.pos, 1) {
             // staying alive beats avoiding a malus
             req.avoid_malus = false;
             return step_to(find_path(&req, &|_| true))
                 .unwrap_or_else(|| self.desperate(obs, me, &danger));
+        }
+        if me.role == Role::Runner {
+            req.max_depth = 10;
+            if let Some(i) = step_to(flee_chaser(obs, me, &req)) {
+                return i;
+            }
         }
         if let Some(progress) = closing_progress(obs) {
             req.max_depth = 14;
@@ -198,9 +223,41 @@ fn move_inward(
         .filter(|p| !p.is_empty())
 }
 
-/// Another living participant that is not on the bot's team (everybody is an enemy without teams).
+/// Another living participant the bot may hurt: the runners for the chaser, nobody for a runner
+/// (it has no bombs), the other team in Team mode and everybody else without teams.
 fn is_enemy(me: &Participant, other: &Participant) -> bool {
-    other.alive && other.id != me.id && (me.team.is_none() || other.team != me.team)
+    if !other.alive || other.id == me.id {
+        return false;
+    }
+    match me.role {
+        Role::Chaser => other.role == Role::Runner,
+        Role::Runner => false,
+        Role::Normal => me.team.is_none() || other.team != me.team,
+    }
+}
+
+fn manhattan(a: Pos, b: Pos) -> u32 {
+    u32::from(a.x.abs_diff(b.x) + a.y.abs_diff(b.y))
+}
+
+/// How close the chaser may come before a runner runs.
+const FLEE_DISTANCE: u32 = 5;
+
+/// A runner keeps away from the chaser: the way to the nearest square that is farther from it and
+/// not a dead end, or `None` when the chaser is not close.
+fn flee_chaser(obs: &Observation, me: &Participant, req: &PathRequest) -> Option<Vec<Dir>> {
+    let chaser = obs
+        .players
+        .iter()
+        .find(|p| p.alive && p.role == Role::Chaser)?;
+    let now = manhattan(me.pos, chaser.pos);
+    if now > FLEE_DISTANCE {
+        return None;
+    }
+    let far = (now + 3).min(9);
+    find_path(req, &|t| manhattan(t, chaser.pos) >= far && roomy(obs, t))
+        .or_else(|| find_path(req, &|t| manhattan(t, chaser.pos) > now))
+        .filter(|p| !p.is_empty())
 }
 
 /// A tile with at least two open neighbours is not a dead end.
@@ -229,7 +286,14 @@ fn can_bomb_here(obs: &Observation, me: &Participant) -> bool {
     {
         return false;
     }
-    let useful = !hit.destroyed.is_empty()
+    // the chaser also bombs to corner a runner: one that is close cannot just run past the bomb
+    let pressing = me.role == Role::Chaser
+        && obs
+            .players
+            .iter()
+            .any(|p| is_enemy(me, p) && manhattan(p.pos, me.pos) <= 3);
+    let useful = pressing
+        || !hit.destroyed.is_empty()
         || obs
             .players
             .iter()

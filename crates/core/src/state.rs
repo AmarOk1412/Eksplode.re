@@ -367,8 +367,15 @@ impl GameState {
         let mut rng = Rng::new(seed);
         let arena = Arena::generate(&config, &mut rng);
         let corners = arena.start_positions();
-        let starts = [0, 1, 2, 3].map(|i| active[i].then_some(corners[i]));
-        Self::build(config, arena, starts, rng)
+        let mut starts = [0, 1, 2, 3].map(|i| active[i].then_some(corners[i]));
+        // the chaser is drawn after the arena, so the arena of a seed does not depend on it
+        let chaser = (config.mode == crate::room::Mode::Chaser)
+            .then(|| crate::chaser::choose(&mut rng, &active))
+            .flatten();
+        if let Some(c) = chaser {
+            starts[c] = Some(Pos::new(arena.width() / 2, arena.height() / 2));
+        }
+        Self::build(config, arena, starts, rng, chaser)
     }
 
     /// Creates a round on a given arena with explicit start positions (tests, scenarios).
@@ -381,7 +388,12 @@ impl GameState {
         config.width = arena.width();
         config.height = arena.height();
         config.validate()?;
-        Self::build(config, arena, starts, Rng::new(seed))
+        // in Chaser mode the first participant is the chaser
+        let chaser = (config.mode == crate::room::Mode::Chaser
+            && starts.iter().flatten().count() >= 2)
+            .then(|| starts.iter().position(Option::is_some))
+            .flatten();
+        Self::build(config, arena, starts, Rng::new(seed), chaser)
     }
 
     fn build(
@@ -389,6 +401,7 @@ impl GameState {
         arena: Arena,
         starts: [Option<Pos>; MAX_PLAYERS],
         rng: Rng,
+        chaser: Option<usize>,
     ) -> Result<GameState, CoreError> {
         let started = starts.iter().flatten().count();
         if started == 0 {
@@ -413,7 +426,12 @@ impl GameState {
             pos: starts[i].unwrap_or(Pos::new(0, 0)),
             alive: starts[i].is_some(),
             facing: Dir::Down,
-            bombs_max: config.start_bombs,
+            bombs_max: match chaser {
+                Some(c) if c == i => config.chaser_bombs,
+                // runners can never place a bomb
+                Some(_) if starts[i].is_some() => 0,
+                _ => config.start_bombs,
+            },
             bombs_active: 0,
             range: config.start_range,
             move_cooldown: config.base_move_cooldown,
@@ -422,8 +440,15 @@ impl GameState {
             has_kick: false,
             malus: None,
             team: team_mode.then(|| crate::team::team_of(i)),
-            role: Role::Normal,
-            hearts: 1,
+            role: match chaser {
+                Some(c) if c == i => Role::Chaser,
+                Some(_) if starts[i].is_some() => Role::Runner,
+                _ => Role::Normal,
+            },
+            hearts: match chaser {
+                Some(c) if c == i => config.chaser_hearts,
+                _ => 1,
+            },
             shield_left: 0,
         });
         Ok(GameState {

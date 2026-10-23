@@ -285,3 +285,11 @@ test("warnings are limited to one every 250 ms, impacts are not", () => {
   engine.handleEvents([closing.started]);
   assert.ok(count() > start + 2, "the start of the pattern always sounds");
 });
+
+test("f4_us4_as9_a_lost_heart_has_its_own_sound", () => {
+  assert.deepEqual(ids([{ HeartLost: { player: 2, hearts_left: 2 } }]), ["heart"]);
+  assert.ok(SOUND_IDS.includes("heart"));
+  const h = play("heart");
+  assert.ok(h.osc.length >= 1);
+  assert.deepEqual(ids([{ HeartLost: { player: 2, hearts_left: 2 } }, { HeartLost: { player: 2, hearts_left: 1 } }]), ["heart"]);
+});

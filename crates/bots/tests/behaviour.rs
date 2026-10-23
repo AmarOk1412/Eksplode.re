@@ -309,3 +309,124 @@ fn f4_us3_as6_a_bot_still_flees_the_bomb_of_its_teammate() {
     assert!(s.players[0].alive);
     assert_ne!(s.players[0].pos, pos(3, 3), "it left the line of the bomb");
 }
+
+fn chaser_state(starts: [Option<(u8, u8)>; 4]) -> GameState {
+    let config = bomberust_core::Config {
+        mode: bomberust_core::Mode::Chaser,
+        ..bomberust_core::Config::default()
+    };
+    // the first participant is the chaser
+    state_with(config, &OPEN, starts)
+}
+
+fn decide_as(s: &GameState, slot: u8) -> PlayerInput {
+    DefaultBot::new(1).decide(&s.observe(pid(slot)))
+}
+
+fn manhattan(a: bomberust_core::Pos, b: bomberust_core::Pos) -> u32 {
+    u32::from(a.x.abs_diff(b.x) + a.y.abs_diff(b.y))
+}
+
+#[test]
+fn f4_us4_as8_a_chaser_bot_bombs_a_runner_in_reach_and_walks_toward_the_others() {
+    // a runner next to the chaser: bomb it, there is room to get away
+    let s = chaser_state([Some((3, 3)), Some((3, 4)), Some((1, 1)), Some((5, 1))]);
+    assert!(decide_as(&s, 0).bomb, "a runner is within reach");
+
+    // the runners are far: it walks toward the nearest one
+    let s = chaser_state([Some((3, 3)), Some((5, 5)), None, None]);
+    let input = decide_as(&s, 0);
+    assert!(!input.bomb);
+    let dir = input.mv.expect("it moves");
+    let (dx, dy) = dir.delta();
+    let to = bomberust_core::Pos::new((3 + i16::from(dx)) as u8, (3 + i16::from(dy)) as u8);
+    assert!(
+        manhattan(to, pos(5, 5)) < manhattan(pos(3, 3), pos(5, 5)),
+        "{dir:?}"
+    );
+}
+
+#[test]
+fn f4_us4_as8_a_chaser_bot_does_not_bomb_without_a_way_out_and_keeps_two_bombs_in_mind() {
+    // the chaser stands in a dead end with a runner next to it: a bomb would be suicide
+    let rows = [
+        "#######", "#.#####", "#.#####", "#.....#", "#.#####", "#.#####", "#######",
+    ];
+    let s = state_with(
+        bomberust_core::Config {
+            mode: bomberust_core::Mode::Chaser,
+            ..bomberust_core::Config::default()
+        },
+        &rows,
+        [Some((1, 1)), Some((1, 2)), Some((5, 3)), None],
+    );
+    assert!(
+        !decide_as(&s, 0).bomb || { s.players[0].hearts > 1 },
+        "{:?}",
+        decide_as(&s, 0)
+    );
+}
+
+#[test]
+fn f4_us4_as8_a_runner_bot_flees_the_chaser_and_never_bombs() {
+    for (me, chaser) in [
+        ((3, 3), (3, 5)),
+        ((3, 3), (1, 3)),
+        ((2, 2), (4, 2)),
+        ((5, 3), (3, 3)),
+    ] {
+        let s = chaser_state([Some(chaser), Some(me), None, None]);
+        let input = decide_as(&s, 1);
+        assert!(!input.bomb && !input.punch);
+        let dir = input
+            .mv
+            .unwrap_or_else(|| panic!("a runner at {me:?} must move away from {chaser:?}"));
+        let (dx, dy) = dir.delta();
+        let to = bomberust_core::Pos::new(
+            (i16::from(me.0) + i16::from(dx)) as u8,
+            (i16::from(me.1) + i16::from(dy)) as u8,
+        );
+        assert!(
+            manhattan(to, pos(chaser.0, chaser.1))
+                > manhattan(pos(me.0, me.1), pos(chaser.0, chaser.1)),
+            "{me:?} from {chaser:?} moved {dir:?}"
+        );
+    }
+}
+
+#[test]
+fn f4_us4_as8_a_runner_bot_collects_a_bonus_in_reach_when_the_chaser_is_far() {
+    let mut s = chaser_state([Some((5, 5)), Some((1, 1)), None, None]);
+    s.powerups.push(bomberust_core::PowerUp {
+        pos: pos(1, 3),
+        kind: bomberust_core::PowerUpKind::Speed,
+    });
+    let input = decide_as(&s, 1);
+    assert_eq!(input.mv, Some(Dir::Down), "toward the bonus");
+}
+
+#[test]
+fn f4_us4_as8_a_runner_with_the_punch_sends_a_bomb_in_front_of_it_away() {
+    let mut s = chaser_state([Some((5, 5)), Some((3, 3)), None, None]);
+    s.players[1].has_punch = true;
+    s.players[1].facing = Dir::Right;
+    add_bomb(&mut s, 0, 4, 3, 40);
+    let input = decide_as(&s, 1);
+    assert!(input.punch, "{input:?}");
+    // without the punch it does not
+    s.players[1].has_punch = false;
+    assert!(!decide_as(&s, 1).punch);
+}
+
+#[test]
+fn f4_us4_as8_a_runner_bot_still_flees_the_chasers_bomb() {
+    let mut s = chaser_state([Some((1, 1)), Some((3, 3)), None, None]);
+    add_bomb(&mut s, 0, 3, 2, 20);
+    let mut bot = DefaultBot::new(1);
+    let mut inputs = [PlayerInput::default(); 4];
+    for _ in 0..40 {
+        inputs[1] = bot.decide(&s.observe(pid(1)));
+        step(&mut s, &inputs);
+    }
+    assert!(s.players[1].alive);
+}

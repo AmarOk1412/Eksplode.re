@@ -30,6 +30,9 @@ pub const SPARK_A: Rgb = [1.0, 0.6, 0.1];
 pub const SPARK_B: Rgb = [1.0, 0.9, 0.3];
 pub const WHITE: Rgb = [1.0, 1.0, 1.0];
 /// The ring under the players of team A and team B.
+/// The chaser's crown and hearts.
+pub const CROWN_GOLD: Rgb = [0.98, 0.8, 0.15];
+pub const HEART_RED: Rgb = [0.9, 0.12, 0.2];
 pub const TEAM_A_RING: Rgb = [0.2, 0.45, 0.95];
 pub const TEAM_B_RING: Rgb = [0.95, 0.55, 0.1];
 /// The frame and the block shadow of a square the end pattern is about to cover.

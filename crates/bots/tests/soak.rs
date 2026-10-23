@@ -228,3 +228,81 @@ fn f4_us3_four_bot_team_rounds_always_end_with_a_team_result() {
         assert!(team_wins > 0);
     }
 }
+
+#[test]
+fn f4_us4_soak_chaser_two_hundred_rounds_end_in_time_and_nobody_gets_stuck() {
+    let config = Config {
+        mode: bomberust_core::Mode::Chaser,
+        round_limit_ticks: 900,
+        ..Config::default()
+    };
+    let (mut chaser_wins, mut runner_wins, mut spawned, mut ticks_total) = (0, 0, 0u32, 0u32);
+    let mut chaser_bombs = 0u32;
+    for seed in 0..200u64 {
+        let mut s = GameState::new(config.clone(), seed, [true; 4]).unwrap();
+        let mut bots: Vec<DefaultBot> = (0..4).map(|i| DefaultBot::new(seed * 4 + i)).collect();
+        // the last tick at which each participant moved or placed a bomb
+        let mut active_at = [0u32; 4];
+        let mut last_pos: Vec<_> = s.players.iter().map(|p| p.pos).collect();
+        while s.phase == Phase::Playing {
+            let mut inputs = [PlayerInput::default(); 4];
+            for (i, bot) in bots.iter_mut().enumerate() {
+                inputs[i] = bot.decide(&s.observe(pid(i as u8)));
+            }
+            let ev = step(&mut s, &inputs);
+            spawned += ev
+                .iter()
+                .filter(|e| matches!(e, bomberust_core::Event::PowerUpSpawned { .. }))
+                .count() as u32;
+            chaser_bombs += ev
+                .iter()
+                .filter(|e| matches!(e, bomberust_core::Event::BombPlaced { player, .. } if s.players[player.index()].role == bomberust_core::Role::Chaser))
+                .count() as u32;
+            for i in 0..4 {
+                let moved = s.players[i].pos != last_pos[i];
+                let bombed = ev.iter().any(|e| matches!(e, bomberust_core::Event::BombPlaced { player, .. } if player.index() == i));
+                // a runner closed in by blocks and a bomb cannot go anywhere: that is not stuck
+                let exit = bomberust_core::Dir::ALL.iter().any(|d| {
+                    s.players[i]
+                        .pos
+                        .step(*d, s.arena.width(), s.arena.height())
+                        .is_some_and(|n| {
+                            s.arena.tile(n) == bomberust_core::Tile::Floor
+                                && !s.bombs.iter().any(|b| b.pos == n && b.flight.is_none())
+                                && !s.players.iter().any(|o| o.alive && o.pos == n)
+                        })
+                });
+                if moved || bombed || !exit || !s.players[i].alive {
+                    active_at[i] = s.tick;
+                    last_pos[i] = s.players[i].pos;
+                }
+                assert!(
+                    s.tick - active_at[i] <= 100,
+                    "seed {seed}: player {i} stood still for more than 5 seconds at tick {}",
+                    s.tick
+                );
+            }
+            assert!(s.tick <= 900 + 20, "seed {seed} did not end");
+        }
+        ticks_total += s.tick;
+        match s.phase {
+            Phase::Ended(Outcome::ChaserWins) => chaser_wins += 1,
+            Phase::Ended(Outcome::RunnersWin) => runner_wins += 1,
+            Phase::Ended(Outcome::Draw) => {}
+            other => panic!("seed {seed}: {other:?}"),
+        }
+    }
+    println!("chaser wins {chaser_wins}, runner wins {runner_wins}, bonuses {spawned} in {ticks_total} ticks");
+    // the runners flee well, so the chaser rarely finishes a round, but it must hunt
+    assert!(runner_wins > 0);
+    assert!(
+        chaser_bombs >= 100,
+        "the chaser only placed {chaser_bombs} bombs in 200 rounds"
+    );
+    // the schedule: one bonus per 100 ticks while the board is below its cap and a square is free
+    let expected = ticks_total / 100;
+    assert!(
+        spawned * 10 >= expected * 5,
+        "{spawned} bonuses for {ticks_total} ticks"
+    );
+}

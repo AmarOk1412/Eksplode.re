@@ -29,6 +29,11 @@ pub enum Sprite {
         lead: u32,
     },
     PowerUp(PowerUpKind),
+    /// The crown and the hearts above the chaser; `hidden` while the hearts blink.
+    ChaserMark {
+        hearts: u8,
+        hidden: bool,
+    },
     /// The ring under a player of team `0` or `1`.
     TeamRing {
         team: u8,
@@ -164,6 +169,14 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
                 // just above the row of the player so the ring is drawn first
                 let ring = Sprite::TeamRing { team };
                 objects.push(item((x + 0.5, y + 0.5 - 0.01), Layer::Player, ring));
+            }
+            if p.role == bomberust_core::Role::Chaser {
+                // drawn after the player of the same row
+                let mark = Sprite::ChaserMark {
+                    hearts: p.hearts,
+                    hidden: p.shield_left > 0 && (obs.tick / 2) % 2 == 0,
+                };
+                objects.push(item((x + 0.5, y + 0.5 + 0.01), Layer::Player, mark));
             }
             let sprite = Sprite::Player { slot: slot as u8 };
             let mut it = item((x + 0.5, y + 0.5), Layer::Player, sprite);

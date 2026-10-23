@@ -143,8 +143,17 @@ function slotName(lobby, i) {
   return s?.name || `Player ${i + 1}`;
 }
 
-function outcomeText(outcome, slot, lobby) {
+function outcomeText(outcome, slot, lobby, observation) {
   if (outcome === "Draw") return "Draw";
+  if (outcome === "ChaserWins") {
+    const chaser = observation?.players?.findIndex((p) => p.role === "Chaser") ?? -1;
+    if (chaser >= 0 && chaser === slot) return "You won! The chaser wins";
+    return chaser >= 0 ? `The chaser wins (${slotName(lobby, chaser)})` : "The chaser wins";
+  }
+  if (outcome === "RunnersWin") {
+    const chaser = observation?.players?.findIndex((p) => p.role === "Chaser") ?? -1;
+    return chaser >= 0 && chaser !== slot ? "You survived! The runners win" : "The runners win";
+  }
   if (outcome !== null && typeof outcome === "object" && "TeamWin" in outcome) {
     const team = outcome.TeamWin === 1 ? 1 : 0;
     const members = [0, 1, 2, 3].filter((i) => i >> 1 === team).map((i) => slotName(lobby, i));
@@ -196,7 +205,7 @@ export function reduce(state, event) {
     case "PlayerLeft":
       return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
     case "Ended":
-      return { ...state, stage: "lobby", notice: outcomeText(event.outcome, state.slot, state.lobby) };
+      return { ...state, stage: "lobby", notice: outcomeText(event.outcome, state.slot, state.lobby, state.observation) };
     case "Error":
       if (event.code === "HostLeft") {
         return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
@@ -238,10 +247,15 @@ export function devPanel(state) {
   const enabled = owner !== null && owner === state.slot;
   const paused = state.devState?.paused === true;
   const percents = percentsFromChances(state.devState?.drops);
+  // Chaser mode has its own bonuses: blocks hide nothing, so the drop chances do nothing
+  const mode = state.observation?.config?.mode ?? state.lobby?.settings?.mode;
+  const noDropEffect = mode === "chaser";
+  const base = enabled ? "Developer mode: testing only." : "Only the lobby owner can use the developer panel.";
   return {
     marker: "DEV MODE",
     enabled,
-    hint: enabled ? "Developer mode: testing only." : "Only the lobby owner can use the developer panel.",
+    noDropEffect,
+    hint: noDropEffect ? `${base} Chaser mode: bonuses appear on their own, the drop sliders have no effect.` : base,
     pause: { paused, label: paused ? "Resume bots" : "Pause bots" },
     sliders: DROP_KINDS.map((kind, i) => ({ kind, label: DROP_LABELS[i], percent: percents[i] })),
     reset: { label: "Reset drops" },
@@ -333,6 +347,9 @@ export function hudRows(state) {
       speed: base + 1 - p.move_cooldown,
       effects: effectsOf(p, hz),
       team: typeof p.team === "number" ? TEAM_LETTERS[p.team] ?? null : null,
+      role: p.role === "Chaser" ? "chaser" : p.role === "Runner" ? "runner" : null,
+      hearts: p.role === "Chaser" ? p.hearts : 0,
+      shield: p.role === "Chaser" && p.shield_left > 0,
       you,
     });
   });
@@ -485,6 +502,7 @@ function start() {
     roomCreate: $("room-create"),
     joinRoom: $("join-room"),
     roomSummary: $("room-summary"),
+    roomNote: $("room-note"),
     lobbyName: $("lobby-room-name"),
     lobbyMode: $("lobby-mode"),
     lobbySize: $("lobby-size"),
@@ -726,9 +744,11 @@ function start() {
         chip.style.backgroundColor = COLOUR_CSS[state.looks[row.slot]?.colour] ?? "";
         chip.textContent = String(row.slot + 1);
         const text = document.createElement("span");
+        const roleText = row.role === "chaser" ? ` [chaser ${"\u2665".repeat(row.hearts)}${row.shield ? " protected" : ""}]` : row.role === "runner" ? " [runner]" : "";
         text.textContent = row.alive
-          ? `${row.label}${row.team ? ` [team ${row.team}]` : ""}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
-          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}: eliminated`;
+          ? `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
+          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: eliminated`;
+        if (row.role) li.classList.add(`role-${row.role}`);
         if (row.team) li.classList.add(`team-${row.team}`);
         li.append(chip, text);
         return li;
@@ -826,6 +846,7 @@ function start() {
   function renderRoom() {
     const controls = roomControls(state);
     el.roomSummary.textContent = state.stage === "lobby" ? controls.summary : "";
+    el.roomNote.textContent = state.stage === "lobby" ? controls.note : "";
     const s = controls.settings;
     if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
     el.lobbyMode.value = s.mode;

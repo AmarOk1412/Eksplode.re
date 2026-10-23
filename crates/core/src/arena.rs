@@ -4,6 +4,7 @@ use crate::action::Pos;
 use crate::config::Config;
 use crate::error::CoreError;
 use crate::rng::Rng;
+use crate::room::Mode;
 
 /// One cell of the arena.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -65,15 +66,39 @@ impl Arena {
             height: h,
             tiles: vec![Tile::Floor; usize::from(w) * usize::from(h)],
         };
-        let clear: Vec<Pos> = start_areas(w, h);
+        let chaser = config.mode == Mode::Chaser;
+        let mut clear: Vec<Pos> = start_areas(w, h);
+        if chaser {
+            // the chaser starts in the middle: the middle and the squares around it are free
+            let (cx, cy) = (w / 2, h / 2);
+            clear.extend([
+                Pos::new(cx, cy),
+                Pos::new(cx - 1, cy),
+                Pos::new(cx + 1, cy),
+                Pos::new(cx, cy - 1),
+                Pos::new(cx, cy + 1),
+            ]);
+        }
+        let (density, keep_every) = if chaser {
+            (
+                config.chaser_block_density,
+                usize::from(config.chaser_pillar_mod.max(1)),
+            )
+        } else {
+            (config.block_density, 1)
+        };
         for y in 0..h {
             for x in 0..w {
                 let p = Pos::new(x, y);
                 let border = x == 0 || y == 0 || x == w - 1 || y == h - 1;
-                let pillar = x % 2 == 0 && y % 2 == 0;
+                // Normal: every even/even square is a pillar; Chaser: about one in `keep_every`
+                let pillar = x % 2 == 0
+                    && y % 2 == 0
+                    && (usize::from(x / 2) + usize::from(y / 2)) % keep_every == 0
+                    && !(chaser && clear.contains(&p));
                 if border || pillar {
                     arena.set_tile(p, Tile::Wall);
-                } else if !clear.contains(&p) && rng.chance(config.block_density) {
+                } else if !clear.contains(&p) && rng.chance(density) {
                     arena.set_tile(p, Tile::Block);
                 }
             }

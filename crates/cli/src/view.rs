@@ -39,6 +39,9 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
             // a block is about to land on this player
             style = style.add_modifier(Modifier::REVERSED);
         }
+        if p.role == bomberust_core::Role::Chaser {
+            style = style.bg(Color::Yellow).fg(Color::Black);
+        }
         return (format!("P{}", p.id.index() + 1), style);
     }
     if state.flames.iter().any(|f| f.pos == pos) {
@@ -204,14 +207,30 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
                 let seconds = m.ticks_left.div_ceil(state.config.tick_hz.max(1));
                 effects.push_str(&format!(" {name} {seconds}s"));
             }
+            let role = match p.role {
+                bomberust_core::Role::Chaser => {
+                    let shield = if p.shield_left > 0 { " []" } else { "" };
+                    format!(" <3 x{}{shield}", p.hearts)
+                }
+                bomberust_core::Role::Runner => " runner".to_string(),
+                bomberust_core::Role::Normal => String::new(),
+            };
             format!(
-                "{tag:<6} bombs {}/{} range {} speed {speed}{effects}",
+                "{tag:<6} bombs {}/{} range {} speed {speed}{effects}{role}",
                 p.bombs_active, p.bombs_max, p.range
             )
         } else {
             format!("{tag:<6} eliminated")
         };
         let mut spans = vec![name];
+        if p.role == bomberust_core::Role::Chaser {
+            spans.push(Span::styled(
+                "* ",
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
         if let Some(t) = p.team {
             spans.push(Span::styled(
                 format!("[{}] ", team_letter(t)),
