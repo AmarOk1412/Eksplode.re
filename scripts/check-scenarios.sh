@@ -52,10 +52,11 @@ for id in $ids_002; do
     missing=$((missing + 1))
 done
 
-# F3_ONLY limits the check to some ids while a stage is still being built, e.g. F3_ONLY="f3_us1 f3_us2".
+# F3_ONLY limits the check to some stories or ids while a stage is still being built, e.g.
+# F3_ONLY="f3_us1 f3_us2_as1".
 for id in $ids_003; do
     if [ -n "${F3_ONLY:-}" ]; then
-        case " $F3_ONLY " in *" ${id%_as*} "*) ;; *) continue ;; esac
+        case " $F3_ONLY " in *" ${id%_as*} "* | *" $id "*) ;; *) continue ;; esac
     fi
     in_tests_f3 "$id" && continue
     in_manual_ticked "$id" "$MANUAL_003" && continue

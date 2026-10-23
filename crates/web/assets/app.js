@@ -4,6 +4,22 @@
 //
 // The helpers before `start()` are pure and exported for the node tests (crates/web/js-tests).
 
+import {
+  COLOUR_CSS,
+  COLOUR_NAMES,
+  FACES,
+  GENDERS,
+  HEADS,
+  defaultLook,
+  editorReducer,
+  loadLook,
+  looksJson,
+  lookMessage,
+  previewCommands,
+  sanitizeLook,
+  saveLook,
+} from "./look.js";
+
 const DIRECTIONS = {
   ArrowUp: "Up",
   KeyW: "Up",
@@ -52,7 +68,17 @@ export class KeyTracker {
 }
 
 export function initialState() {
-  return { stage: "idle", slot: null, lobby: null, notice: "", observation: null, tick: 0 };
+  return { stage: "idle", slot: null, lobby: null, notice: "", observation: null, tick: 0, looks: defaultLooks() };
+}
+
+function defaultLooks() {
+  return [0, 1, 2, 3].map((i) => defaultLook(i));
+}
+
+/** The four looks of a message; a host that sends none leaves what is known (or the defaults). */
+function looksOf(event, previous) {
+  if (!Array.isArray(event.looks) || event.looks.length === 0) return previous ?? defaultLooks();
+  return [0, 1, 2, 3].map((i) => sanitizeLook(event.looks[i], i));
 }
 
 export function rejectText(reason) {
@@ -90,12 +116,12 @@ export function reduce(state, event) {
     case "retry":
       return initialState();
     case "Welcome":
-      return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "" };
+      return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "", looks: looksOf(event, null) };
     case "Rejected":
       return { ...state, stage: "closed", notice: rejectText(event.reason) };
     case "Lobby": {
       const stage = state.stage === "playing" || state.stage === "closed" ? state.stage : "lobby";
-      return { ...state, stage, lobby: event.lobby };
+      return { ...state, stage, lobby: event.lobby, looks: looksOf(event, state.looks) };
     }
     case "Start":
       return { ...state, stage: "playing", notice: "" };
@@ -196,6 +222,18 @@ export function createRenderer(ex) {
     pick(x, y) {
       return ex.bomberust_pick_tile(x, y);
     },
+    /** Gives the module the looks of the four slots (plain objects). */
+    setLooks(looks) {
+      if (!ex.bomberust_set_looks) return -1;
+      const bytes = encoder.encode(looksJson(looks));
+      const size = Math.max(bytes.length, 1);
+      const ptr = ex.bomberust_alloc(size);
+      if (ptr === 0) return 4;
+      new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
+      const code = ex.bomberust_set_looks(ptr, bytes.length);
+      ex.bomberust_free(ptr, size);
+      return code;
+    },
     /** Commands of a character fitted into width x height pixels; `rows` 0 is the whole figure. */
     portrait(slot, width, height, rows) {
       const count = ex.bomberust_portrait(slot, width, height, rows);
@@ -258,6 +296,15 @@ function start() {
     hud: $("hud"),
     timer: $("timer"),
     logo: $("logo"),
+    editor: $("editor"),
+    preview: $("preview"),
+    swatches: $("swatches"),
+    gender: $("gender"),
+    head: $("head"),
+    face: $("face"),
+    randomLook: $("random-look"),
+    doneLook: $("done-look"),
+    changeLook: $("change-look"),
   };
   const ctx = el.canvas.getContext("2d");
   const keys = new KeyTracker();
@@ -288,6 +335,7 @@ function start() {
 
   function dispatch(event) {
     state = reduce(state, event);
+    if ((event.type === "Welcome" || event.type === "Lobby") && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
       const code = renderer.load(JSON.stringify(event.state));
       if (code !== 0) state = { ...state, notice: `Graphics error: ${renderer.describe(code)}` };
@@ -303,6 +351,9 @@ function start() {
     el.joinPanel.hidden = inLobby || playing;
     el.lobbyPanel.hidden = !inLobby;
     el.gamePanel.hidden = !playing;
+    el.editor.hidden = !(!inLobby && !playing) && !(inLobby && editing);
+    el.doneLook.hidden = !inLobby;
+    if (!el.editor.hidden) renderEditor();
     el.join.hidden = state.stage === "closed";
     el.retry.hidden = state.stage !== "closed";
     el.join.disabled = state.stage === "connecting" || state.stage === "joining";
@@ -357,6 +408,7 @@ function start() {
         li.className = row.alive ? "" : "dead";
         const chip = document.createElement("span");
         chip.className = `chip slot-${row.slot}`;
+        chip.style.backgroundColor = COLOUR_CSS[state.looks[row.slot]?.colour] ?? "";
         chip.textContent = String(row.slot + 1);
         const text = document.createElement("span");
         text.textContent = row.alive
@@ -381,7 +433,7 @@ function start() {
     socket = new WebSocket(`${scheme}://${location.host}/ws`);
     socket.onopen = () => {
       dispatch({ type: "socket-open" });
-      send({ type: "Join", version: PROTOCOL_VERSION, name });
+      send(lookMessage("Join", draft, { version: PROTOCOL_VERSION, name }));
     };
     socket.onmessage = (ev) => {
       try {
@@ -407,6 +459,83 @@ function start() {
   el.ready.addEventListener("click", () => {
     const mine = state.lobby?.slots[state.slot]?.ready ?? false;
     send({ type: "SetReady", ready: !mine });
+  });
+
+  // ---- the character editor: the draft is saved on this device and used by the next Join ----
+  const storage = (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return undefined;
+    }
+  })();
+  let draft = loadLook(storage, 0);
+  let editing = false;
+
+  function fillSelect(select, options) {
+    select.replaceChildren(
+      ...options.map((name) => {
+        const o = document.createElement("option");
+        o.value = name;
+        o.textContent = name;
+        return o;
+      }),
+    );
+  }
+  fillSelect(el.gender, GENDERS);
+  fillSelect(el.head, HEADS);
+  fillSelect(el.face, FACES);
+  el.swatches.replaceChildren(
+    ...COLOUR_NAMES.map((name) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "swatch";
+      b.dataset.colour = name;
+      b.title = name;
+      b.setAttribute("aria-label", name);
+      b.style.backgroundColor = COLOUR_CSS[name];
+      b.addEventListener("click", () => editLook({ type: "colour", value: name }));
+      return b;
+    }),
+  );
+
+  function editLook(action) {
+    draft = editorReducer(draft, action);
+    saveLook(storage, draft);
+    renderEditor();
+    if (state.stage === "lobby") send(lookMessage("SetLook", draft));
+  }
+
+  function renderEditor() {
+    el.gender.value = draft.gender;
+    el.head.value = draft.head;
+    el.face.value = draft.face;
+    for (const b of el.swatches.children) b.classList.toggle("selected", b.dataset.colour === draft.colour);
+    paintPreview();
+  }
+
+  function paintPreview() {
+    if (!renderer || el.editor.hidden) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = el.preview.getBoundingClientRect();
+    const w = Math.max(16, Math.round((rect.width || 160) * dpr));
+    const h = Math.max(16, Math.round((rect.height || 226) * dpr));
+    el.preview.width = w;
+    el.preview.height = h;
+    paintCommands(el.preview.getContext("2d"), previewCommands(renderer, draft, w, h, 0, state.looks));
+  }
+
+  el.gender.addEventListener("change", () => editLook({ type: "gender", value: el.gender.value }));
+  el.head.addEventListener("change", () => editLook({ type: "head", value: el.head.value }));
+  el.face.addEventListener("change", () => editLook({ type: "face", value: el.face.value }));
+  el.randomLook.addEventListener("click", () => editLook({ type: "random" }));
+  el.changeLook.addEventListener("click", () => {
+    editing = !editing;
+    updateUi();
+  });
+  el.doneLook.addEventListener("click", () => {
+    editing = false;
+    updateUi();
   });
 
   window.addEventListener("keydown", (e) => {
@@ -460,10 +589,12 @@ function start() {
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {});
       renderer = createRenderer(instance.exports);
+      renderer.setLooks(state.looks);
     } catch (e) {
       state = { ...state, stage: "closed", notice: `Graphics module failed: ${e.message}` };
     }
     updateUi();
+    renderEditor();
   }
 
   updateUi();

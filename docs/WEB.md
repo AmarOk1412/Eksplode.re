@@ -105,6 +105,12 @@ When the page and the server share an origin (the normal case) there is nothing 
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`bomberust_render.wasm`](../crates/web/assets/bomberust_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
 
+**Character editor.** On the join screen (and from "Change look" in the lobby) the player picks a
+colour, a gender look, a head accessory and a face accessory with a live preview drawn by the
+WebAssembly module. The choice is saved on the device (`localStorage`, key `bomberust.look.v1`),
+sent with `Join`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
+[PROTOCOL.md](PROTOCOL.md#looks)). During a match the editor is locked.
+
 The page never evaluates game rules. It sends the keys currently held as `Input` messages every
 50 ms and draws the `Snapshot`s it receives. Keys: arrows or WASD to move, Space or E for a bomb;
 all keys are released when the window loses focus. Messages from the server show up as notices

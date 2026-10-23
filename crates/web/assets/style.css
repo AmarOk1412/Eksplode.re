@@ -108,6 +108,26 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   justify-content: center;
 }
 
+.editor {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 24px;
+  align-items: start;
+  width: min(560px, 100%);
+}
+
+.preview { width: 160px; height: 226px; background: #e8e6e9; image-rendering: pixelated; display: block; }
+
+.pickers { display: grid; gap: 8px; justify-items: start; }
+.pickers h2 { margin-bottom: 4px; }
+.pickers select { width: 100%; font: inherit; font-size: 1rem; padding: 4px 8px; border: 3px solid var(--ink); background: #fff; color: var(--ink); border-radius: 0; }
+.pickers .buttons { margin-top: 8px; justify-content: flex-start; }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.swatch { width: 28px; height: 28px; padding: 0; border: 3px solid var(--ink); border-radius: 0; }
+.swatch.selected { outline: 3px solid var(--ink); outline-offset: 2px; }
+.swatch:hover:not(:disabled) { background-color: inherit; }
+
 .slot { display: grid; justify-items: center; gap: 8px; }
 
 .card {

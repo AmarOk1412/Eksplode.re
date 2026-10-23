@@ -75,6 +75,7 @@ dependencies = [
  "bomberust-cli",
  "bomberust-core",
  "bomberust-net",
+ "bomberust-web-render",
  "ctrlc",
  "serde_json",
  "tungstenite",

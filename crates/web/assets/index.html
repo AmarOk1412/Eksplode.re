@@ -21,6 +21,24 @@
       <button id="retry" type="button" hidden>Retry</button>
     </section>
 
+    <section id="editor" class="dialog editor" aria-label="Character editor" hidden>
+      <canvas id="preview" class="preview" aria-label="Preview of your character"></canvas>
+      <div class="pickers">
+        <h2>Your character</h2>
+        <div id="swatches" class="swatches" role="group" aria-label="Colour"></div>
+        <label for="gender">Look</label>
+        <select id="gender"></select>
+        <label for="head">Head</label>
+        <select id="head"></select>
+        <label for="face">Face</label>
+        <select id="face"></select>
+        <div class="buttons">
+          <button id="random-look" type="button">Random</button>
+          <button id="done-look" type="button" hidden>Done</button>
+        </div>
+      </div>
+    </section>
+
     <section id="lobby-panel" class="dialog" hidden>
       <h2>Lobby</h2>
       <ul id="slots" class="cards"></ul>
@@ -29,6 +47,7 @@
         <button id="add-bot" type="button">Add bot</button>
         <button id="remove-bot" type="button">Remove bot</button>
         <button id="ready" type="button">Ready</button>
+        <button id="change-look" type="button">Change look</button>
       </div>
       <p class="hint">The first human player is the owner and starts the match.
 Controls: arrow keys or WASD to move, Space or E for a bomb.</p>

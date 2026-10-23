@@ -94,6 +94,20 @@ async function main() {
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
   await shot("1-join.png");
 
+  // pick a look in the character editor (feature 003) and save a screenshot of it
+  await evaluate(`(() => {
+    document.querySelector('#swatches [data-colour="Teal"]').click();
+    for (const [id, value] of [["gender", "Female"], ["head", "Crown"], ["face", "Glasses"]]) {
+      const select = document.getElementById(id);
+      select.value = value;
+      select.dispatchEvent(new Event("change"));
+    }
+    return 1;
+  })()`);
+  await sleep(300);
+  await shot("1b-editor.png");
+  console.log("stored look:", await evaluate("localStorage.getItem('bomberust.look.v1')"));
+
   await evaluate("document.getElementById('name').value = 'SmokeTest'; document.getElementById('join').click(); 1");
   await waitFor("!document.getElementById('lobby-panel').hidden", "the lobby");
   console.log("lobby:", await evaluate("document.getElementById('slots').innerText"));

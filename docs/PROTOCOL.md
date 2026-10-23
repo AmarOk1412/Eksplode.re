@@ -27,7 +27,8 @@ runs the simulation and validates every message, whatever the transport.
 
 | type | Fields | When |
 |------|--------|------|
-| `Join` | `version: u32`, `name: string` | must be the first message |
+| `Join` | `version: u32`, `name: string`, `look` (optional, see [Looks](#looks)) | must be the first message |
+| `SetLook` | `look` | lobby only: change the sender's look; refused during a match with `WrongPhase` |
 | `SetReady` | `ready: bool` | in the lobby |
 | `Input` | `tick: u32`, `mv: "Up"/"Down"/"Left"/"Right"/null`, `bomb: bool` | during a match, at most one per tick; `tick` is the latest snapshot the client has seen |
 | `Leave` | none | graceful exit |
@@ -48,9 +49,9 @@ Examples:
 
 | type | Fields | When |
 |------|--------|------|
-| `Welcome` | `slot: 0..3`, `config`, `lobby` | the join was accepted |
+| `Welcome` | `slot: 0..3`, `config`, `lobby`, `looks: [Look; 4]` | the join was accepted |
 | `Rejected` | `reason: "Full" / "BadVersion" / "BadName" / "InMatch"` | the join was refused; the connection is closed |
-| `Lobby` | `lobby: {slots: [{controller, name, ready}; 4]}` | any lobby change |
+| `Lobby` | `lobby: {slots: [{controller, name, ready}; 4]}`, `looks: [Look; 4]` | any lobby change |
 | `Start` | `seed: u64`, `config` | the owner started a match |
 | `Snapshot` | `tick: u32`, `state` (an `Observation` for this slot), `events: [Event]` | every tick of a match (20 Hz) |
 | `PlayerLeft` | `slot: u8`, `replaced_by_bot: bool` | a player disconnected or went silent |
@@ -74,6 +75,24 @@ An `Observation` is what any participant, human or bot, may see: the arena, the 
 bombs, flames and the power-ups that are not hidden under blocks. It never contains the random
 generator.
 
+## Looks
+
+A look is a JSON object `{"colour":"Blue","gender":"Male","head":"Cap","face":"None"}`. The host
+reads it leniently: a missing, wrongly typed or unknown field becomes the default of the sender's
+slot for that field, and a value that is not an object gives the full default, so a look never
+causes `Malformed`. The four participants of a match always have different colours: when the
+requested colour is taken, the sender gets the next free colour in palette order (wrapping) and an
+`Error{LookAdjusted}` notice. A bot or a terminal player gets the default look of its slot (blue,
+black, red and purple characters). `Welcome` and `Lobby` carry the look of every slot; old hosts send
+none and old clients ignore the field.
+
+| Field | Values |
+|-------|--------|
+| `colour` | `Blue`, `Black`, `Red`, `Purple`, `Green`, `Orange`, `Yellow`, `Pink`, `Teal`, `White` |
+| `gender` | `Male`, `Female` |
+| `head` | `None`, `Cap`, `TopHat`, `Crown`, `Headphones` |
+| `face` | `None`, `Glasses`, `Sunglasses`, `Moustache`, `Mask` |
+
 ## Error codes
 
 | code | Meaning |
@@ -88,6 +107,7 @@ generator.
 | `BadTick` | an `Input` from the future |
 | `Timeout` | silent for too long; the slot goes to a bot |
 | `HostLeft` | the host is shutting down; every client gets it before the connection closes |
+| `LookAdjusted` | the requested colour was taken; the message names the colour you got (a notice, not a refusal) |
 
 An `Error` never ends a match for the others: the bad message is dropped.
 

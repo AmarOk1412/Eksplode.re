@@ -24,6 +24,8 @@ ctrlc = "3"
 [dev-dependencies]
 # Only for the documentation tests, which compare the CLI help text with the guides.
 bomberust-cli = { path = "../cli" }
+# The consistency test compares the look options of the renderer with the server and the page.
+bomberust-web-render = { path = "../web-render" }
 
 [lints]
 workspace = true
