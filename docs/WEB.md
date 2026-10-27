@@ -97,6 +97,7 @@ eksplode-re-cli join http://192.168.1.20:8080/     # web addresses work too; onl
 | `GET /look.js` | `200 text/javascript` - the character looks: options, editor state and storage |
 | `GET /room.js` | `200 text/javascript` - the room settings: options, menu state and storage |
 | `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
+| `GET /controls.js` | `200 text/javascript` - keyboard preferences and controller input mapping |
 | `GET /style.css` | `200 text/css` |
 | `GET /eksplode_re_render.wasm` | `200 application/wasm` - the graphics module |
 | `GET /ws` with `Upgrade: websocket` | `101` - see [PROTOCOL.md](PROTOCOL.md) |
@@ -129,7 +130,8 @@ When the page and the server share an origin (the normal case) there is nothing 
 |------|------|
 | [`index.html`](../crates/web/assets/index.html) | structure: join form, lobby list, canvas, HUD, notices; no inline script |
 | [`look.js`](../crates/web/assets/look.js), [`room.js`](../crates/web/assets/room.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the room settings, menu state and storage; the generated sound and settings |
-| [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard tracking, DOM updates, and painting of the draw commands on the canvas |
+| [`controls.js`](../crates/web/assets/controls.js) | keyboard defaults, validation and local preferences; standard gamepad mapping and device state |
+| [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard/controller input, DOM updates, and painting of the draw commands on the canvas |
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`eksplode_re_render.wasm`](../crates/web/assets/eksplode_re_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
 
@@ -150,9 +152,31 @@ WebAssembly module. The choice is saved on the device (`localStorage`, key `eksp
 sent with `Join`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
 [PROTOCOL.md](PROTOCOL.md#looks)). During a match the editor is locked.
 
-The page never evaluates game rules. It sends the keys currently held as `Input` messages every
-50 ms and draws the `Snapshot`s it receives. Keys: arrows or WASD to move, Space or E for a bomb, Z or Q to punch;
-all keys are released when the window loses focus. Messages from the server show up as notices
+**Control settings.** The keyboard icon in the page header opens the controls panel. Select one of
+the six actions and press a key to replace its current assignment; a conflicting or reserved key
+is rejected without changing the existing mapping. The defaults remain arrows plus WASD, Space
+plus E, and Z plus Q. Valid keyboard bindings are stored on this device under
+`eksplode.re.controls.v1`; use "Restore defaults" to reset them. Storage that is unavailable or
+contains invalid data falls back to usable defaults.
+
+The controller section lists standard-mapped controllers visible to the browser. A controller
+already plugged in may not appear until the page is visible and focused and a button or stick is
+used once. Select a controller there when more than one is connected. The standard Xbox mapping
+uses the left stick or D-pad to move, A to place a bomb, and B to punch a bomb. Stick movement has
+a small dead zone; bomb and punch fire once per press. Disconnecting or changing the selected
+controller clears held input, and keyboard play remains available if the controller is unavailable.
+
+Terminal key configuration is independent of the web panel. Local CLI play accepts `--p1-keys`
+through `--p4-keys`; a terminal client joining a hosted game accepts `--keys`. Each value contains
+six comma-separated keys in `up,down,left,right,bomb,punch` order. Values may be one character or
+`Up`, `Down`, `Left`, `Right` or `Space`; character case is ignored. Duplicate keys and the reserved
+`q`, `p` and `r` commands are refused. Terminal bindings apply only to that process; web keyboard
+preferences persist on that browser device.
+
+The page never evaluates game rules. It sends keyboard and controller state as the existing `Input`
+messages every 50 ms and draws the `Snapshot`s it receives. Keyboard defaults are arrows or WASD
+to move, Space or E for a bomb, Z or Q to punch; held inputs are cleared when the window loses
+focus or becomes hidden. Messages from the server show up as notices
 (`Only Ann can start the match`, `Player 3 left, a bot took over`, `You won!`), and when the
 connection drops the page says so and offers a Retry button.
 

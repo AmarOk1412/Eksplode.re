@@ -1,6 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use eksplode_re_cli::args::{parse, Command, LocalOptions, UsageError};
+use eksplode_re_cli::input::{default_key_bindings, KeyBindings};
+use ratatui::crossterm::event::KeyCode;
 
 fn args(list: &[&str]) -> Result<Command, UsageError> {
     parse(list.iter().map(|s| s.to_string()))
@@ -13,6 +15,7 @@ fn opts(players: u8, bots: u8, seed: Option<u64>, lobby: bool) -> Result<Command
         seed,
         lobby,
         room: Default::default(),
+        key_bindings: default_key_bindings(),
     }))
 }
 
@@ -139,6 +142,7 @@ mod network {
         Ok(Command::Join(JoinOptions {
             addr: addr.into(),
             name: name.into(),
+            key_bindings: KeyBindings::default_for_slot(0),
         }))
     }
 
@@ -254,6 +258,48 @@ mod network {
             args(&["join", "a", "--bots", "1"]),
             Err(UsageError::UnknownOption(_))
         ));
+    }
+
+    #[test]
+    fn terminal_key_options_parse_six_bindings_and_keep_omitted_slot_defaults() {
+        let Ok(Command::Run(defaults)) = args(&[]) else {
+            panic!("expected default local options");
+        };
+        let Ok(Command::Run(configured)) = args(&["--p1-keys", "1,2,3,4,5,6"]) else {
+            panic!("expected configured local options");
+        };
+        assert_eq!(configured.key_bindings[0].up, KeyCode::Char('1'));
+        assert_eq!(configured.key_bindings[0].down, KeyCode::Char('2'));
+        assert_eq!(configured.key_bindings[0].left, KeyCode::Char('3'));
+        assert_eq!(configured.key_bindings[0].right, KeyCode::Char('4'));
+        assert_eq!(configured.key_bindings[0].bomb, KeyCode::Char('5'));
+        assert_eq!(configured.key_bindings[0].punch, KeyCode::Char('6'));
+        assert_eq!(configured.key_bindings[1], defaults.key_bindings[1]);
+    }
+
+    #[test]
+    fn joining_player_can_configure_only_their_own_keyboard_bindings() {
+        let Ok(Command::Join(join)) =
+            args(&["join", "host.lan", "--keys", "Up,Down,Left,Right,Space,z"])
+        else {
+            panic!("expected a joining client");
+        };
+        assert_eq!(join.key_bindings.up, KeyCode::Up);
+        assert_eq!(join.key_bindings.bomb, KeyCode::Char(' '));
+        assert_eq!(join.key_bindings.punch, KeyCode::Char('z'));
+    }
+
+    #[test]
+    fn invalid_or_conflicting_key_binding_options_are_usage_errors() {
+        for bad in [
+            &["--p1-keys", "1,2,3"][..],
+            &["--p1-keys", "1,2,3,4,5,Escape"][..],
+            &["--p1-keys", "q,2,3,4,5,6"][..],
+            &["--p1-keys", "1,2,3,4,5,6", "--p2-keys", "1,7,8,9,0,a"][..],
+            &["join", "host", "--keys", "1,1,2,3,4,5"][..],
+        ] {
+            assert!(args(bad).is_err(), "accepted invalid bindings {bad:?}");
+        }
     }
 }
 

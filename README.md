@@ -1,5 +1,7 @@
 # Eksplode.re
 
+Note: This is a "Toy project" fully sloppy generated.
+
 Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, and let browser and
 terminal players share the same match. The rules, the bots, the network protocol and the
 pixel-art view are all small, tested crates.
@@ -64,6 +66,10 @@ capture PNGs).
 - `--lobby` shows the lobby screen first (Up/Down select, `h` human, `b` bot, Enter start);
 - `--mode <normal|team|chaser>`, `--size <small|medium|large>`, `--time <2|3|5|10>` (minutes) and
   `--friendly-fire <on|off>` set the room settings of the match (defaults: normal, small, 3, on);
+- `--p1-keys`, `--p2-keys`, `--p3-keys` and `--p4-keys` configure each local player's six keys in
+  `up,down,left,right,bomb,punch` order; for example, `--p1-keys "w,s,a,d,e,z"`. Values accept
+  single characters or `Up`, `Down`, `Left`, `Right`, `Space`. Omitted slots keep their defaults;
+  duplicate keys and `q` (quit), `p` (pause) or `r` (rematch) are rejected;
 - `-h`, `--help` and `-V`, `--version`.
 
 `eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
@@ -83,9 +89,10 @@ capture PNGs).
   page only on `127.0.0.1`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
 
-`eksplode-re-cli join <ADDR[:PORT]> [--name NAME]` joins a host. `host`, `host:port` and web
-addresses such as `http://host:8080/` work; for a web address only the host is kept. A refused
-or full match ends with a one-line explanation and exit status 1.
+`eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS]` joins a host. `--keys` uses the
+same six-key order for the joining player only. `host`, `host:port` and web addresses such as
+`http://host:8080/` work; for a web address only the host is kept. A refused or full match ends
+with a one-line explanation and exit status 1.
 
 The terminal must be at least 40x20; a medium board needs 40x22 and a large one 52x26 (the game says so when the terminal is too small). Wrong usage exits with status 2.
 
@@ -100,7 +107,8 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 
 | Where | Move | Bomb | Punch |
 |-------|------|------|-------|
-| Browser | arrows or WASD | Space or E | Z or Q |
+| Browser keyboard | arrows or WASD | Space or E | Z or Q |
+| Xbox-compatible controller | left stick or D-pad | A | B |
 | Terminal P1 | arrow keys | Space | Z |
 | Terminal P2 | W A S D | E | C |
 | Terminal P3 | I J K L | O | U |
@@ -110,6 +118,14 @@ In the lobby: Enter starts (owner only), `b` adds a bot, `x` removes one, `r` to
 quits. In a local match `p` pauses and `r` starts a rematch after a round. The terminal reports
 no key releases, so a direction key moves one tile per tap and keeps moving while the key
 repeats. In the browser the game keeps moving while a key is held.
+
+Open the keyboard icon in the browser header to reassign any action, see the active bindings or
+restore defaults. A reassignment replaces that action's aliases and is saved on the same device.
+Conflicting and reserved keys are refused. For a controller, focus the visible game page and press
+a button or move a stick if it is not listed yet; choose among listed controllers in the panel.
+Movement uses the left stick or D-pad, A places a bomb and B punches a bomb. Keyboard input remains
+available when a controller is disconnected or unsupported. See [docs/WEB.md](docs/WEB.md) for
+browser setup details.
 
 ## Rules in short
 

@@ -14,7 +14,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Paragraph};
 use ratatui::Frame;
 
-use crate::input::{map_key, normalize, InputState, KeyAction};
+use crate::input::{map_key_for_player, normalize, InputState, KeyAction, KeyBindings};
 use crate::view::{self, player_color, team_letter, team_members, ViewContext};
 
 /// Where an online session is.
@@ -40,6 +40,7 @@ pub struct Online {
     /// Where browsers can join, when the host also serves the web page.
     pub web_url: Option<String>,
     rejection: Option<(RejectReason, Instant)>,
+    key_bindings: KeyBindings,
     input: InputState,
     tick: u32,
 }
@@ -47,6 +48,11 @@ pub struct Online {
 impl Online {
     /// A client of someone else's host.
     pub fn new(client: Client) -> Online {
+        Self::with_key_bindings(client, KeyBindings::default_for_slot(0))
+    }
+
+    /// A joining client with custom local gameplay keys.
+    pub fn with_key_bindings(client: Client, key_bindings: KeyBindings) -> Online {
         Online {
             client,
             host: None,
@@ -58,6 +64,7 @@ impl Online {
             quit: false,
             web_url: None,
             rejection: None,
+            key_bindings,
             input: InputState::new(4),
             tick: 0,
         }
@@ -174,7 +181,7 @@ impl Online {
 
     /// Reacts to a key press for the current stage.
     pub fn handle_key(&mut self, code: KeyCode) {
-        let action = map_key(code);
+        let action = map_key_for_player(code, self.key_bindings, 0);
         if action == Some(KeyAction::Quit) {
             self.quit = true;
             return;

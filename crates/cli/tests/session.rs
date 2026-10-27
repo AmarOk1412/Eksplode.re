@@ -2,6 +2,7 @@
 
 use eksplode_re_cli::app::Session;
 use eksplode_re_cli::args::LocalOptions;
+use eksplode_re_cli::input::{default_key_bindings, KeyBindings};
 use eksplode_re_core::{Controller, Event, Lobby, Outcome, Phase, Pos};
 use ratatui::crossterm::event::KeyCode;
 
@@ -13,10 +14,44 @@ fn session(players: u8, bots: u8) -> Session {
             seed: None,
             lobby: false,
             room: Default::default(),
+            key_bindings: default_key_bindings(),
         },
         7,
     )
     .unwrap()
+}
+
+#[test]
+fn local_session_uses_custom_keys_and_keeps_other_slot_defaults() {
+    let mut key_bindings = default_key_bindings();
+    key_bindings[0] = KeyBindings {
+        up: KeyCode::Char('1'),
+        down: KeyCode::Char('2'),
+        left: KeyCode::Char('3'),
+        right: KeyCode::Char('4'),
+        bomb: KeyCode::Char('5'),
+        punch: KeyCode::Char('6'),
+    };
+    let options = LocalOptions {
+        players: 2,
+        bots: 0,
+        seed: None,
+        lobby: false,
+        room: Default::default(),
+        key_bindings,
+    };
+    let mut game = Session::new(&options, 7).unwrap();
+    let first_start = game.state.players[0].pos;
+    let second_start = game.state.players[1].pos;
+    game.handle_key(KeyCode::Char('2'));
+    game.tick();
+    assert_ne!(game.state.players[0].pos, first_start);
+    game.handle_key(KeyCode::Char('s'));
+    game.tick();
+    assert_ne!(game.state.players[1].pos, second_start);
+    game.handle_key(KeyCode::Char('5'));
+    game.tick();
+    assert_eq!(game.state.bombs.len(), 1);
 }
 
 #[test]

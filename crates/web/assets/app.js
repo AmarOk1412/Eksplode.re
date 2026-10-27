@@ -6,6 +6,15 @@
 
 import { AudioEngine, tuneForStage } from "./audio.js";
 import {
+  DEFAULT_BINDINGS,
+  GamepadTracker,
+  assignBinding,
+  compatibleGamepads,
+  loadBindings,
+  sanitizeBindings,
+  saveBindings,
+} from "./controls.js";
+import {
   COLOUR_CSS,
   COLOUR_NAMES,
   FACES,
@@ -39,35 +48,39 @@ import {
   setRoomMessage,
 } from "./room.js";
 
-const DIRECTIONS = {
-  ArrowUp: "Up",
-  KeyW: "Up",
-  ArrowDown: "Down",
-  KeyS: "Down",
-  ArrowLeft: "Left",
-  KeyA: "Left",
-  ArrowRight: "Right",
-  KeyD: "Right",
-};
-const BOMB_KEYS = new Set(["Space", "KeyE"]);
-const PUNCH_KEYS = new Set(["KeyZ", "KeyQ"]);
+const DIRECTION_ACTIONS = { up: "Up", down: "Down", left: "Left", right: "Right" };
 const TICK_MS = 50;
 const PROTOCOL_VERSION = 1;
 
 /** Keeps the held keys and turns them into one input per tick. */
 export class KeyTracker {
-  constructor() {
+  constructor(bindings = DEFAULT_BINDINGS) {
+    this.bindings = sanitizeBindings(bindings);
     this.held = [];
     this.bomb = false;
     this.punch = false;
   }
 
+  setBindings(bindings) {
+    this.bindings = sanitizeBindings(bindings);
+    this.clear();
+  }
+
+  actionFor(code) {
+    return Object.keys(this.bindings).find((action) => this.bindings[action].includes(code)) ?? null;
+  }
+
+  isBound(code) {
+    return this.actionFor(code) !== null;
+  }
+
   press(code) {
-    if (code in DIRECTIONS) {
+    const action = this.actionFor(code);
+    if (action in DIRECTION_ACTIONS) {
       if (!this.held.includes(code)) this.held.push(code);
-    } else if (BOMB_KEYS.has(code)) {
+    } else if (action === "bomb") {
       this.bomb = true;
-    } else if (PUNCH_KEYS.has(code)) {
+    } else if (action === "punch") {
       this.punch = true;
     }
   }
@@ -85,7 +98,8 @@ export class KeyTracker {
   /** The latest pressed direction that is still held; bomb and punch presses fire once. */
   take() {
     const last = this.held[this.held.length - 1];
-    const input = { mv: last ? DIRECTIONS[last] : null, bomb: this.bomb, punch: this.punch };
+    const action = last ? this.actionFor(last) : null;
+    const input = { mv: action ? DIRECTION_ACTIONS[action] : null, bomb: this.bomb, punch: this.punch };
     this.bomb = false;
     this.punch = false;
     return input;
@@ -535,6 +549,14 @@ function start() {
     changeLook: $("change-look"),
     soundButton: $("sound-button"),
     soundPanel: $("sound-panel"),
+    controlsButton: $("controls-button"),
+    controlsPanel: $("controls-panel"),
+    controlsStatus: $("controls-status"),
+    controlBindings: [...document.querySelectorAll("[data-bind-action]")],
+    controlsReset: $("controls-reset"),
+    controlsClose: $("controls-close"),
+    controllerSelect: $("controller-select"),
+    controllerStatus: $("controller-status"),
     musicVolume: $("music-volume"),
     effectsVolume: $("effects-volume"),
     mute: $("mute"),
@@ -546,11 +568,21 @@ function start() {
     devReset: $("dev-reset"),
     devSliders: $("dev-sliders"),
   };
+  const storage = (() => {
+    try {
+      return window.localStorage;
+    } catch {
+      return undefined;
+    }
+  })();
   const ctx = el.canvas.getContext("2d");
-  const keys = new KeyTracker();
+  let keyboardBindings = loadBindings(storage);
+  const keys = new KeyTracker(keyboardBindings);
+  const gamepads = new GamepadTracker();
   let state = initialState();
   let socket = null;
   let renderer = null;
+  let pageFocused = true;
   let lastSnapshotAt = 0;
   let logoPainted = false;
   let lobbyCanvases = [];
@@ -785,15 +817,6 @@ function start() {
     socket.onclose = () => dispatch({ type: "socket-closed" });
   }
 
-  // settings and looks are remembered on this device when its storage allows it
-  const storage = (() => {
-    try {
-      return window.localStorage;
-    } catch {
-      return undefined;
-    }
-  })();
-
   // ---- the room: the creation menu before joining and the settings in the lobby ----
   const modeLabel = (m) => MODE_LABELS[m] ?? m;
   const sizeText = (s) => `${SIZE_LABELS[s]} (${SIZE_DIMENSIONS[s][0]} x ${SIZE_DIMENSIONS[s][1]})`;
@@ -942,6 +965,7 @@ function start() {
   el.soundButton.addEventListener("click", () => {
     el.soundPanel.hidden = !el.soundPanel.hidden;
     el.soundButton.setAttribute("aria-expanded", String(!el.soundPanel.hidden));
+    if (!el.soundPanel.hidden) closeControls();
   });
   el.closeSound.addEventListener("click", () => {
     el.soundPanel.hidden = true;
@@ -951,6 +975,137 @@ function start() {
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
   el.mute.addEventListener("change", () => audio.setSettings({ muted: el.mute.checked }));
   el.testSound.addEventListener("click", () => audio.testSound());
+
+  let capturingAction = null;
+  const actionLabels = {
+    up: "Move up",
+    down: "Move down",
+    left: "Move left",
+    right: "Move right",
+    bomb: "Place bomb",
+    punch: "Punch bomb",
+  };
+  const keyLabel = (code) =>
+    code === "Space" ? "Space" : code.startsWith("Arrow") ? code.slice(5) : code.startsWith("Key") ? code.slice(3) : code;
+  let resetArmed = false;
+  let resetTimer = null;
+
+  function cancelReset(message = "") {
+    clearTimeout(resetTimer);
+    resetTimer = null;
+    if (!resetArmed) return;
+    resetArmed = false;
+    el.controlsReset.textContent = "Restore defaults";
+    if (message) el.controlsStatus.textContent = message;
+  }
+
+  function renderControlBindings() {
+    for (const button of el.controlBindings) {
+      const action = button.dataset.bindAction;
+      button.textContent = `${actionLabels[action]}: ${keyboardBindings[action].map(keyLabel).join(" / ")}`;
+    }
+  }
+
+  function readGamepads() {
+    if (typeof navigator.getGamepads !== "function") return { state: "unsupported", gamepads: [] };
+    try {
+      return { state: "available", gamepads: Array.from(navigator.getGamepads() ?? []) };
+    } catch {
+      return { state: "blocked", gamepads: [] };
+    }
+  }
+
+  function renderControllerPanel() {
+    const snapshot = readGamepads();
+    const devices = compatibleGamepads(snapshot.gamepads);
+    el.controllerSelect.replaceChildren(
+      ...devices.map((device) => {
+        const option = document.createElement("option");
+        option.value = String(device.index);
+        option.textContent = device.id;
+        return option;
+      }),
+    );
+    el.controllerSelect.disabled = devices.length < 2;
+    const selected = devices.find((device) => device.index === gamepads.selectedIndex) ?? devices[0];
+    if (selected) {
+      el.controllerSelect.value = String(selected.index);
+      el.controllerStatus.textContent = `${selected.id} is connected and selected.`;
+    } else if (snapshot.state === "unsupported") {
+      el.controllerStatus.textContent = "Controller input is unavailable in this browser. Keyboard controls remain available.";
+    } else if (snapshot.state === "blocked") {
+      el.controllerStatus.textContent = "Controller access is blocked by this browser or page. Keyboard controls remain available.";
+    } else if (snapshot.gamepads.some((gamepad) => gamepad && gamepad.connected !== false)) {
+      el.controllerStatus.textContent = "A controller is connected but does not have a supported standard mapping. Keyboard controls remain available.";
+    } else {
+      el.controllerStatus.textContent = "No standard controller is visible. Focus this page and press a button or move a stick.";
+    }
+  }
+
+  function closeControls() {
+    capturingAction = null;
+    cancelReset();
+    el.controlsPanel.hidden = true;
+    el.controlsButton.setAttribute("aria-expanded", "false");
+    for (const button of el.controlBindings) button.removeAttribute("aria-pressed");
+  }
+
+  function setKeyboardBindings(bindings) {
+    keyboardBindings = sanitizeBindings(bindings);
+    keys.setBindings(keyboardBindings);
+    saveBindings(storage, keyboardBindings);
+    renderControlBindings();
+  }
+
+  renderControlBindings();
+  el.controlsStatus.textContent = "Select an action to change its key.";
+  el.controlsButton.addEventListener("click", () => {
+    const open = el.controlsPanel.hidden;
+    el.soundPanel.hidden = true;
+    el.soundButton.setAttribute("aria-expanded", "false");
+    if (open) {
+      el.controlsPanel.hidden = false;
+      el.controlsButton.setAttribute("aria-expanded", "true");
+      keys.clear();
+      renderControllerPanel();
+    } else {
+      closeControls();
+    }
+  });
+  el.controlsClose.addEventListener("click", closeControls);
+  el.controllerSelect.addEventListener("change", () => {
+    const index = Number(el.controllerSelect.value);
+    gamepads.select(index);
+    keys.clear();
+    renderControllerPanel();
+  });
+  window.addEventListener("gamepadconnected", renderControllerPanel);
+  window.addEventListener("gamepaddisconnected", () => {
+    gamepads.clear();
+    renderControllerPanel();
+  });
+  for (const button of el.controlBindings) {
+    button.addEventListener("click", () => {
+      cancelReset();
+      capturingAction = button.dataset.bindAction;
+      el.controlsStatus.textContent = `Press a key for ${actionLabels[capturingAction].toLowerCase()}.`;
+      for (const item of el.controlBindings) item.setAttribute("aria-pressed", String(item === button));
+      button.focus();
+    });
+  }
+  el.controlsReset.addEventListener("click", () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      el.controlsReset.textContent = "Confirm reset";
+      el.controlsStatus.textContent = "Select Confirm reset within four seconds to restore defaults.";
+      resetTimer = setTimeout(() => cancelReset("Reset cancelled."), 4000);
+      return;
+    }
+    cancelReset();
+    setKeyboardBindings(DEFAULT_BINDINGS);
+    el.controlsStatus.textContent = "Default keyboard controls restored.";
+  });
+
   // every button of the menu and lobby clicks (the test button plays its own sound)
   document.addEventListener("click", (e) => {
     const button = e.target instanceof Element ? e.target.closest("button") : null;
@@ -1028,10 +1183,31 @@ function start() {
   });
 
   window.addEventListener("keydown", (e) => {
+    if (capturingAction) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) return;
+      const result = assignBinding(keyboardBindings, capturingAction, e.code);
+      if (result.ok) {
+        setKeyboardBindings(result.bindings);
+        el.controlsStatus.textContent = `${actionLabels[capturingAction]} updated.`;
+      } else {
+        el.controlsStatus.textContent = result.reason === "conflict"
+          ? "That key is already assigned to another action."
+          : "That key is reserved and cannot be assigned.";
+      }
+      capturingAction = null;
+      for (const button of el.controlBindings) button.setAttribute("aria-pressed", "false");
+      return;
+    }
+    if (!el.controlsPanel.hidden) {
+      e.preventDefault();
+      return;
+    }
     if (state.stage === "playing") {
       // the sliders of the sound panel keep their arrow keys
       if (e.target instanceof HTMLInputElement) return;
-      if (e.code in DIRECTIONS || BOMB_KEYS.has(e.code)) e.preventDefault();
+      if (keys.isBound(e.code)) e.preventDefault();
       keys.press(e.code);
     } else if (state.stage === "lobby" && e.key === "Enter") {
       // Enter in a text field or a list belongs to that control
@@ -1040,11 +1216,36 @@ function start() {
     }
   });
   window.addEventListener("keyup", (e) => keys.release(e.code));
-  window.addEventListener("blur", () => keys.clear());
-  document.addEventListener("visibilitychange", () => keys.clear());
+  window.addEventListener("blur", () => {
+    pageFocused = false;
+    keys.clear();
+    gamepads.clear();
+  });
+  window.addEventListener("focus", () => {
+    pageFocused = true;
+    keys.clear();
+    gamepads.clear();
+  });
+  document.addEventListener("visibilitychange", () => {
+    keys.clear();
+    gamepads.clear();
+  });
 
   setInterval(() => {
-    if (state.stage === "playing") send(inputMessage(state, keys.take()));
+    if (state.stage !== "playing") return;
+    if (!pageFocused || document.hidden || !el.controlsPanel.hidden) {
+      keys.clear();
+      gamepads.clear();
+      send(inputMessage(state, keys.take()));
+      return;
+    }
+    const controllerInput = gamepads.sample(readGamepads().gamepads);
+    const keyboardInput = keys.take();
+    send(inputMessage(state, {
+      mv: controllerInput.mv ?? keyboardInput.mv,
+      bomb: controllerInput.bomb || keyboardInput.bomb,
+      punch: controllerInput.punch || keyboardInput.punch,
+    }));
   }, TICK_MS);
   setInterval(() => {
     if (document.hidden) send({ type: "Ping", nonce: Date.now() });

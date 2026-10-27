@@ -12,6 +12,7 @@
       <h1>Eksplode.re</h1>
       <p id="notice" role="status" aria-live="polite">Loading...</p>
       <button id="sound-button" class="sound-button" type="button" aria-label="Sound settings" aria-controls="sound-panel" aria-expanded="false">&#9835;</button>
+      <button id="controls-button" class="controls-button" type="button" aria-label="Controls settings" aria-controls="controls-panel" aria-expanded="false" title="Controls">&#9000;</button>
     </header>
 
     <section id="sound-panel" class="dialog sound" aria-label="Sound settings" hidden>
@@ -24,6 +25,30 @@
       <div class="buttons">
         <button id="test-sound" type="button">Test sound</button>
         <button id="close-sound" type="button">Close</button>
+      </div>
+    </section>
+
+    <section id="controls-panel" class="dialog controls-panel" aria-label="Controls settings" hidden>
+      <h2>Controls</h2>
+      <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
+      <div class="control-bindings" role="group" aria-label="Keyboard bindings">
+        <div class="control-binding"><span>Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
+        <div class="control-binding"><span>Move down</span><button type="button" data-bind-action="down">Down: ArrowDown / S</button></div>
+        <div class="control-binding"><span>Move left</span><button type="button" data-bind-action="left">Left: ArrowLeft / A</button></div>
+        <div class="control-binding"><span>Move right</span><button type="button" data-bind-action="right">Right: ArrowRight / D</button></div>
+        <div class="control-binding"><span>Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
+        <div class="control-binding"><span>Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
+      </div>
+      <div class="controller-settings">
+        <h3>Game controller</h3>
+        <label for="controller-select">Connected controller</label>
+        <select id="controller-select" aria-label="Select a connected controller" disabled></select>
+        <p id="controller-mapping" class="hint">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
+        <p id="controller-status" class="hint" role="status" aria-live="polite">Focus this page and press a controller button or move a stick to connect.</p>
+      </div>
+      <div class="buttons">
+        <button id="controls-reset" type="button">Restore defaults</button>
+        <button id="controls-close" type="button">Close</button>
       </div>
     </section>
 

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { KeyTracker } from "../assets/app.js";
+import { DEFAULT_BINDINGS } from "../assets/controls.js";
 
 test("us1_as4_arrow_keys_and_space", () => {
   const k = new KeyTracker();
@@ -75,6 +76,17 @@ test("key repeat of a held direction keeps it", () => {
   assert.equal(k.take().mv, "Down");
   k.release("ArrowDown");
   assert.equal(k.take().mv, null);
+});
+
+test("custom bindings replace the default direction while preserving one-shot actions", () => {
+  const bindings = { ...DEFAULT_BINDINGS, up: ["KeyI"], bomb: ["KeyB"] };
+  const tracker = new KeyTracker(bindings);
+  tracker.press("KeyI");
+  tracker.press("KeyB");
+  assert.deepEqual(tracker.take(), { mv: "Up", bomb: true, punch: false });
+  assert.deepEqual(tracker.take(), { mv: "Up", bomb: false, punch: false });
+  tracker.release("KeyI");
+  assert.equal(tracker.take().mv, null);
 });
 
 test("f3_us2_as9_punch_keys_fire_once_and_clear_on_release_and_blur", () => {

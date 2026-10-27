@@ -14,7 +14,7 @@ const JS: &str = "text/javascript; charset=utf-8";
 const CSS: &str = "text/css; charset=utf-8";
 const WASM: &str = "application/wasm";
 
-/// The eight fixed routes; anything else is `None`.
+/// The fixed routes; anything else is `None`.
 pub fn lookup(path: &str) -> Option<Asset> {
     let (content_type, body): (&'static str, &'static [u8]) = match path {
         "/" | "/index.html" => (HTML, include_bytes!("../assets/index.html")),
@@ -22,6 +22,7 @@ pub fn lookup(path: &str) -> Option<Asset> {
         "/look.js" => (JS, include_bytes!("../assets/look.js")),
         "/room.js" => (JS, include_bytes!("../assets/room.js")),
         "/audio.js" => (JS, include_bytes!("../assets/audio.js")),
+        "/controls.js" => (JS, include_bytes!("../assets/controls.js")),
         "/style.css" => (CSS, include_bytes!("../assets/style.css")),
         "/eksplode_re_render.wasm" => (WASM, include_bytes!("../assets/eksplode_re_render.wasm")),
         _ => return None,

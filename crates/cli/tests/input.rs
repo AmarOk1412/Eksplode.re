@@ -1,4 +1,7 @@
-use eksplode_re_cli::input::{map_key, InputState, KeyAction, PlayerAction};
+use eksplode_re_cli::input::{
+    default_key_bindings, map_key, map_key_for_player, map_key_with_bindings, InputState,
+    KeyAction, KeyBindings, PlayerAction,
+};
 use eksplode_re_core::Dir;
 use ratatui::crossterm::event::KeyCode;
 
@@ -128,4 +131,50 @@ fn punch_presses_fire_once() {
     s.press(1, PlayerAction::Punch);
     s.clear();
     assert!(!s.take()[1].punch);
+}
+
+#[test]
+fn configured_bindings_map_all_actions_to_the_selected_slot() {
+    let mut bindings = default_key_bindings();
+    bindings[0] = KeyBindings {
+        up: KeyCode::Char('1'),
+        down: KeyCode::Char('2'),
+        left: KeyCode::Char('3'),
+        right: KeyCode::Char('4'),
+        bomb: KeyCode::Char('5'),
+        punch: KeyCode::Char('6'),
+    };
+    let keys = [
+        (KeyCode::Char('1'), PlayerAction::Move(Dir::Up)),
+        (KeyCode::Char('2'), PlayerAction::Move(Dir::Down)),
+        (KeyCode::Char('3'), PlayerAction::Move(Dir::Left)),
+        (KeyCode::Char('4'), PlayerAction::Move(Dir::Right)),
+        (KeyCode::Char('5'), PlayerAction::Bomb),
+        (KeyCode::Char('6'), PlayerAction::Punch),
+    ];
+    for (key, action) in keys {
+        assert_eq!(map_key_with_bindings(key, &bindings), player(0, action));
+    }
+    assert_eq!(bindings[1], default_key_bindings()[1]);
+}
+
+#[test]
+fn a_joining_players_binding_maps_only_to_that_players_slot() {
+    let binding = KeyBindings {
+        up: KeyCode::Char('1'),
+        down: KeyCode::Char('2'),
+        left: KeyCode::Char('3'),
+        right: KeyCode::Char('4'),
+        bomb: KeyCode::Char('5'),
+        punch: KeyCode::Char('6'),
+    };
+    assert_eq!(
+        map_key_for_player(KeyCode::Char('2'), binding, 2),
+        player(2, PlayerAction::Move(Dir::Down))
+    );
+    assert_eq!(map_key_for_player(KeyCode::Char('w'), binding, 2), None);
+    assert_eq!(
+        map_key_for_player(KeyCode::Char('q'), binding, 2),
+        Some(KeyAction::Quit)
+    );
 }

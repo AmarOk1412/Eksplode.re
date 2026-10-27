@@ -17,7 +17,9 @@ use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode};
 use ratatui::DefaultTerminal;
 
 use crate::args::{HostOptions, JoinOptions, LocalOptions};
-use crate::input::{map_key, normalize, InputState, KeyAction};
+use crate::input::{
+    default_key_bindings, map_key_with_bindings, normalize, InputState, KeyAction, KeyBindings,
+};
 use crate::lobby::{self, LobbyScreen};
 use crate::online::{self, Online};
 use crate::setup::{self, SetupScreen};
@@ -85,6 +87,7 @@ pub struct Session {
     config: Config,
     seed: u64,
     controllers: [Controller; MAX_PLAYERS],
+    key_bindings: [KeyBindings; MAX_PLAYERS],
     active: [bool; MAX_PLAYERS],
     bots: [Option<DefaultBot>; MAX_PLAYERS],
     pub state: GameState,
@@ -99,11 +102,19 @@ impl Session {
         let mut lobby = Lobby::from_counts(opts.players, opts.bots)
             .map_err(|e| CoreError::InvalidSlots(e.to_string()))?;
         lobby.settings = opts.room.clone().sanitize();
-        Self::from_lobby(&lobby, seed)
+        Self::from_lobby_with_bindings(&lobby, seed, opts.key_bindings)
     }
 
     /// Starts a round with the slots chosen in `lobby`.
     pub fn from_lobby(lobby: &Lobby, seed: u64) -> Result<Session, CoreError> {
+        Self::from_lobby_with_bindings(lobby, seed, default_key_bindings())
+    }
+
+    fn from_lobby_with_bindings(
+        lobby: &Lobby,
+        seed: u64,
+        key_bindings: [KeyBindings; MAX_PLAYERS],
+    ) -> Result<Session, CoreError> {
         let config = lobby.settings.to_config(&Config::default());
         let state = GameState::new(config.clone(), seed, lobby.active())?;
         let controllers = [0, 1, 2, 3].map(|i| lobby.slots[i].controller);
@@ -114,6 +125,7 @@ impl Session {
             config,
             seed,
             controllers,
+            key_bindings,
             state,
             paused: false,
             quit: false,
@@ -122,7 +134,7 @@ impl Session {
 
     /// Reacts to a key press.
     pub fn handle_key(&mut self, code: KeyCode) {
-        let Some(action) = map_key(code) else {
+        let Some(action) = map_key_with_bindings(code, &self.key_bindings) else {
             return;
         };
         match action {
@@ -213,7 +225,10 @@ pub fn run(opts: &LocalOptions, seed: u64) -> Result<(), AppError> {
             None => return Ok(()),
         }
     }
-    game_loop(&mut terminal, Session::from_lobby(&lobby, seed)?)
+    game_loop(
+        &mut terminal,
+        Session::from_lobby_with_bindings(&lobby, seed, opts.key_bindings)?,
+    )
 }
 
 /// Returns the chosen lobby, or `None` when the user quit.
@@ -391,7 +406,7 @@ fn setup_room(
 pub fn run_join(opts: &JoinOptions) -> Result<(), AppError> {
     let client =
         Client::connect(&opts.addr, &opts.name).map_err(|e| connect_failure(&opts.addr, e))?;
-    online_loop(Online::new(client))
+    online_loop(Online::with_key_bindings(client, opts.key_bindings))
 }
 
 fn online_loop(mut online: Online) -> Result<(), AppError> {

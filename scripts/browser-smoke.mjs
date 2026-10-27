@@ -93,9 +93,40 @@ async function main() {
       await sleep(type === "keyDown" ? 250 : 30);
     }
   };
+  const setFakeGamepad = async (pressedButtons = [], axes = [0, 0], mapping = "standard", count = 1) => {
+    const pads = Array.from({ length: count }, (_, index) => ({
+      index,
+      id: `Smoke Xbox controller ${index + 1}`,
+      mapping,
+      connected: true,
+      buttons: Array.from({ length: 16 }, (__, button) => ({ pressed: pressedButtons.includes(button), value: 0 })),
+      axes,
+    }));
+    await evaluate(`window.setSmokeGamepads(${JSON.stringify(pads)}); 1`);
+  };
 
   await call("Runtime.enable");
   await call("Page.enable");
+  await call("Page.addScriptToEvaluateOnNewDocument", {
+    source: `(() => {
+      let gamepads = [];
+      Object.defineProperty(Navigator.prototype, "getGamepads", { configurable: true, value: () => gamepads });
+      window.__smokeInputs = [];
+      const send = WebSocket.prototype.send;
+      WebSocket.prototype.send = function (data) {
+        try {
+          const message = JSON.parse(data);
+          if (message.type === "Input") window.__smokeInputs.push(message);
+        } catch {}
+        return send.call(this, data);
+      };
+      window.setSmokeGamepads = (next) => {
+        const wasConnected = gamepads.length > 0;
+        gamepads = next;
+        window.dispatchEvent(new Event(next.length ? "gamepadconnected" : wasConnected ? "gamepaddisconnected" : "gamepadconnected"));
+      };
+    })();`,
+  });
   await call("Page.navigate", { url });
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
 
@@ -132,6 +163,42 @@ async function main() {
   await shot("1a-sound.png");
   console.log("audio settings:", await evaluate("localStorage.getItem('eksplode.re.audio.v1')"));
   await evaluate("document.getElementById('mute').click(); document.getElementById('close-sound').click(); 1");
+
+  // keyboard controls (feature 005): edit a binding, reload, reject a conflict, and reset
+  await setFakeGamepad([], [0, 0], "");
+  await evaluate("document.getElementById('controls-button').click(); 1");
+  await waitFor("document.getElementById('controls-panel') && !document.getElementById('controls-panel').hidden", "the controls panel");
+  await waitFor("document.getElementById('controller-status').textContent.includes('does not have a supported')", "the unsupported controller fallback");
+  await setFakeGamepad([], [0, 0], "standard", 2);
+  await waitFor("document.getElementById('controller-select').options.length === 2", "multiple standard controllers");
+  await evaluate(`(() => {
+    const select = document.getElementById('controller-select');
+    select.value = '1';
+    select.dispatchEvent(new Event('change'));
+    return 1;
+  })()`);
+  await waitFor("document.getElementById('controller-status').textContent.includes('controller 2')", "the selected second controller");
+  await setFakeGamepad();
+  await waitFor("document.getElementById('controller-select').options.length === 1 && document.getElementById('controller-status').textContent.includes('connected')", "the detected standard controller");
+  console.log("controller panel:", await evaluate("document.getElementById('controller-status').textContent"));
+  await evaluate(`document.querySelector('[data-bind-action="up"]').click(); 1`);
+  await key("KeyI", "i", 73);
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('KeyI')", "the saved movement binding");
+  await call("Page.reload");
+  await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page after reloading controls");
+  await setFakeGamepad();
+  await evaluate("document.getElementById('controls-button').click(); 1");
+  await waitFor("!document.getElementById('controls-panel').hidden && document.querySelector('[data-bind-action=up]').textContent.includes('I')", "the restored movement binding");
+  await evaluate(`document.querySelector('[data-bind-action="down"]').click(); 1`);
+  await key("KeyI", "i", 73);
+  await waitFor("document.getElementById('controls-status').textContent.toLowerCase().includes('already assigned')", "the duplicate-key message");
+  await evaluate("document.getElementById('controls-reset').click(); 1");
+  await waitFor("document.getElementById('controls-reset').textContent === 'Confirm reset'", "the reset confirmation step");
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('KeyI')", "the unchanged binding before reset confirmation");
+  await evaluate("document.getElementById('controls-reset').click(); 1");
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('ArrowUp')", "the reset keyboard defaults");
+  await shot("1c-controls.png");
+  await evaluate("document.getElementById('controls-button').click(); 1");
 
   // pick a look in the character editor (feature 003) and save a screenshot of it
   await evaluate(`(() => {
@@ -225,6 +292,20 @@ async function main() {
 
   await evaluate("document.getElementById('start').click(); 1");
   await waitFor("!document.getElementById('game-panel').hidden", "the game");
+  await evaluate("window.dispatchEvent(new Event('blur')); 1");
+  await setFakeGamepad();
+  await sleep(100);
+  const bombInputsWhileBlurred = await evaluate("window.__smokeInputs.filter((input) => input.bomb).length");
+  await setFakeGamepad([0]);
+  await sleep(150);
+  await waitFor(`window.__smokeInputs.filter((input) => input.bomb).length === ${bombInputsWhileBlurred}`, "no controller action while the page is blurred");
+  await setFakeGamepad();
+  await evaluate("window.dispatchEvent(new Event('focus')); 1");
+  await sleep(100);
+  await setFakeGamepad([0]);
+  await waitFor("document.getElementById('hud').innerText.includes('You: bombs 1/1')", "the Xbox A bomb action");
+  console.log("controller A action:", await evaluate("document.getElementById('hud').innerText.split('\\n').find((line) => line.startsWith('You:'))"));
+  await setFakeGamepad();
   await sleep(1500);
   await shot("3-game.png");
 

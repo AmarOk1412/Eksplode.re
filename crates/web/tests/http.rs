@@ -18,6 +18,7 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/look.js", "text/javascript; charset=utf-8"),
         ("/room.js", "text/javascript; charset=utf-8"),
         ("/audio.js", "text/javascript; charset=utf-8"),
+        ("/controls.js", "text/javascript; charset=utf-8"),
         ("/style.css", "text/css; charset=utf-8"),
         ("/eksplode_re_render.wasm", "application/wasm"),
     ] {
@@ -48,10 +49,20 @@ fn the_page_mentions_what_it_loads() {
     let s = server(|_| {});
     let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
     assert!(html.contains("/app.js") && html.contains("/style.css"));
+    assert!(html.contains("controls-button") && html.contains("controls-panel"));
     assert!(
         !html.contains("<script>"),
         "no inline scripts because of the CSP"
     );
+}
+
+#[test]
+fn the_controls_panel_describes_controller_selection() {
+    let s = server(|_| {});
+    let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
+    assert!(html.contains("controller-select"));
+    assert!(html.contains("controller-status"));
+    assert!(html.contains("controller-mapping"));
 }
 
 #[test]

@@ -21,15 +21,63 @@ pub enum KeyAction {
     Pause,
 }
 
-/// Punch key of each slot (the arrow-key player is slot 0).
-const PUNCH_KEYS: [char; 4] = ['z', 'c', 'u', 'n'];
+/// The six keyboard actions assigned to one terminal player.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyBindings {
+    pub up: KeyCode,
+    pub down: KeyCode,
+    pub left: KeyCode,
+    pub right: KeyCode,
+    pub bomb: KeyCode,
+    pub punch: KeyCode,
+}
 
-/// Per slot keys: up, down, left, right, bomb.
-const KEYS: [[char; 5]; 3] = [
-    ['w', 's', 'a', 'd', 'e'],
-    ['i', 'k', 'j', 'l', 'o'],
-    ['t', 'g', 'f', 'h', 'y'],
-];
+impl KeyBindings {
+    /// Existing default keys for a terminal player slot (0-3).
+    pub fn default_for_slot(slot: usize) -> Self {
+        match slot {
+            1 => Self::letters(['w', 's', 'a', 'd', 'e', 'c']),
+            2 => Self::letters(['i', 'k', 'j', 'l', 'o', 'u']),
+            3 => Self::letters(['t', 'g', 'f', 'h', 'y', 'n']),
+            _ => Self {
+                up: KeyCode::Up,
+                down: KeyCode::Down,
+                left: KeyCode::Left,
+                right: KeyCode::Right,
+                bomb: KeyCode::Char(' '),
+                punch: KeyCode::Char('z'),
+            },
+        }
+    }
+
+    fn letters(keys: [char; 6]) -> Self {
+        Self {
+            up: KeyCode::Char(keys[0]),
+            down: KeyCode::Char(keys[1]),
+            left: KeyCode::Char(keys[2]),
+            right: KeyCode::Char(keys[3]),
+            bomb: KeyCode::Char(keys[4]),
+            punch: KeyCode::Char(keys[5]),
+        }
+    }
+
+    pub(crate) fn keys(self) -> [KeyCode; 6] {
+        [
+            self.up, self.down, self.left, self.right, self.bomb, self.punch,
+        ]
+    }
+}
+
+impl Default for KeyBindings {
+    fn default() -> Self {
+        Self::default_for_slot(0)
+    }
+}
+
+/// The existing per-slot mappings, preserved when a slot is not configured.
+pub fn default_key_bindings() -> [KeyBindings; 4] {
+    std::array::from_fn(KeyBindings::default_for_slot)
+}
 
 /// Turns a raw terminal key event into the key the game should react to.
 ///
@@ -55,40 +103,62 @@ pub fn normalize(ev: KeyEvent) -> Option<KeyCode> {
 
 /// Translates a key code; unknown keys give `None`.
 pub fn map_key(code: KeyCode) -> Option<KeyAction> {
-    let player = |slot, action| Some(KeyAction::Player { slot, action });
-    match code {
-        KeyCode::Up => player(0, PlayerAction::Move(Dir::Up)),
-        KeyCode::Down => player(0, PlayerAction::Move(Dir::Down)),
-        KeyCode::Left => player(0, PlayerAction::Move(Dir::Left)),
-        KeyCode::Right => player(0, PlayerAction::Move(Dir::Right)),
-        KeyCode::Char(' ') => player(0, PlayerAction::Bomb),
-        KeyCode::Char(c) => {
-            let c = c.to_ascii_lowercase();
-            match c {
-                'q' => return Some(KeyAction::Quit),
-                'r' => return Some(KeyAction::Rematch),
-                'p' => return Some(KeyAction::Pause),
-                _ => {}
-            }
-            if let Some(slot) = PUNCH_KEYS.iter().position(|k| *k == c) {
-                return player(slot, PlayerAction::Punch);
-            }
-            for (i, keys) in KEYS.iter().enumerate() {
-                let Some(k) = keys.iter().position(|x| *x == c) else {
-                    continue;
-                };
-                let action = match k {
-                    0 => PlayerAction::Move(Dir::Up),
-                    1 => PlayerAction::Move(Dir::Down),
-                    2 => PlayerAction::Move(Dir::Left),
-                    3 => PlayerAction::Move(Dir::Right),
-                    _ => PlayerAction::Bomb,
-                };
-                return player(i + 1, action);
-            }
-            None
+    map_key_with_bindings(code, &default_key_bindings())
+}
+
+/// Maps one key using four independently configured local-player bindings.
+pub fn map_key_with_bindings(code: KeyCode, bindings: &[KeyBindings; 4]) -> Option<KeyAction> {
+    if let Some(command) = command_key(code) {
+        return Some(command);
+    }
+    for (slot, binding) in bindings.iter().enumerate() {
+        if let Some(action) = player_action(code, *binding) {
+            return Some(KeyAction::Player { slot, action });
         }
+    }
+    None
+}
+
+/// Maps a key only against one player's controls, preserving terminal command keys.
+pub fn map_key_for_player(code: KeyCode, bindings: KeyBindings, slot: usize) -> Option<KeyAction> {
+    command_key(code)
+        .or_else(|| player_action(code, bindings).map(|action| KeyAction::Player { slot, action }))
+}
+
+fn command_key(code: KeyCode) -> Option<KeyAction> {
+    match code {
+        KeyCode::Char(c) => match c.to_ascii_lowercase() {
+            'q' => Some(KeyAction::Quit),
+            'r' => Some(KeyAction::Rematch),
+            'p' => Some(KeyAction::Pause),
+            _ => None,
+        },
         _ => None,
+    }
+}
+
+fn matches_key(input: KeyCode, binding: KeyCode) -> bool {
+    match (input, binding) {
+        (KeyCode::Char(input), KeyCode::Char(binding)) => input.eq_ignore_ascii_case(&binding),
+        _ => input == binding,
+    }
+}
+
+fn player_action(code: KeyCode, binding: KeyBindings) -> Option<PlayerAction> {
+    if matches_key(code, binding.up) {
+        Some(PlayerAction::Move(Dir::Up))
+    } else if matches_key(code, binding.down) {
+        Some(PlayerAction::Move(Dir::Down))
+    } else if matches_key(code, binding.left) {
+        Some(PlayerAction::Move(Dir::Left))
+    } else if matches_key(code, binding.right) {
+        Some(PlayerAction::Move(Dir::Right))
+    } else if matches_key(code, binding.bomb) {
+        Some(PlayerAction::Bomb)
+    } else if matches_key(code, binding.punch) {
+        Some(PlayerAction::Punch)
+    } else {
+        None
     }
 }
 

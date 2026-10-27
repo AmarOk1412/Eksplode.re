@@ -79,7 +79,7 @@ change:
 web: add http server, origin policy and websocket bridge
 
 long description to explain the feature
-on multiple lines
+on multiple lines 120 chars max
 ```
 
 Parts: `core`, `bots`, `net`, `cli`, `web`, `render`, `build`, `docs`, `test`. Commit small, working

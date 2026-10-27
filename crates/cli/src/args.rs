@@ -3,15 +3,17 @@
 use std::fmt;
 use std::net::IpAddr;
 
+use crate::input::{default_key_bindings, KeyBindings};
 use eksplode_re_core::{BoardSize, Mode, RoomSettings, MINUTES};
 use eksplode_re_net::protocol::{valid_name, DEFAULT_PORT};
+use ratatui::crossterm::event::KeyCode;
 
 pub const USAGE: &str = "\
 Usage:
   eksplode-re-cli [OPTIONS]                          play on this machine
   eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
                      [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
-  eksplode-re-cli join <ADDR[:PORT]> [--name NAME]
+    eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS]
 
 Local options:
   --players <N>   number of local human players, 0-4 (default 1)
@@ -22,6 +24,10 @@ Local options:
   --size <SIZE>   small, medium or large board (default small)
   --time <MIN>    round time in minutes: 2, 3, 5 or 10 (default 3)
   --friendly-fire <on|off>  Team mode: whether explosions hurt teammates (default on)
+    --p1-keys <KEYS>  player 1 keys: up,down,left,right,bomb,punch (default arrows/Space/Z)
+    --p2-keys <KEYS>  player 2 keys (default WASD/E/C)
+    --p3-keys <KEYS>  player 3 keys (default IJKL/O/U)
+    --p4-keys <KEYS>  player 4 keys (default TFGH/Y/N)
   -h, --help      show this help
   -V, --version   show the version
 
@@ -40,7 +46,7 @@ Network play: the host listens on port 7878 by default; up to 4 participants (hu
 Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
 Lobby keys: host b add bot, x remove bot, Enter start; clients r ready. The room owner changes
 the settings with m mode, s size, t time, f friendly fire. Anyone: q quit.
-Keys: P1 arrows+Space, P2 WASD+E, P3 IJKL+O, P4 TFGH+Y; q quit, p pause, r rematch.";
+KEYS is six comma-separated bindings in up,down,left,right,bomb,punch order; use single characters or Up,Down,Left,Right,Space. Joining clients use --keys for their own controls. Reserved keys: q quit, p pause, r rematch.";
 
 /// Options of a local match.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -52,6 +58,8 @@ pub struct LocalOptions {
     pub lobby: bool,
     /// Mode, board size, time and friendly fire of the match (the name is not used).
     pub room: RoomSettings,
+    /// Per-slot gameplay keys for this run.
+    pub key_bindings: [KeyBindings; 4],
 }
 
 /// Options of `host`.
@@ -81,6 +89,8 @@ pub struct JoinOptions {
     /// `host:port`; the default port is added when missing.
     pub addr: String,
     pub name: String,
+    /// Gameplay keys for this client during this run.
+    pub key_bindings: KeyBindings,
 }
 
 /// What the user asked the program to do.
@@ -176,6 +186,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
     let mut seed = None;
     let mut lobby = false;
     let mut room = RoomSettings::default();
+    let mut key_bindings = default_key_bindings();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
@@ -184,9 +195,19 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
             "--bots" => bots = Some(count(&arg, it.next(), 4)?),
             "--lobby" => lobby = true,
             "--seed" => seed = Some(number(&arg, it.next())?),
+            _ if key_slot(&arg).is_some() => {
+                let slot = key_slot(&arg).unwrap_or_default();
+                key_bindings[slot] = parse_key_bindings(&arg, it.next())?;
+            }
             _ if room_option(&arg, &mut it, &mut room)? => {}
             _ => return Err(UsageError::UnknownOption(arg)),
         }
+    }
+    if !key_bindings_are_unique(&key_bindings) {
+        return Err(invalid(
+            "--pN-keys",
+            "duplicate key across player slots".to_string(),
+        ));
     }
     let bots = bots.unwrap_or(4 - players);
     let total = u16::from(players) + u16::from(bots);
@@ -207,6 +228,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
         seed,
         lobby,
         room,
+        key_bindings,
     }))
 }
 
@@ -249,10 +271,12 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
 fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageError> {
     let mut addr = None;
     let mut player = "Player".to_string();
+    let mut key_bindings = KeyBindings::default_for_slot(0);
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
             "--name" => player = name(&arg, it.next())?,
+            "--keys" => key_bindings = parse_key_bindings(&arg, it.next())?,
             a if a.starts_with('-') => return Err(UsageError::UnknownOption(arg)),
             _ if addr.is_none() => addr = Some(arg),
             _ => return Err(UsageError::UnknownOption(arg)),
@@ -264,7 +288,66 @@ fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         None if addr.contains(':') => addr,
         None => format!("{addr}:{DEFAULT_PORT}"),
     };
-    Ok(Command::Join(JoinOptions { addr, name: player }))
+    Ok(Command::Join(JoinOptions {
+        addr,
+        name: player,
+        key_bindings,
+    }))
+}
+
+fn key_slot(option: &str) -> Option<usize> {
+    match option {
+        "--p1-keys" => Some(0),
+        "--p2-keys" => Some(1),
+        "--p3-keys" => Some(2),
+        "--p4-keys" => Some(3),
+        _ => None,
+    }
+}
+
+fn parse_key_bindings(option: &str, provided: Option<String>) -> Result<KeyBindings, UsageError> {
+    let value = value(option, provided)?;
+    let parts: Vec<_> = value.split(',').map(str::trim).collect();
+    if parts.len() != 6 {
+        return Err(invalid(option, value));
+    }
+    let mut parsed = Vec::with_capacity(6);
+    for part in parts {
+        let code = match part.to_ascii_lowercase().as_str() {
+            "up" => KeyCode::Up,
+            "down" => KeyCode::Down,
+            "left" => KeyCode::Left,
+            "right" => KeyCode::Right,
+            "space" => KeyCode::Char(' '),
+            _ if part.len() == 1 && part.as_bytes()[0].is_ascii_graphic() => {
+                KeyCode::Char(part.as_bytes()[0].to_ascii_lowercase() as char)
+            }
+            _ => return Err(invalid(option, value)),
+        };
+        if matches!(code, KeyCode::Char('q' | 'p' | 'r')) || parsed.contains(&code) {
+            return Err(invalid(option, value));
+        }
+        parsed.push(code);
+    }
+    Ok(KeyBindings {
+        up: parsed[0],
+        down: parsed[1],
+        left: parsed[2],
+        right: parsed[3],
+        bomb: parsed[4],
+        punch: parsed[5],
+    })
+}
+
+fn key_bindings_are_unique(bindings: &[KeyBindings; 4]) -> bool {
+    let mut seen = Vec::with_capacity(24);
+    for code in bindings.iter().flat_map(|binding| binding.keys()) {
+        if seen.contains(&code) {
+            return false;
+        }
+        seen.push(code);
+    }
+    true
 }
 
 /// For a web address (`http://host:8080/page`) the host alone: its port is the web port, not

@@ -221,6 +221,75 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   padding: 0;
   font-size: 1.3rem;
 }
+.controls-button {
+  position: fixed;
+  top: 12px;
+  right: 64px;
+  z-index: 2;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.15rem;
+}
+.controls-panel {
+  position: fixed;
+  top: 64px;
+  right: 12px;
+  z-index: 3;
+  display: grid;
+  gap: 10px;
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100vh - 76px);
+  overflow: auto;
+  padding: 18px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.24);
+}
+.control-bindings { display: grid; gap: 6px; }
+.control-binding {
+  display: grid;
+  grid-template-columns: minmax(88px, 1fr) minmax(0, 1.5fr);
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #d5d3d8;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.control-binding button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 5px 8px;
+  font-size: 0.88rem;
+}
+.controls-panel .hint { min-height: 1.2em; margin: 0; }
+.controls-panel .buttons { margin-top: 2px; }
+.controller-settings {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 2px solid #d5d3d8;
+}
+.controller-settings h3 {
+  margin: 0;
+  font-family: var(--title);
+  font-size: 1.05rem;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+.controller-settings select {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 3px solid var(--ink);
+  border-radius: 0;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.controller-settings select:disabled { opacity: 0.6; }
+.controller-settings #controller-mapping { color: var(--ink); }
 .sound { display: grid; gap: 8px; width: min(360px, 100%); justify-items: stretch; }
 .sound input[type="range"] { width: 100%; }
 .sound .check { display: flex; align-items: center; justify-content: flex-start; justify-self: start; gap: 8px; color: var(--ink); }
@@ -270,3 +339,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 #hud li.team-B .chip { outline: 3px solid #f28c1a; }
 
 #hud li.role-chaser { font-weight: bold; }
+
+@media (max-width: 480px) {
+  header { padding-top: 48px; }
+  .controls-panel { left: 12px; right: 12px; width: auto; padding: 16px; }
+  .control-binding { grid-template-columns: minmax(76px, 0.8fr) minmax(0, 1.2fr); }
+  .controls-panel .buttons button { font-size: 0.95rem; }
+}

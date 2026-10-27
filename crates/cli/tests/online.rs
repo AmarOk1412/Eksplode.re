@@ -2,6 +2,7 @@
 
 use std::time::{Duration, Instant};
 
+use eksplode_re_cli::input::KeyBindings;
 use eksplode_re_cli::online::{render, Online, Stage};
 use eksplode_re_core::{Config, Controller};
 use eksplode_re_net::{Client, Host, HostConfig};
@@ -154,6 +155,52 @@ fn key_presses_move_the_players_character() {
             .is_some_and(|ob| ob.players[0].pos != start)
     });
     assert!(moved, "the character never moved");
+}
+
+#[test]
+fn a_joining_clients_custom_keys_drive_only_its_player() {
+    let host = host_with(open_game(10_000));
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    let bindings = KeyBindings {
+        up: KeyCode::Char('1'),
+        down: KeyCode::Char('2'),
+        left: KeyCode::Char('3'),
+        right: KeyCode::Char('4'),
+        bomb: KeyCode::Char('5'),
+        punch: KeyCode::Char('6'),
+    };
+    let mut a = Online::with_key_bindings(
+        Client::connect(&h.host_addr().unwrap().to_string(), "Ann").unwrap(),
+        bindings,
+    );
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    h.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut h, |o| o.stage == Stage::Playing));
+    assert!(pump_until(&mut a, |o| o.stage == Stage::Playing));
+
+    let start = a.observation.as_ref().unwrap().players[1].pos;
+    a.handle_key(KeyCode::Down);
+    a.send_input();
+    std::thread::sleep(Duration::from_millis(40));
+    a.pump();
+    assert_eq!(a.observation.as_ref().unwrap().players[1].pos, start);
+
+    let moved = pump_until(&mut a, |o| {
+        o.handle_key(KeyCode::Char('2'));
+        o.send_input();
+        o.observation
+            .as_ref()
+            .is_some_and(|ob| ob.players[1].pos != start)
+    });
+    assert!(
+        moved,
+        "the joining client's configured key never moved its player"
+    );
+    assert_eq!(
+        a.observation.as_ref().unwrap().players[0].pos,
+        h.observation.as_ref().unwrap().players[0].pos
+    );
 }
 
 #[test]
@@ -390,6 +437,7 @@ fn us3_as3_a_refused_connection_is_explained_in_one_line() {
     let err = app::run_join(&JoinOptions {
         addr: format!("127.0.0.1:{port}"),
         name: "Ann".into(),
+        key_bindings: eksplode_re_cli::input::KeyBindings::default_for_slot(0),
     })
     .expect_err("nobody listens there");
     let text = one_line(&err);
