@@ -19,6 +19,7 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/room.js", "text/javascript; charset=utf-8"),
         ("/audio.js", "text/javascript; charset=utf-8"),
         ("/controls.js", "text/javascript; charset=utf-8"),
+        ("/nav.js", "text/javascript; charset=utf-8"),
         ("/style.css", "text/css; charset=utf-8"),
         ("/eksplode_re_render.wasm", "application/wasm"),
     ] {
@@ -50,6 +51,7 @@ fn the_page_mentions_what_it_loads() {
     let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
     assert!(html.contains("/app.js") && html.contains("/style.css"));
     assert!(html.contains("controls-button") && html.contains("controls-panel"));
+    assert!(html.contains("id=\"view\"") && html.contains("tabindex=\"0\""));
     assert!(
         !html.contains("<script>"),
         "no inline scripts because of the CSP"
@@ -63,6 +65,53 @@ fn the_controls_panel_describes_controller_selection() {
     assert!(html.contains("controller-select"));
     assert!(html.contains("controller-status"));
     assert!(html.contains("controller-mapping"));
+}
+
+#[test]
+fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
+    let s = server(|_| {});
+    let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
+    for id in [
+        "menu-hub",
+        "hub-sound",
+        "hub-controls",
+        "hub-dev",
+        "hub-resume",
+    ] {
+        assert!(html.contains(id), "missing {id}");
+    }
+    for id in ["sound-panel", "controls-panel"] {
+        let start = html.find(&format!("id=\"{id}\"")).unwrap();
+        let panel = &html[start..html[start..].find('>').unwrap() + start];
+        assert!(
+            panel.contains("role=\"dialog\""),
+            "{id} needs dialog semantics"
+        );
+        assert!(
+            panel.contains("aria-label="),
+            "{id} needs an accessible label"
+        );
+    }
+}
+
+#[test]
+fn the_on_screen_keyboard_is_a_focusable_dialog_and_lobby_controls_exist() {
+    let s = server(|_| {});
+    let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
+    for id in [
+        "osk",
+        "osk-keys",
+        "room-create",
+        "name",
+        "join",
+        "start",
+        "add-bot",
+        "change-look",
+    ] {
+        assert!(html.contains(id), "missing {id}");
+    }
+    assert!(html.contains("role=\"dialog\""));
+    assert!(html.contains("aria-label=\"On-screen keyboard\""));
 }
 
 #[test]
@@ -218,6 +267,7 @@ fn sc005_the_whole_page_stays_small() {
         "/look.js",
         "/room.js",
         "/audio.js",
+        "/nav.js",
         "/style.css",
         "/eksplode_re_render.wasm",
     ]

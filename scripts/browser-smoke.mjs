@@ -93,7 +93,37 @@ async function main() {
       await sleep(type === "keyDown" ? 250 : 30);
     }
   };
+  const shiftTab = async () => {
+    await call("Input.dispatchKeyEvent", { type: "keyDown", code: "ShiftLeft", key: "Shift", windowsVirtualKeyCode: 16 });
+    await call("Input.dispatchKeyEvent", { type: "keyDown", code: "Tab", key: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", code: "Tab", key: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
+    await call("Input.dispatchKeyEvent", { type: "keyUp", code: "ShiftLeft", key: "Shift", windowsVirtualKeyCode: 16 });
+  };
   const setFakeGamepad = async (pressedButtons = [], axes = [0, 0], mapping = "standard", count = 1) => {
+    if (await evaluate("typeof window.setSmokeGamepads !== 'function'")) {
+      await evaluate(`(() => {
+        let gamepads = [];
+        Object.defineProperty(Navigator.prototype, "getGamepads", { configurable: true, value: () => gamepads });
+        window.setSmokeGamepads = (next) => {
+          const wasConnected = gamepads.length > 0;
+          gamepads = next;
+          window.dispatchEvent(new Event(next.length ? "gamepadconnected" : wasConnected ? "gamepaddisconnected" : "gamepadconnected"));
+        };
+        window.__smokeInputs ??= [];
+        if (!window.__smokeSendWrapped) {
+          const send = WebSocket.prototype.send;
+          WebSocket.prototype.send = function (data) {
+            try {
+              const message = JSON.parse(data);
+              if (message.type === "Input") window.__smokeInputs.push(message);
+            } catch {}
+            return send.call(this, data);
+          };
+          window.__smokeSendWrapped = true;
+        }
+        return 1;
+      })()`);
+    }
     const pads = Array.from({ length: count }, (_, index) => ({
       index,
       id: `Smoke Xbox controller ${index + 1}`,
@@ -104,9 +134,13 @@ async function main() {
     }));
     await evaluate(`window.setSmokeGamepads(${JSON.stringify(pads)}); 1`);
   };
+  const pulseGamepad = async (buttons) => {
+    await setFakeGamepad(buttons, [0, 0], "standard", 2);
+    await sleep(120);
+    await setFakeGamepad([], [0, 0], "standard", 2);
+    await sleep(100);
+  };
 
-  await call("Runtime.enable");
-  await call("Page.enable");
   await call("Page.addScriptToEvaluateOnNewDocument", {
     source: `(() => {
       let gamepads = [];
@@ -130,6 +164,105 @@ async function main() {
   await call("Page.navigate", { url });
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
 
+  if (["keyboard", "controller"].includes(process.env.MAIN_FLOW)) {
+    const flow = process.env.MAIN_FLOW;
+    await waitFor("!document.getElementById('room-panel').hidden", "fresh room creation screen");
+    if (flow === "keyboard") {
+      await waitFor("document.activeElement.id === 'room-name'", "initial keyboard focus on room name");
+      await key("KeyR", "r", 82);
+      await key("Tab", "Tab", 9);
+      await key("ArrowRight", "ArrowRight", 39);
+      await waitFor("document.querySelector('#room-modes [aria-checked=true]')?.textContent.toLowerCase() === 'team'", "keyboard selecting Team mode");
+      await key("ArrowLeft", "ArrowLeft", 37);
+      await waitFor("document.querySelector('#room-modes [aria-checked=true]')?.textContent.toLowerCase() === 'normal'", "keyboard returning to Normal mode");
+      for (let i = 0; i < 16 && await evaluate("document.activeElement.id !== 'room-create'"); i += 1) await key("Tab", "Tab", 9);
+      await waitFor("document.activeElement.id === 'room-create'", "keyboard focus on Create room");
+      await key("Enter", "Enter", 13);
+      await waitFor("!document.getElementById('join-panel').hidden", "keyboard opening the join screen");
+      await waitFor("document.activeElement.id === 'name'", "keyboard focus on player name");
+      await key("End", "End", 35);
+      await key("KeyX", "x", 88);
+      await key("Tab", "Tab", 9);
+      await waitFor("document.activeElement.id === 'join'", "keyboard focus on Join");
+      await key("Enter", "Enter", 13);
+      await waitFor("!document.getElementById('lobby-panel').hidden", "keyboard entering the lobby");
+      for (let i = 0; i < 20 && await evaluate("document.activeElement.id !== 'start'"); i += 1) await key("Tab", "Tab", 9);
+      await waitFor("document.activeElement.id === 'start'", "keyboard focus on Start");
+      await key("Enter", "Enter", 13);
+      await waitFor("!document.getElementById('game-panel').hidden", "keyboard starting the match");
+      const inputsBeforeMenu = await evaluate("window.__smokeInputs.length");
+      await key("Escape", "Escape", 27);
+      await waitFor("!document.getElementById('menu-hub').hidden", "keyboard opening the in-match hub");
+      await sleep(120);
+      const unsafeInputs = await evaluate(`window.__smokeInputs.slice(${inputsBeforeMenu}).filter((input) => input.mv || input.bomb || input.punch).length`);
+      if (unsafeInputs) throw new Error("gameplay input escaped while the in-match hub was open");
+      await key("Escape", "Escape", 27);
+      await waitFor("document.getElementById('menu-hub').hidden", "keyboard resuming the match");
+      await waitFor("document.activeElement.id === 'view'", "keyboard focus returning to the arena");
+    } else {
+      await setFakeGamepad([], [0, 0], "standard", 1);
+      await sleep(100);
+      await pulseGamepad([0]);
+      await waitFor("!document.getElementById('osk').hidden", "controller opening room-name entry");
+      await pulseGamepad([0]);
+      await waitFor("document.getElementById('osk-preview').textContent.toLowerCase().includes('q')", "controller entering room text");
+      for (let i = 0; i < 4; i += 1) await pulseGamepad([13]);
+      for (let i = 0; i < 5; i += 1) await pulseGamepad([15]);
+      await waitFor("document.activeElement.id === 'osk-confirm'", "controller focus on room-name Confirm");
+      await pulseGamepad([0]);
+      await waitFor("document.getElementById('osk').hidden", "controller confirming room-name entry");
+      await setFakeGamepad([], [0, 0], "standard", 1);
+      await sleep(100);
+      await pulseGamepad([13]);
+      await waitFor("document.activeElement.getAttribute('role') === 'radio'", "controller focus on room mode");
+      await pulseGamepad([15]);
+      await waitFor("document.querySelector('#room-modes [aria-checked=true]')?.textContent.toLowerCase() === 'team'", "controller selecting Team mode");
+      await pulseGamepad([14]);
+      await waitFor("document.querySelector('#room-modes [aria-checked=true]')?.textContent.toLowerCase() === 'normal'", "controller returning to Normal mode");
+      await pulseGamepad([13]);
+      await waitFor("document.activeElement.id === 'room-size'", "controller focus on board size");
+      await pulseGamepad([15]);
+      await pulseGamepad([13]);
+      await waitFor("document.activeElement.id === 'room-minutes'", "controller focus on round time");
+      for (let i = 0; i < 4 && await evaluate("document.activeElement.id !== 'room-create'"); i += 1) await pulseGamepad([13]);
+      await waitFor("document.activeElement.id === 'room-create'", "controller focus on Create room");
+      await pulseGamepad([0]);
+      await waitFor("!document.getElementById('join-panel').hidden", "controller opening the join screen");
+      await pulseGamepad([0]);
+      await waitFor("!document.getElementById('osk').hidden", "controller opening player-name entry");
+      await pulseGamepad([0]);
+      for (let i = 0; i < 4; i += 1) await pulseGamepad([13]);
+      for (let i = 0; i < 5; i += 1) await pulseGamepad([15]);
+      await pulseGamepad([0]);
+      await waitFor("document.getElementById('osk').hidden", "controller confirming the player name");
+      await setFakeGamepad([], [0, 0], "standard", 1);
+      await sleep(100);
+      await pulseGamepad([13]);
+      await waitFor("document.activeElement.id === 'join'", "controller focus on Join");
+      await pulseGamepad([0]);
+      await waitFor("!document.getElementById('lobby-panel').hidden", "controller entering the lobby");
+      for (let i = 0; i < 12 && await evaluate("document.activeElement.id !== 'start'"); i += 1) {
+        await pulseGamepad([13]);
+      }
+      await waitFor("document.activeElement.id === 'start'", "controller focus on Start");
+      await pulseGamepad([0]);
+      await waitFor("!document.getElementById('game-panel').hidden", "controller starting the match");
+      await setFakeGamepad([], [0, 0], "standard", 1);
+      await sleep(100);
+      const inputsBeforeMenu = await evaluate("window.__smokeInputs.length");
+      await pulseGamepad([9]);
+      await waitFor("!document.getElementById('menu-hub').hidden", "controller opening the in-match hub");
+      await sleep(120);
+      const unsafeInputs = await evaluate(`window.__smokeInputs.slice(${inputsBeforeMenu}).filter((input) => input.mv || input.bomb || input.punch).length`);
+      if (unsafeInputs) throw new Error("gameplay input escaped while the controller hub was open");
+      await pulseGamepad([9]);
+      await waitFor("document.getElementById('menu-hub').hidden", "controller resuming the match");
+      await waitFor("document.activeElement.id === 'view'", "controller focus returning to the arena");
+    }
+    console.log(`${flow} main-screen flow passed`);
+    return;
+  }
+
   // room settings (feature 004): an empty server shows the creation menu first
   await waitFor("!document.getElementById('room-panel').hidden", "the room creation menu");
   await shot("0-room-menu.png");
@@ -149,6 +282,70 @@ async function main() {
   })()`);
   await waitFor("!document.getElementById('join-panel').hidden && document.getElementById('room-panel').hidden", "the join screen after the menu");
   await shot("1-join.png");
+
+  // mouse-free settings: Escape and keyboard focus, then the synthetic controller
+  await key("Escape", "Escape", 27);
+  await waitFor("!document.getElementById('menu-hub').hidden", "the keyboard-opened menu hub");
+  await key("Enter", "Enter", 13);
+  await waitFor("!document.getElementById('sound-panel').hidden", "Sound from the menu hub");
+  const musicBefore = await evaluate("Number(document.getElementById('music-volume').value)");
+  await key("ArrowRight", "ArrowRight", 39);
+  await waitFor(`Number(document.getElementById('music-volume').value) !== ${musicBefore}`, "keyboard sound adjustment");
+  await key("Escape", "Escape", 27);
+  await waitFor("document.activeElement.id === 'hub-sound'", "focus returning to Sound in the hub");
+  await key("ArrowDown", "ArrowDown", 40);
+  await waitFor("document.activeElement.id === 'hub-controls'", "keyboard focus moving through the hub");
+  await key("Enter", "Enter", 13);
+  await waitFor("!document.getElementById('controls-panel').hidden", "Controls from the hub");
+  const upBindingBefore = await evaluate("document.querySelector('[data-bind-action=up]').textContent");
+  await key("Enter", "Enter", 13);
+  await key("Escape", "Escape", 27);
+  await waitFor("document.getElementById('controls-status').textContent.includes('cancelled')", "Escape cancelling key capture");
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Enter", "Enter", 13);
+  await waitFor("document.getElementById('controls-reset').textContent === 'Confirm reset'", "the reset confirmation step");
+  await key("Enter", "Enter", 13);
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('ArrowUp')", "restored default binding");
+  if (await evaluate("document.querySelector('[data-bind-action=up]').textContent") !== upBindingBefore) throw new Error("Escape changed the captured key");
+  await key("Escape", "Escape", 27);
+  await waitFor("!document.getElementById('menu-hub').hidden", "returning to the hub from Controls");
+  await key("Escape", "Escape", 27);
+  await waitFor("document.getElementById('menu-hub').hidden", "closing the menu hub");
+
+  await setFakeGamepad([], [0, 0], "standard", 2);
+  await sleep(100);
+  await pulseGamepad([9]);
+  await waitFor("!document.getElementById('menu-hub').hidden", "controller Start opening the hub");
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('sound-panel').hidden", "controller A opening Sound");
+  const controllerMusicBefore = await evaluate("Number(document.getElementById('music-volume').value)");
+  await pulseGamepad([15]);
+  await waitFor(`Number(document.getElementById('music-volume').value) !== ${controllerMusicBefore}`, "controller sound adjustment");
+  await pulseGamepad([13]);
+  await pulseGamepad([13]);
+  await pulseGamepad([0]);
+  await waitFor("document.getElementById('mute').checked", "controller toggling Mute");
+  await pulseGamepad([1]);
+  await waitFor("document.getElementById('sound-panel').hidden && !document.getElementById('menu-hub').hidden", "controller B returning from Sound to the hub");
+  await pulseGamepad([13]);
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('controls-panel').hidden", "controller A opening Controls");
+  await waitFor("document.getElementById('controller-select').options.length === 2", "controller selector choices");
+  const controllerIndexBefore = await evaluate("document.getElementById('controller-select').value");
+  for (let i = 0; i < 6; i += 1) await pulseGamepad([13]);
+  await pulseGamepad([15]);
+  await waitFor(`document.getElementById('controller-select').value !== '${controllerIndexBefore}'`, "controller cycling the selected device");
+  await pulseGamepad([1]);
+  await waitFor("document.getElementById('controls-panel').hidden && !document.getElementById('menu-hub').hidden", "controller B returning from Controls to the hub");
+  await pulseGamepad([1]);
+  await waitFor("document.getElementById('menu-hub').hidden", "controller B closing the menu hub");
+  await setFakeGamepad();
+  await sleep(100);
 
   // the sound settings (feature 003): open the panel, move a slider, check that it is stored
   await evaluate("document.getElementById('sound-button').click(); 1");
@@ -216,6 +413,84 @@ async function main() {
 
   await evaluate("document.getElementById('name').value = 'SmokeTest'; document.getElementById('join').click(); 1");
   await waitFor("!document.getElementById('lobby-panel').hidden", "the lobby");
+  await waitFor("document.activeElement.id === 'lobby-room-name'", "initial lobby focus on the room name");
+  const roomNameBeforeOsk = await evaluate("document.getElementById('lobby-room-name').value");
+  await setFakeGamepad();
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('osk').hidden", "controller opening the room-name keyboard");
+  await pulseGamepad([0]);
+  await waitFor("document.getElementById('osk-preview').textContent.includes('q')", "controller entering a character");
+  await pulseGamepad([1]);
+  await waitFor("document.getElementById('osk').hidden && document.activeElement.id === 'lobby-room-name'", "controller cancelling text entry");
+  if (await evaluate("document.getElementById('lobby-room-name').value") !== roomNameBeforeOsk) throw new Error("OSK cancel changed the room name");
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('osk').hidden", "controller reopening the room-name keyboard");
+  await pulseGamepad([0]);
+  for (let i = 0; i < 4; i += 1) await pulseGamepad([13]);
+  for (let i = 0; i < 5; i += 1) await pulseGamepad([15]);
+  await waitFor("document.activeElement.id === 'osk-confirm'", "controller focus on OSK confirm");
+  await pulseGamepad([0]);
+  await waitFor(`document.getElementById('lobby-room-name').value === ${JSON.stringify(`${roomNameBeforeOsk}q`)}`, "controller confirming room-name entry");
+  await setFakeGamepad([], [0, 0], "standard", 2);
+  await sleep(100);
+  for (const [id, direction, inverse] of [["lobby-mode", 14, 15], ["lobby-size", 14, 15], ["lobby-minutes", 14, 15]]) {
+    await pulseGamepad([13]);
+    await waitFor(`document.activeElement.id === '${id}'`, `controller focus on ${id}`);
+    const before = await evaluate(`document.getElementById('${id}').value`);
+    await pulseGamepad([direction]);
+    await waitFor(`document.getElementById('${id}').value !== ${JSON.stringify(before)}`, `controller adjustment of ${id}`);
+    await pulseGamepad([inverse]);
+    await waitFor(`document.getElementById('${id}').value === ${JSON.stringify(before)}`, `controller restoring ${id}`);
+  }
+  await pulseGamepad([13]);
+  await waitFor("document.activeElement.id === 'start'", "controller focus leaving Time for the lobby actions");
+  for (let i = 0; i < 4; i += 1) await pulseGamepad([15]);
+  await waitFor("document.activeElement.id === 'change-look'", "controller focus on Change look");
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('editor').hidden", "controller opening the character editor");
+  const controllerColourBefore = await evaluate("document.querySelector('#swatches .selected')?.dataset.colour");
+  await pulseGamepad([15]);
+  await waitFor(`document.querySelector('#swatches .selected')?.dataset.colour !== ${JSON.stringify(controllerColourBefore)}`, "controller changing the colour choice");
+  for (let i = 0; i < 20 && await evaluate("document.activeElement.id !== 'done-look'"); i += 1) await pulseGamepad([13]);
+  await waitFor("document.activeElement.id === 'done-look'", "controller focus on Done");
+  await pulseGamepad([0]);
+  await waitFor("document.getElementById('editor').hidden && document.activeElement.id === 'change-look'", "controller returning from the editor");
+  await pulseGamepad([0]);
+  await waitFor("!document.getElementById('editor').hidden", "controller reopening the editor");
+  await pulseGamepad([1]);
+  await waitFor("document.getElementById('editor').hidden && document.activeElement.id === 'change-look'", "controller B returning from the editor");
+  await setFakeGamepad();
+  await evaluate("document.getElementById('lobby-room-name').focus(); 1");
+  for (const [id, delta] of [["lobby-mode", "ArrowDown"], ["lobby-size", "ArrowDown"], ["lobby-minutes", "ArrowDown"]]) {
+    await key("Tab", "Tab", 9);
+    const before = await evaluate(`document.getElementById('${id}').value`);
+    await key(delta, delta, delta === "ArrowDown" ? 40 : 39);
+    await waitFor(`document.getElementById('${id}').value !== ${JSON.stringify(before)}`, `keyboard adjustment of ${id}`);
+    await key(delta === "ArrowDown" ? "ArrowUp" : "ArrowLeft", delta === "ArrowDown" ? "ArrowUp" : "ArrowLeft", delta === "ArrowDown" ? 38 : 37);
+    await waitFor(`document.getElementById('${id}').value === ${JSON.stringify(before)}`, `keyboard restoring ${id}`);
+  }
+  await key("Tab", "Tab", 9);
+  await waitFor("document.activeElement.id === 'start'", "keyboard focus on Start");
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await key("Tab", "Tab", 9);
+  await waitFor("document.activeElement.id === 'ready'", "keyboard focus on Ready");
+  await key("Enter", "Enter", 13);
+  await key("Tab", "Tab", 9);
+  await waitFor("document.activeElement.id === 'change-look'", "keyboard focus on Change look");
+  await key("Enter", "Enter", 13);
+  await waitFor("!document.getElementById('editor').hidden", "keyboard opening the character editor");
+  const colourBefore = await evaluate("document.querySelector('#swatches .selected')?.dataset.colour");
+  await key("ArrowRight", "ArrowRight", 39);
+  await waitFor(`document.querySelector('#swatches .selected')?.dataset.colour !== ${JSON.stringify(colourBefore)}`, "keyboard changing the colour choice");
+  for (let i = 0; i < 20 && await evaluate("document.activeElement.id !== 'done-look'"); i += 1) await key("Tab", "Tab", 9);
+  await waitFor("document.activeElement.id === 'done-look'", "keyboard focus on Done");
+  await key("Enter", "Enter", 13);
+  await waitFor("document.getElementById('editor').hidden && document.activeElement.id === 'change-look'", "keyboard returning from the editor");
+  await key("Enter", "Enter", 13);
+  await waitFor("!document.getElementById('editor').hidden", "keyboard reopening the editor");
+  await key("Escape", "Escape", 27);
+  await waitFor("document.getElementById('editor').hidden && document.activeElement.id === 'change-look'", "Escape returning from the editor");
   // a second participant joins the open room, sees the settings and cannot change them
   const wsUrl = `ws://${new URL(url).host}/ws`;
   const peer = new WebSocket(wsUrl);
@@ -228,7 +503,7 @@ async function main() {
       if (hit) return hit;
       await sleep(50);
     }
-    throw new Error(`peer timed out waiting for ${what}`);
+    throw new Error(`peer timed out waiting for ${what}; received: ${JSON.stringify(seen)}`);
   };
   peer.send(JSON.stringify({ type: "RoomQuery" }));
   const info = await until((m) => m.type === "RoomInfo", "RoomInfo");
@@ -257,8 +532,36 @@ async function main() {
   peer.close();
   await sleep(300);
 
+  const botsBeforeController = await evaluate("[...document.querySelectorAll('#slots .caption')].filter((item) => item.textContent.toLowerCase().includes('bot')).length");
+  await shiftTab();
+  await shiftTab();
+  await shiftTab();
+  await waitFor("document.activeElement.id === 'add-bot'", "keyboard focus on Add bot");
+  await key("Enter", "Enter", 13);
+  await waitFor(`[...document.querySelectorAll('#slots .caption')].filter((item) => item.textContent.toLowerCase().includes('bot')).length === ${botsBeforeController + 1}`, "Enter activating Add bot without starting");
+  if (await evaluate("!document.getElementById('game-panel').hidden")) throw new Error("Enter on Add bot started the match");
+  await key("Tab", "Tab", 9);
+  await waitFor("document.activeElement.id === 'remove-bot'", "keyboard focus on Remove bot");
+  await key("Enter", "Enter", 13);
+  await waitFor(`[...document.querySelectorAll('#slots .caption')].filter((item) => item.textContent.toLowerCase().includes('bot')).length === ${botsBeforeController}`, "keyboard removing the smoke bot to preserve room capacity");
+
+  await setFakeGamepad([], [0, 0], "standard", 2);
+  await sleep(100);
+  await pulseGamepad([15]);
+  await pulseGamepad([15]);
+  await waitFor("document.activeElement.id === 'change-look'", "controller focus on Change look");
+  for (let i = 0; i < 3; i += 1) await pulseGamepad([14]);
+  await waitFor("document.activeElement.id === 'add-bot'", "controller focus on Add bot");
+  await pulseGamepad([0]);
+  await waitFor(`[...document.querySelectorAll('#slots .caption')].filter((item) => item.textContent.toLowerCase().includes('bot')).length === ${botsBeforeController + 1}`, "controller A adding a bot");
+  await pulseGamepad([15]);
+  await waitFor("document.activeElement.id === 'remove-bot'", "controller focus on Remove bot");
+  await pulseGamepad([0]);
+  await waitFor(`[...document.querySelectorAll('#slots .caption')].filter((item) => item.textContent.toLowerCase().includes('bot')).length === ${botsBeforeController}`, "controller removing the smoke bot to preserve room capacity");
+  await setFakeGamepad();
+
   // fill the lobby with bots so that four cards show characters
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 2; i += 1) {
     await evaluate("document.getElementById('add-bot').click(); 1");
     await sleep(200);
   }
@@ -274,6 +577,50 @@ async function main() {
   const devVisible = await evaluate("!document.getElementById('dev-panel').hidden");
   console.log("dev panel visible:", devVisible);
   if (devVisible) {
+    await key("Escape", "Escape", 27);
+    await waitFor("!document.getElementById('menu-hub').hidden && !document.getElementById('hub-dev').hidden", "keyboard opening the developer menu action");
+    await key("ArrowDown", "ArrowDown", 40);
+    await key("ArrowDown", "ArrowDown", 40);
+    await waitFor("document.activeElement.id === 'hub-dev'", "keyboard focus on Developer");
+    await key("Enter", "Enter", 13);
+    await waitFor("!document.getElementById('dev-panel').hidden && document.activeElement.id === 'dev-pause'", "keyboard opening developer controls");
+    const pauseBeforeKeyboard = await evaluate("document.getElementById('dev-pause').textContent");
+    await key("Enter", "Enter", 13);
+    await waitFor(`document.getElementById('dev-pause').textContent !== ${JSON.stringify(pauseBeforeKeyboard)}`, "keyboard toggling developer pause");
+    await key("Tab", "Tab", 9);
+    await key("Tab", "Tab", 9);
+    await waitFor("document.activeElement.id === 'dev-drop-ExtraBomb'", "keyboard focus on first developer slider");
+    const dropBeforeKeyboard = await evaluate("Number(document.getElementById('dev-drop-ExtraBomb').value)");
+    await key("ArrowRight", "ArrowRight", 39);
+    await waitFor(`Number(document.getElementById('dev-drop-ExtraBomb').value) !== ${dropBeforeKeyboard}`, "keyboard adjusting developer slider");
+    await key("Escape", "Escape", 27);
+    await waitFor("!document.getElementById('menu-hub').hidden && document.activeElement.id === 'hub-dev'", "keyboard returning to hub from developer controls");
+    await key("Escape", "Escape", 27);
+    await waitFor("document.getElementById('menu-hub').hidden", "keyboard closing developer hub");
+
+    await setFakeGamepad([], [0, 0], "standard", 1);
+    await sleep(100);
+    await pulseGamepad([9]);
+    await waitFor("!document.getElementById('menu-hub').hidden", "controller opening developer hub");
+    await pulseGamepad([13]);
+    await pulseGamepad([13]);
+    await waitFor("document.activeElement.id === 'hub-dev'", "controller focus on Developer");
+    await pulseGamepad([0]);
+    await waitFor("document.activeElement.id === 'dev-pause'", "controller opening developer controls");
+    const pauseBeforeController = await evaluate("document.getElementById('dev-pause').textContent");
+    await pulseGamepad([0]);
+    await waitFor(`document.getElementById('dev-pause').textContent !== ${JSON.stringify(pauseBeforeController)}`, "controller toggling developer pause");
+    for (let i = 0; i < 2; i += 1) await pulseGamepad([13]);
+    await waitFor("document.activeElement.id === 'dev-drop-ExtraBomb'", "controller focus on first developer slider");
+    const dropBeforeController = await evaluate("Number(document.getElementById('dev-drop-ExtraBomb').value)");
+    await pulseGamepad([15]);
+    await waitFor(`Number(document.getElementById('dev-drop-ExtraBomb').value) !== ${dropBeforeController}`, "controller adjusting developer slider");
+    await pulseGamepad([1]);
+    await waitFor("!document.getElementById('menu-hub').hidden && !document.getElementById('dev-panel').classList.contains('navigation-layer')", "controller returning from developer controls to the hub");
+    await pulseGamepad([1]);
+    await waitFor("document.getElementById('menu-hub').hidden", "controller closing the developer hub");
+    await setFakeGamepad();
+
     await evaluate(`(() => {
       ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb"].forEach((k) => {
         const r = document.getElementById("dev-drop-" + k);

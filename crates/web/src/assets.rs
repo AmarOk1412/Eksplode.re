@@ -23,6 +23,7 @@ pub fn lookup(path: &str) -> Option<Asset> {
         "/room.js" => (JS, include_bytes!("../assets/room.js")),
         "/audio.js" => (JS, include_bytes!("../assets/audio.js")),
         "/controls.js" => (JS, include_bytes!("../assets/controls.js")),
+        "/nav.js" => (JS, include_bytes!("../assets/nav.js")),
         "/style.css" => (CSS, include_bytes!("../assets/style.css")),
         "/eksplode_re_render.wasm" => (WASM, include_bytes!("../assets/eksplode_re_render.wasm")),
         _ => return None,

@@ -15,6 +15,22 @@ import {
   saveBindings,
 } from "./controls.js";
 import {
+  NavigationLayers,
+  NavTracker,
+  activateControl,
+  adjustControl,
+  focusKey,
+  focusTargets,
+  moveFocus,
+  moveFormFocus,
+  moveGroupFocus,
+  navigationMode,
+  OSK_ROWS,
+  createOskState,
+  reduceOsk,
+  restoreFocus,
+} from "./nav.js";
+import {
   COLOUR_CSS,
   COLOUR_NAMES,
   FACES,
@@ -549,6 +565,10 @@ function start() {
     changeLook: $("change-look"),
     soundButton: $("sound-button"),
     soundPanel: $("sound-panel"),
+    hubSound: $("hub-sound"),
+    hubControls: $("hub-controls"),
+    hubDev: $("hub-dev"),
+    hubResume: $("hub-resume"),
     controlsButton: $("controls-button"),
     controlsPanel: $("controls-panel"),
     controlsStatus: $("controls-status"),
@@ -567,6 +587,12 @@ function start() {
     devPause: $("dev-pause"),
     devReset: $("dev-reset"),
     devSliders: $("dev-sliders"),
+    app: $("app"),
+    hub: $("menu-hub"),
+    osk: $("osk"),
+    oskTitle: $("osk-title"),
+    oskPreview: $("osk-preview"),
+    oskKeys: $("osk-keys"),
   };
   const storage = (() => {
     try {
@@ -579,6 +605,8 @@ function start() {
   let keyboardBindings = loadBindings(storage);
   const keys = new KeyTracker(keyboardBindings);
   const gamepads = new GamepadTracker();
+  const navTracker = new NavTracker();
+  const navigationLayers = new NavigationLayers();
   let state = initialState();
   let socket = null;
   let renderer = null;
@@ -587,6 +615,11 @@ function start() {
   let logoPainted = false;
   let lobbyCanvases = [];
   let bannerTimer = null;
+  let lastFocusRoot = null;
+  let lastFocusStage = null;
+  let oskState = null;
+  let oskTarget = null;
+  let oskAccepted = false;
   const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
   /** Paints the semi-3D characters of the lobby cards `seconds` into their animation. */
@@ -699,7 +732,177 @@ function start() {
     });
   }
 
+  function navigationRoot() {
+    if (navigationLayers.top) return navigationLayers.top.root;
+    if (!el.controlsPanel.hidden) return el.controlsPanel;
+    if (!el.soundPanel.hidden) return el.soundPanel;
+    for (const root of [el.roomPanel, el.joinPanel, el.editor, el.lobbyPanel, el.gamePanel, el.devPanel]) {
+      if (root && !root.hidden) return root;
+    }
+    return null;
+  }
+
+  function hasNavigationLayer() {
+    return navigationLayers.top !== null || !el.soundPanel.hidden || !el.controlsPanel.hidden ||
+      Boolean(el.hub && !el.hub.hidden) || Boolean(el.osk && !el.osk.hidden);
+  }
+
+  function syncLayerInert() {
+    const root = navigationLayers.top?.root ??
+      (!el.controlsPanel.hidden ? el.controlsPanel : !el.soundPanel.hidden ? el.soundPanel : null);
+    if (!el.app) return;
+    for (const child of el.app.children) child.inert = Boolean(root && child !== root);
+  }
+
+  function focusFirst(root = navigationRoot()) {
+    const target = focusTargets(root)[0] ?? null;
+    target?.focus();
+    return target;
+  }
+
+  function renderOsk() {
+    el.oskPreview.textContent = oskState.buffer;
+    el.oskKeys.replaceChildren(...OSK_ROWS.map((row, rowIndex) => {
+      const rowElement = document.createElement("div");
+      rowElement.className = "osk-row";
+      rowElement.setAttribute("role", "row");
+      rowElement.append(...row.map((key, columnIndex) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "osk-key";
+        button.id = key.type === "character" ? `osk-key-${rowIndex}-${columnIndex}` : `osk-${key.type}`;
+        button.dataset.oskRow = String(rowIndex);
+        button.dataset.oskColumn = String(columnIndex);
+        button.dataset.oskType = key.type;
+        if (key.type === "character") {
+          button.dataset.oskValue = key.value;
+          button.textContent = oskState.shift ? key.value.toUpperCase() : key.value;
+        } else {
+          button.textContent = key.type === "backspace" ? "Backspace"
+            : key.type === "space" ? "Space"
+            : key.type === "shift" ? "Shift"
+            : key.type[0].toUpperCase() + key.type.slice(1);
+        }
+        button.setAttribute("aria-label", button.textContent);
+        if (rowIndex === oskState.cursor.row && columnIndex === oskState.cursor.column) button.setAttribute("aria-current", "true");
+        button.addEventListener("click", () => applyOskAction(key, button));
+        return button;
+      }));
+      return rowElement;
+    }));
+  }
+
+  function openOsk(target) {
+    if (!el.osk || !target) return false;
+    oskTarget = target;
+    oskState = createOskState(target.id, target.value, target.maxLength > 0 ? target.maxLength : 24);
+    const label = target.labels?.[0]?.textContent?.trim();
+    el.oskTitle.textContent = label ? `Enter ${label.toLowerCase()}` : "Enter text";
+    renderOsk();
+    if (!openNavigationLayer("osk", el.osk, target)) return false;
+    focusFirst(el.osk);
+    return true;
+  }
+
+  function applyOskAction(action, button = null) {
+    if (!oskState) return;
+    if (button) {
+      oskState.cursor = { row: Number(button.dataset.oskRow), column: Number(button.dataset.oskColumn) };
+    }
+    oskState = reduceOsk(oskState, action);
+    if (oskState.closed) {
+      oskTarget.value = oskState.result;
+      oskTarget.dispatchEvent(new Event("input", { bubbles: true }));
+      oskTarget.dispatchEvent(new Event("change", { bubbles: true }));
+      oskAccepted = true;
+      closeNavigationLayer();
+      return;
+    }
+    renderOsk();
+    const buttonToFocus = el.oskKeys.querySelector(`[data-osk-row="${oskState.cursor.row}"][data-osk-column="${oskState.cursor.column}"]`);
+    buttonToFocus?.focus();
+  }
+
+  function openNavigationLayer(id, root, opener = document.activeElement) {
+    if (!root || !navigationLayers.open(id, root, opener)) return false;
+    root.hidden = false;
+    syncLayerInert();
+    navTracker.contextChanged();
+    keys.clear();
+    gamepads.clear();
+    focusFirst(root);
+    return true;
+  }
+
+  function openMenuHub(opener = document.activeElement) {
+    el.hubDev.hidden = !state.dev;
+    return openNavigationLayer("hub", el.hub, opener);
+  }
+
+  function closeNavigationLayer() {
+    if (!navigationLayers.top) return false;
+    const closed = navigationLayers.close();
+    const opener = closed.closed.opener;
+    if (closed.closed.id === "osk") {
+      if (!oskAccepted && oskTarget && oskState) oskTarget.value = oskState.original;
+      oskAccepted = false;
+      oskState = null;
+      oskTarget = null;
+    }
+    if (closed.closed.id !== "dev") closed.closed.root.hidden = true;
+    else el.devPanel.classList.remove("navigation-layer");
+    syncLayerInert();
+    navTracker.contextChanged();
+    keys.clear();
+    gamepads.clear();
+    const visibleOpener = focusTargets(document).includes(opener) ? opener : closed.focus;
+    if (navigationLayers.top) {
+      (visibleOpener ?? focusFirst(navigationLayers.top.root))?.focus?.();
+    } else if (visibleOpener && focusTargets(document).includes(visibleOpener)) {
+      visibleOpener.focus();
+    } else if (state.stage !== "playing") {
+      focusFirst();
+    }
+    el.soundButton.setAttribute("aria-expanded", String(navigationLayers.has("sound")));
+    el.controlsButton.setAttribute("aria-expanded", String(navigationLayers.has("controls")));
+    return true;
+  }
+
+  function handleNavigationInput(input) {
+    if (input.menu) {
+      if (navigationLayers.top?.id === "hub") closeNavigationLayer();
+      else if (!navigationLayers.top) openMenuHub();
+      return;
+    }
+    if (input.back) {
+      if (navigationLayers.top) closeNavigationLayer();
+      else if (state.stage === "lobby" && editing) el.doneLook.click();
+      else if (!el.controlsPanel.hidden) el.controlsClose.click();
+      else if (!el.soundPanel.hidden) el.closeSound.click();
+      else openMenuHub();
+      return;
+    }
+    const target = document.activeElement;
+    if (input.direction) {
+      const candidates = focusTargets(navigationRoot());
+      if (moveGroupFocus(target, input.direction, candidates)) return;
+      if ((input.direction === "left" || input.direction === "right") && target.matches?.(".swatch, #room-modes button")) {
+        moveFocus(target, input.direction, candidates)?.click();
+        return;
+      }
+      if ((input.direction === "left" || input.direction === "right") && adjustControl(target, input.direction)) return;
+      const next = moveFormFocus(target, input.direction, candidates) ?? moveFocus(target, input.direction, candidates);
+      if (oskState && next?.dataset?.oskRow !== undefined) {
+        oskState.cursor = { row: Number(next.dataset.oskRow), column: Number(next.dataset.oskColumn) };
+      }
+    }
+    if (input.confirm) {
+      if (activateControl(target) === "osk" && el.osk) openOsk(target);
+    }
+  }
+
   function updateUi() {
+    const previousKey = focusKey(document.activeElement);
     renderDev();
     el.notice.textContent = state.notice;
     const playing = state.stage === "playing";
@@ -786,6 +989,20 @@ function start() {
         return li;
       }),
     );
+    syncLayerInert();
+    const root = navigationRoot();
+    if (state.stage !== lastFocusStage || root !== lastFocusRoot) {
+      navTracker.contextChanged();
+      keys.clear();
+      gamepads.clear();
+      if (state.stage === "playing" && !navigationLayers.top) focusFirst(root);
+      else if (state.stage === "closed") el.retry.focus();
+      else focusFirst(root);
+    } else if (previousKey) {
+      restoreFocus(root, previousKey);
+    }
+    lastFocusRoot = root;
+    lastFocusStage = state.stage;
   }
 
   function connect() {
@@ -853,6 +1070,7 @@ function start() {
         b.type = "button";
         b.textContent = modeLabel(mode);
         b.setAttribute("role", "radio");
+        b.dataset.navKey = `room-mode-${mode}`;
         b.setAttribute("aria-checked", String(mode === roomDraft.mode));
         b.addEventListener("click", () => editRoom({ type: "mode", value: mode }));
         return b;
@@ -861,8 +1079,10 @@ function start() {
   }
 
   function editRoom(action) {
+    const previousKey = focusKey(document.activeElement);
     roomDraft = roomReducer(roomDraft, action);
     renderRoomMenu();
+    restoreFocus(el.roomModes, previousKey);
   }
 
   /** Settings shown in the lobby; the owner's controls follow the lobby message. */
@@ -963,13 +1183,19 @@ function start() {
   el.effectsVolume.value = String(Math.round(audio.settings.effects * 100));
   el.mute.checked = audio.settings.muted;
   el.soundButton.addEventListener("click", () => {
-    el.soundPanel.hidden = !el.soundPanel.hidden;
-    el.soundButton.setAttribute("aria-expanded", String(!el.soundPanel.hidden));
-    if (!el.soundPanel.hidden) closeControls();
+    if (navigationLayers.top?.id === "sound") closeNavigationLayer();
+    else if (!navigationLayers.has("sound")) {
+      openNavigationLayer("sound", el.soundPanel, el.soundButton);
+      el.soundButton.setAttribute("aria-expanded", "true");
+    }
   });
   el.closeSound.addEventListener("click", () => {
-    el.soundPanel.hidden = true;
-    el.soundButton.setAttribute("aria-expanded", "false");
+    if (navigationLayers.top?.id === "sound") closeNavigationLayer();
+    else {
+      el.soundPanel.hidden = true;
+      el.soundButton.setAttribute("aria-expanded", "false");
+      syncLayerInert();
+    }
   });
   el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
@@ -989,6 +1215,7 @@ function start() {
     code === "Space" ? "Space" : code.startsWith("Arrow") ? code.slice(5) : code.startsWith("Key") ? code.slice(3) : code;
   let resetArmed = false;
   let resetTimer = null;
+  let spaceActivateTarget = null;
 
   function cancelReset(message = "") {
     clearTimeout(resetTimer);
@@ -1045,9 +1272,14 @@ function start() {
   function closeControls() {
     capturingAction = null;
     cancelReset();
+    for (const button of el.controlBindings) button.removeAttribute("aria-pressed");
+    if (navigationLayers.top?.id === "controls") {
+      closeNavigationLayer();
+      return;
+    }
     el.controlsPanel.hidden = true;
     el.controlsButton.setAttribute("aria-expanded", "false");
-    for (const button of el.controlBindings) button.removeAttribute("aria-pressed");
+    syncLayerInert();
   }
 
   function setKeyboardBindings(bindings) {
@@ -1060,18 +1292,24 @@ function start() {
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
   el.controlsButton.addEventListener("click", () => {
-    const open = el.controlsPanel.hidden;
-    el.soundPanel.hidden = true;
-    el.soundButton.setAttribute("aria-expanded", "false");
-    if (open) {
-      el.controlsPanel.hidden = false;
+    if (navigationLayers.top?.id === "controls") closeControls();
+    else if (!navigationLayers.has("controls")) {
+      openNavigationLayer("controls", el.controlsPanel, el.controlsButton);
       el.controlsButton.setAttribute("aria-expanded", "true");
-      keys.clear();
       renderControllerPanel();
-    } else {
-      closeControls();
     }
   });
+  el.hubSound.addEventListener("click", () => openNavigationLayer("sound", el.soundPanel, el.hubSound));
+  el.hubControls.addEventListener("click", () => {
+    if (openNavigationLayer("controls", el.controlsPanel, el.hubControls)) {
+      el.controlsButton.setAttribute("aria-expanded", "true");
+      renderControllerPanel();
+    }
+  });
+  el.hubDev.addEventListener("click", () => {
+    if (openNavigationLayer("dev", el.devPanel, el.hubDev)) el.devPanel.classList.add("navigation-layer");
+  });
+  el.hubResume.addEventListener("click", closeNavigationLayer);
   el.controlsClose.addEventListener("click", closeControls);
   el.controllerSelect.addEventListener("change", () => {
     const index = Number(el.controllerSelect.value);
@@ -1158,6 +1396,10 @@ function start() {
     paintPreview();
   }
 
+  function focusEditor() {
+    (el.swatches.querySelector(".swatch.selected") ?? focusTargets(el.editor)[0])?.focus();
+  }
+
   function paintPreview() {
     if (!renderer || el.editor.hidden) return;
     const dpr = window.devicePixelRatio || 1;
@@ -1176,10 +1418,12 @@ function start() {
   el.changeLook.addEventListener("click", () => {
     editing = !editing;
     updateUi();
+    if (editing) focusEditor();
   });
   el.doneLook.addEventListener("click", () => {
     editing = false;
     updateUi();
+    el.changeLook.focus();
   });
 
   window.addEventListener("keydown", (e) => {
@@ -1187,6 +1431,12 @@ function start() {
       e.preventDefault();
       e.stopPropagation();
       if (e.repeat) return;
+      if (e.key === "Escape") {
+        capturingAction = null;
+        el.controlsStatus.textContent = "Key capture cancelled.";
+        for (const button of el.controlBindings) button.setAttribute("aria-pressed", "false");
+        return;
+      }
       const result = assignBinding(keyboardBindings, capturingAction, e.code);
       if (result.ok) {
         setKeyboardBindings(result.bindings);
@@ -1200,8 +1450,35 @@ function start() {
       for (const button of el.controlBindings) button.setAttribute("aria-pressed", "false");
       return;
     }
-    if (!el.controlsPanel.hidden) {
+    if (e.key === "Escape") {
       e.preventDefault();
+      if (navigationLayers.top) closeNavigationLayer();
+      else if (state.stage === "lobby" && editing) el.doneLook.click();
+      else if (!el.controlsPanel.hidden) el.controlsClose.click();
+      else if (!el.soundPanel.hidden) el.closeSound.click();
+      else openMenuHub();
+      return;
+    }
+    if (e.target.matches?.("button") && e.key === "Enter") {
+      e.preventDefault();
+      if (!e.repeat) e.target.click();
+      return;
+    }
+    if (e.target.matches?.("button") && e.code === "Space") {
+      e.preventDefault();
+      if (!e.repeat) spaceActivateTarget = e.target;
+      return;
+    }
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key) && e.target.matches?.("button, [role='radio']")) {
+      e.preventDefault();
+      const direction = e.key.slice(5).toLowerCase();
+      const candidates = focusTargets(navigationRoot());
+      const next = moveGroupFocus(e.target, direction, candidates) ?? moveFocus(e.target, direction, candidates);
+      if ((direction === "left" || direction === "right") && e.target.matches(".swatch, #room-modes button")) next?.click();
+      return;
+    }
+    if (navigationLayers.top || !el.controlsPanel.hidden || !el.soundPanel.hidden) {
+      if (keys.isBound(e.code) && !e.target.matches?.("input, select, textarea")) e.preventDefault();
       return;
     }
     if (state.stage === "playing") {
@@ -1215,30 +1492,53 @@ function start() {
       send({ type: "Start" });
     }
   });
-  window.addEventListener("keyup", (e) => keys.release(e.code));
+  window.addEventListener("keyup", (e) => {
+    keys.release(e.code);
+    if (e.code !== "Space" || !spaceActivateTarget) return;
+    const target = spaceActivateTarget;
+    spaceActivateTarget = null;
+    if (target === document.activeElement && !target.disabled) target.click();
+  });
   window.addEventListener("blur", () => {
     pageFocused = false;
     keys.clear();
     gamepads.clear();
+    navTracker.clear();
   });
   window.addEventListener("focus", () => {
     pageFocused = true;
     keys.clear();
     gamepads.clear();
+    navTracker.contextChanged();
   });
   document.addEventListener("visibilitychange", () => {
     keys.clear();
     gamepads.clear();
+    if (document.hidden) navTracker.clear();
+    else navTracker.contextChanged();
   });
 
   setInterval(() => {
-    if (state.stage !== "playing") return;
-    if (!pageFocused || document.hidden || !el.controlsPanel.hidden) {
+    if (!pageFocused || document.hidden) {
       keys.clear();
       gamepads.clear();
-      send(inputMessage(state, keys.take()));
+      navTracker.clear();
+      if (state.stage === "playing") send(inputMessage(state, { mv: null, bomb: false, punch: false }));
       return;
     }
+    const pads = readGamepads().gamepads;
+    const devices = compatibleGamepads(pads);
+    const selected = devices.find((device) => device.index === gamepads.selectedIndex) ?? devices[0];
+    const navPad = selected ? pads.find((pad) => pad?.index === selected.index) : null;
+    const navInput = navTracker.sample(navPad, performance.now());
+    if (navigationMode(state.stage, hasNavigationLayer()) === "navigation" || navInput.menu) {
+      keys.clear();
+      gamepads.clear();
+      handleNavigationInput(navInput);
+      if (state.stage === "playing") send(inputMessage(state, { mv: null, bomb: false, punch: false }));
+      return;
+    }
+    if (state.stage !== "playing") return;
     const controllerInput = gamepads.sample(readGamepads().gamepads);
     const keyboardInput = keys.take();
     send(inputMessage(state, {

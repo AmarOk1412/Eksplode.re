@@ -15,7 +15,15 @@
       <button id="controls-button" class="controls-button" type="button" aria-label="Controls settings" aria-controls="controls-panel" aria-expanded="false" title="Controls">&#9000;</button>
     </header>
 
-    <section id="sound-panel" class="dialog sound" aria-label="Sound settings" hidden>
+    <section id="menu-hub" class="dialog menu-hub" role="dialog" aria-modal="true" aria-labelledby="menu-hub-title" hidden>
+      <h2 id="menu-hub-title">Menu</h2>
+      <button id="hub-sound" type="button">Sound</button>
+      <button id="hub-controls" type="button">Controls</button>
+      <button id="hub-dev" type="button" hidden>Developer</button>
+      <button id="hub-resume" type="button">Resume</button>
+    </section>
+
+    <section id="sound-panel" class="dialog sound" role="dialog" aria-modal="true" aria-label="Sound settings" hidden>
       <h2>Sound</h2>
       <label for="music-volume">Music</label>
       <input id="music-volume" type="range" min="0" max="100" step="1">
@@ -28,7 +36,7 @@
       </div>
     </section>
 
-    <section id="controls-panel" class="dialog controls-panel" aria-label="Controls settings" hidden>
+    <section id="controls-panel" class="dialog controls-panel" role="dialog" aria-modal="true" aria-label="Controls settings" hidden>
       <h2>Controls</h2>
       <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
       <div class="control-bindings" role="group" aria-label="Keyboard bindings">
@@ -123,7 +131,7 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
     <section id="game-panel" hidden>
       <div id="timer" aria-label="Time left"></div>
       <p id="banner" class="pattern-banner" role="alert" hidden></p>
-      <canvas id="view" aria-label="Game arena"></canvas>
+      <canvas id="view" aria-label="Game arena" tabindex="0"></canvas>
       <ul id="hud" class="slots"></ul>
     </section>
 
@@ -136,6 +144,12 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       </div>
       <h2>Drop chance per destroyed block</h2>
       <ul id="dev-sliders" class="dev-sliders"></ul>
+    </section>
+
+    <section id="osk" class="dialog osk" role="dialog" aria-modal="true" aria-label="On-screen keyboard" hidden>
+      <h2 id="osk-title">Enter text</h2>
+      <output id="osk-preview" aria-live="polite"></output>
+      <div id="osk-keys" class="osk-keys" role="grid" aria-label="Text entry keys"></div>
     </section>
   </main>
   <script type="module" src="/app.js"></script>
