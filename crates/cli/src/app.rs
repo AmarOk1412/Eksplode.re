@@ -5,14 +5,14 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
-use bomberust_bots::{Bot, DefaultBot};
-use bomberust_core::{
+use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_core::{
     Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase, PlayerId,
     MAX_PLAYERS,
 };
-use bomberust_net::protocol::RejectReason;
-use bomberust_net::{Client, Host, HostConfig, NetError};
-use bomberust_web::{Server, ServerError, ServerOptions};
+use eksplode_re_net::protocol::RejectReason;
+use eksplode_re_net::{Client, Host, HostConfig, NetError};
+use eksplode_re_web::{Server, ServerError, ServerOptions};
 use ratatui::crossterm::event::{self, Event as TermEvent, KeyCode};
 use ratatui::DefaultTerminal;
 
@@ -153,7 +153,7 @@ impl Session {
                 inputs[i] = bot.decide(&self.state.observe(ids[i]));
             }
         }
-        bomberust_core::step(&mut self.state, &inputs)
+        eksplode_re_core::step(&mut self.state, &inputs)
     }
 
     /// Slot descriptions for the status lines.
@@ -274,7 +274,7 @@ pub fn host_warnings(opts: &HostOptions) -> Vec<String> {
         ));
     }
     if opts.dev {
-        out.push(bomberust_net::DEV_WARNING.to_string());
+        out.push(eksplode_re_net::DEV_WARNING.to_string());
     }
     out
 }
@@ -371,8 +371,8 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
 
 /// Shows the room setup screen; `None` when the owner went back.
 fn setup_room(
-    start: bomberust_core::RoomSettings,
-) -> Result<Option<bomberust_core::RoomSettings>, AppError> {
+    start: eksplode_re_core::RoomSettings,
+) -> Result<Option<eksplode_re_core::RoomSettings>, AppError> {
     let mut terminal = ratatui::try_init()?;
     let _guard = TerminalGuard;
     let mut screen = SetupScreen::new(start);

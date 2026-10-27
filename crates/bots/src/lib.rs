@@ -8,7 +8,7 @@ pub use danger::DangerMap;
 pub use default_bot::DefaultBot;
 pub use pathing::{find_path, passable, PathRequest};
 
-use bomberust_core::{Observation, PlayerInput};
+use eksplode_re_core::{Observation, PlayerInput};
 
 /// Anything that can play a slot: given what is visible, say what to do this tick.
 pub trait Bot {

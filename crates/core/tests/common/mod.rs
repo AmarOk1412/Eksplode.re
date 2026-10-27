@@ -1,6 +1,6 @@
 #![allow(dead_code, clippy::expect_used)]
 
-use bomberust_core::{Arena, Config, GameState, PlayerId, PlayerInput, Pos};
+use eksplode_re_core::{Arena, Config, GameState, PlayerId, PlayerInput, Pos};
 
 /// 7x7 arena with an open interior.
 pub const OPEN: [&str; 7] = [
@@ -46,7 +46,7 @@ pub fn two_safe() -> [Option<(u8, u8)>; 4] {
 /// Adds a bomb as if `owner` had just placed it.
 pub fn add_bomb(s: &mut GameState, owner: u8, x: u8, y: u8, ticks_left: u32) {
     let range = s.players[usize::from(owner)].range;
-    s.bombs.push(bomberust_core::Bomb {
+    s.bombs.push(eksplode_re_core::Bomb {
         owner: pid(owner),
         pos: pos(x, y),
         ticks_left,

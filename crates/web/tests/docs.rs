@@ -55,8 +55,8 @@ fn us4_as1_the_readme_has_a_quick_start_with_the_two_commands() {
         readme.contains("## Quick start"),
         "README needs a Quick start section"
     );
-    assert!(readme.contains("cargo run -p bomberust-web"));
-    assert!(readme.contains("cargo run -p bomberust-cli -- join"));
+    assert!(readme.contains("cargo run -p eksplode-re-web"));
+    assert!(readme.contains("cargo run -p eksplode-re-cli -- join"));
 }
 
 #[test]
@@ -84,8 +84,8 @@ fn us4_as2_the_architecture_guide_names_every_crate_and_has_a_diagram() {
 #[test]
 fn us4_as2_every_option_of_both_programs_is_documented() {
     let docs = format!("{}\n{}", read("README.md"), read("docs/WEB.md"));
-    let server = flags(bomberust_web::args::USAGE);
-    let cli = flags(bomberust_cli::args::USAGE);
+    let server = flags(eksplode_re_web::args::USAGE);
+    let cli = flags(eksplode_re_cli::args::USAGE);
     assert!(server.len() >= 8 && cli.len() >= 8, "{server:?} {cli:?}");
     for flag in server.iter().chain(&cli) {
         assert!(
@@ -169,7 +169,7 @@ fn us4_as2_the_options_table_in_the_web_guide_is_generated_from_the_usage_text()
     let from = web.find(begin).expect("options:begin marker") + begin.len();
     let to = web.find(end).expect("options:end marker");
     let committed = web[from..to].trim();
-    let expected = options_table(bomberust_web::args::USAGE);
+    let expected = options_table(eksplode_re_web::args::USAGE);
     assert_eq!(
         committed, expected,
         "the options table of docs/WEB.md is out of date; replace the text between the markers with:\n{expected}"
@@ -247,7 +247,7 @@ fn f3_sc009_no_audio_file_is_referenced_or_embedded() {
 
 #[test]
 fn f4_the_guides_describe_every_mode_setting_option_and_sound_of_game_modes() {
-    use bomberust_core::{BoardSize, Mode, MINUTES};
+    use eksplode_re_core::{BoardSize, Mode, MINUTES};
     let gameplay = read("docs/GAMEPLAY.md");
     let readme = read("README.md");
     let protocol = read("docs/PROTOCOL.md");
@@ -291,7 +291,7 @@ fn f4_the_guides_describe_every_mode_setting_option_and_sound_of_game_modes() {
         "hearts",
         "RoomQuery",
         "SetRoom",
-        "bomberust.room.v1",
+        "eksplode.re.room.v1",
     ] {
         assert!(
             [&gameplay, &readme, &protocol, &web]

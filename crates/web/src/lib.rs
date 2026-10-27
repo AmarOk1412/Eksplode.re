@@ -1,6 +1,6 @@
-//! Web server of Bomberust: serves the page and bridges WebSocket players to the match host.
+//! Web server of Eksplode.re: serves the page and bridges WebSocket players to the match host.
 //!
-//! One process runs the authoritative match (`bomberust-net`) with its TCP port for terminal
+//! One process runs the authoritative match (`eksplode-re-net`) with its TCP port for terminal
 //! clients, plus an HTTP server on a second port. Browser tabs connect to `/ws` and are attached
 //! to the same host as in-process clients, so they are peers of terminal players and bots.
 
@@ -18,7 +18,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
-use bomberust_net::{Host, HostConfig, HostHandle, NetError};
+use eksplode_re_net::{Host, HostConfig, HostHandle, NetError};
 
 pub use options::ServerOptions;
 

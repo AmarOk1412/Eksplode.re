@@ -33,64 +33,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bomberust-bots"
-version = "0.1.0"
-dependencies = [
- "bomberust-core",
-]
-
-[[package]]
-name = "bomberust-cli"
-version = "0.1.0"
-dependencies = [
- "bomberust-bots",
- "bomberust-core",
- "bomberust-net",
- "bomberust-web",
- "ratatui",
-]
-
-[[package]]
-name = "bomberust-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bomberust-net"
-version = "0.1.0"
-dependencies = [
- "bomberust-bots",
- "bomberust-core",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "bomberust-web"
-version = "0.1.0"
-dependencies = [
- "bomberust-bots",
- "bomberust-cli",
- "bomberust-core",
- "bomberust-net",
- "bomberust-web-render",
- "ctrlc",
- "serde_json",
- "tungstenite",
-]
-
-[[package]]
-name = "bomberust-web-render"
-version = "0.1.0"
-dependencies = [
- "bomberust-core",
- "serde_json",
-]
-
-[[package]]
 name = "bytes"
 version = "1.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -276,6 +218,64 @@ name = "either"
 version = "1.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+
+[[package]]
+name = "eksplode-re-bots"
+version = "0.1.0"
+dependencies = [
+ "eksplode-re-core",
+]
+
+[[package]]
+name = "eksplode-re-cli"
+version = "0.1.0"
+dependencies = [
+ "eksplode-re-bots",
+ "eksplode-re-core",
+ "eksplode-re-net",
+ "eksplode-re-web",
+ "ratatui",
+]
+
+[[package]]
+name = "eksplode-re-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "eksplode-re-net"
+version = "0.1.0"
+dependencies = [
+ "eksplode-re-bots",
+ "eksplode-re-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "eksplode-re-web"
+version = "0.1.0"
+dependencies = [
+ "ctrlc",
+ "eksplode-re-bots",
+ "eksplode-re-cli",
+ "eksplode-re-core",
+ "eksplode-re-net",
+ "eksplode-re-web-render",
+ "serde_json",
+ "tungstenite",
+]
+
+[[package]]
+name = "eksplode-re-web-render"
+version = "0.1.0"
+dependencies = [
+ "eksplode-re-core",
+ "serde_json",
+]
 
 [[package]]
 name = "equivalent"

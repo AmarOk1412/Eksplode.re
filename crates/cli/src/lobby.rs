@@ -1,6 +1,6 @@
 //! Lobby screen: choose who plays which slot before the match starts.
 
-use bomberust_core::{Controller, Lobby, PlayerId};
+use eksplode_re_core::{Controller, Lobby, PlayerId};
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -94,7 +94,7 @@ pub fn render(frame: &mut Frame, screen: &LobbyScreen) {
     let height = (lines.len() as u16 + 2).min(area.height);
     let rect = Rect::new(area.x, area.y, area.width, height);
     frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title(" Bomberust lobby ")),
+        Paragraph::new(lines).block(Block::bordered().title(" Eksplode.re lobby ")),
         rect,
     );
 }

@@ -68,7 +68,7 @@ pub fn warnings(opts: &ServerOptions) -> Vec<String> {
         ));
     }
     if opts.dev {
-        out.push(bomberust_net::DEV_WARNING.to_string());
+        out.push(eksplode_re_net::DEV_WARNING.to_string());
     }
     match &opts.origins {
         AllowedOrigins::SameOrigin => {}

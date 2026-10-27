@@ -12,7 +12,7 @@ import {
 import { fakeAudio, fakeStorage, fakeTarget, fakeTimer } from "./audio-helper.mjs";
 
 function make(options = {}) {
-  const fake = fakeAudio();
+  const fake = fakeAudio({ resumeFailures: options.resumeFailures });
   const storage = options.storage ?? fakeStorage();
   const timer = fakeTimer();
   const engine = new AudioEngine({ AudioContext: fake.AudioContext, storage, timer, ...options });
@@ -33,8 +33,21 @@ test("f3_us3_as5_no_audio_context_exists_before_the_first_gesture", () => {
     assert.equal(log.contexts.length, 1, `${gesture} creates the context`);
     target.fire("keydown");
     assert.equal(log.contexts.length, 1, "only one context");
-    assert.equal(target.count(), 0, "the gesture listeners are removed");
+    assert.equal(target.count(), 3, "later gestures can recover a suspended context");
   }
+});
+
+test("a later user gesture retries a rejected AudioContext resume", () => {
+  const { engine, log } = make({ resumeFailures: 1 });
+  const target = fakeTarget();
+  engine.attach(target);
+  target.fire("pointerdown");
+  assert.equal(log.contexts.length, 1);
+  assert.equal(log.contexts[0].state, "suspended");
+  target.fire("keydown");
+  assert.equal(log.contexts.length, 1, "retry reuses the same context");
+  assert.equal(log.resumeAttempts, 2);
+  assert.equal(log.contexts[0].state, "running");
 });
 
 test("a missing or throwing AudioContext makes every call a no-op", () => {
@@ -115,12 +128,18 @@ test("f3_us3_as4_settings_survive_a_reload", () => {
   const storage = fakeStorage();
   const first = make({ storage });
   first.engine.setSettings({ music: 0.8, effects: 0.2, muted: true });
-  assert.equal(STORAGE_KEY, "bomberust.audio.v1");
+  assert.equal(STORAGE_KEY, "eksplode.re.audio.v1");
   assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEY)), { music: 0.8, effects: 0.2, muted: true });
   const second = make({ storage });
   assert.deepEqual(second.engine.settings, { music: 0.8, effects: 0.2, muted: true });
   second.engine.unlock();
   assert.equal(second.engine.buses.music.gain.value, 0, "muted survives too");
+});
+
+test("audio settings migrate from the Bomberust storage key", () => {
+  const storage = fakeStorage();
+  storage.setItem("bomberust.audio.v1", JSON.stringify({ music: 0.6, effects: 0.4, muted: false }));
+  assert.deepEqual(loadSettings(storage), { music: 0.6, effects: 0.4, muted: false });
 });
 
 test("corrupt or unavailable storage gives the defaults and saving never throws", () => {

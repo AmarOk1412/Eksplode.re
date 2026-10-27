@@ -1,31 +1,31 @@
 [package]
-name = "bomberust-web"
-description = "Web server for Bomberust: serves the page and bridges WebSocket players to the match host."
+name = "eksplode-re-web"
+description = "Web server for Eksplode.re: serves the page and bridges WebSocket players to the match host."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "bomberust_web"
+name = "eksplode_re_web"
 
 [[bin]]
-name = "bomberust-server"
+name = "eksplode-re-server"
 path = "src/main.rs"
 
 [dependencies]
-bomberust-core = { path = "../core", features = ["serde"] }
-bomberust-net = { path = "../net" }
-bomberust-bots = { path = "../bots" }
+eksplode-re-core = { path = "../core", features = ["serde"] }
+eksplode-re-net = { path = "../net" }
+eksplode-re-bots = { path = "../bots" }
 serde_json = "1"
 tungstenite = "0.30"
 ctrlc = "3"
 
 [dev-dependencies]
 # Only for the documentation tests, which compare the CLI help text with the guides.
-bomberust-cli = { path = "../cli" }
+eksplode-re-cli = { path = "../cli" }
 # The consistency test compares the look options of the renderer with the server and the page.
-bomberust-web-render = { path = "../web-render" }
+eksplode-re-web-render = { path = "../web-render" }
 
 [lints]
 workspace = true

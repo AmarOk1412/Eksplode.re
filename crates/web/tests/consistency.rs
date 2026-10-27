@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use bomberust_net::look::{Colour, Face, Gender, Head};
+use eksplode_re_net::look::{Colour, Face, Gender, Head};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -42,22 +42,22 @@ fn the_look_options_of_the_server_the_renderer_the_page_and_the_docs_agree() {
         (
             "COLOUR_NAMES",
             names(Colour::ALL, Colour::name),
-            bomberust_web_render::look::COLOUR_NAMES.to_vec(),
+            eksplode_re_web_render::look::COLOUR_NAMES.to_vec(),
         ),
         (
             "GENDERS",
             names(Gender::ALL, Gender::name),
-            bomberust_web_render::look::GENDER_NAMES.to_vec(),
+            eksplode_re_web_render::look::GENDER_NAMES.to_vec(),
         ),
         (
             "HEADS",
             names(Head::ALL, Head::name),
-            bomberust_web_render::look::HEAD_NAMES.to_vec(),
+            eksplode_re_web_render::look::HEAD_NAMES.to_vec(),
         ),
         (
             "FACES",
             names(Face::ALL, Face::name),
-            bomberust_web_render::look::FACE_NAMES.to_vec(),
+            eksplode_re_web_render::look::FACE_NAMES.to_vec(),
         ),
     ];
     for (js_name, server, render) in lists {
@@ -96,7 +96,7 @@ fn room_list(source: &str, name: &str) -> Vec<String> {
 
 #[test]
 fn the_room_options_of_the_core_the_page_and_the_docs_agree() {
-    use bomberust_core::{BoardSize, Mode, MINUTES, PLAYABLE};
+    use eksplode_re_core::{BoardSize, Mode, MINUTES, PLAYABLE};
     let js = read("crates/web/assets/room.js");
     let docs = read("docs/PROTOCOL.md");
     let lists: [(&str, Vec<String>); 4] = [

@@ -2,9 +2,9 @@
 
 use std::time::{Duration, Instant};
 
-use bomberust_cli::online::{render, Online, Stage};
-use bomberust_core::{Config, Controller};
-use bomberust_net::{Client, Host, HostConfig};
+use eksplode_re_cli::online::{render, Online, Stage};
+use eksplode_re_core::{Config, Controller};
+use eksplode_re_net::{Client, Host, HostConfig};
 use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::Terminal;
@@ -285,9 +285,9 @@ fn control_c_is_not_a_game_key() {
 
 // ---- feature 002, US3: hosting with the web page and clearer join errors ----
 
-use bomberust_cli::app::{self, AppError};
-use bomberust_cli::args::{HostOptions, JoinOptions};
-use bomberust_net::protocol::RejectReason;
+use eksplode_re_cli::app::{self, AppError};
+use eksplode_re_cli::args::{HostOptions, JoinOptions};
+use eksplode_re_net::protocol::RejectReason;
 
 fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
     HostOptions {
@@ -327,7 +327,7 @@ fn us3_as1_the_lobby_shows_the_web_page_only_when_there_is_one() {
     let s = screen(&h);
     assert!(!s.contains("Web page"), "{s}");
     assert!(
-        s.contains(&format!("bomberust-cli join <your-ip>:{port}")),
+        s.contains(&format!("eksplode-re-cli join <your-ip>:{port}")),
         "{s}"
     );
     assert!(s.contains("q quit"), "{s}");
@@ -484,7 +484,7 @@ fn lobby_text_has(o: &Online, needle: &str) -> bool {
     screen(o).contains(needle)
 }
 
-fn room_host(defaults: bomberust_core::RoomSettings) -> Host {
+fn room_host(defaults: eksplode_re_core::RoomSettings) -> Host {
     Host::start(HostConfig {
         bind: "127.0.0.1:0".into(),
         tick: Duration::from_millis(4),
@@ -498,7 +498,7 @@ fn room_host(defaults: bomberust_core::RoomSettings) -> Host {
 
 #[test]
 fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
-    use bomberust_core::{BoardSize, RoomSettings};
+    use eksplode_re_core::{BoardSize, RoomSettings};
     let host = room_host(RoomSettings {
         name: "Lab".into(),
         ..RoomSettings::default()
@@ -528,8 +528,8 @@ fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
 
     h.handle_key(KeyCode::Char('m'));
     assert!(pump_until(&mut h, |o| o.lobby.settings.mode
-        == bomberust_core::Mode::Team));
-    assert!(bomberust_core::PLAYABLE.contains(&h.lobby.settings.mode));
+        == eksplode_re_core::Mode::Team));
+    assert!(eksplode_re_core::PLAYABLE.contains(&h.lobby.settings.mode));
 
     // a terminal player sees the same line, with the friendly-fire choice of Team mode
     let mut a = joined_at(h.host_addr().unwrap(), "Ann");
@@ -543,7 +543,7 @@ fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
 
 #[test]
 fn only_the_owner_changes_the_settings_in_the_terminal_lobby() {
-    use bomberust_core::BoardSize;
+    use eksplode_re_core::BoardSize;
     let host = room_host(Default::default());
     let mut h = hosting(host);
     assert!(pump_until(&mut h, |o| o.slot == Some(0)));
@@ -581,10 +581,10 @@ fn the_lobby_shows_the_settings_on_the_smallest_terminal() {
     assert!(pump_until(&mut h, |o| o.slot == Some(0)));
     h.handle_key(KeyCode::Char('s'));
     assert!(pump_until(&mut h, |o| o.lobby.settings.size
-        == bomberust_core::BoardSize::Medium));
+        == eksplode_re_core::BoardSize::Medium));
     h.handle_key(KeyCode::Char('s'));
     assert!(pump_until(&mut h, |o| o.lobby.settings.size
-        == bomberust_core::BoardSize::Large));
+        == eksplode_re_core::BoardSize::Large));
     let mut t = Terminal::new(TestBackend::new(40, 20)).unwrap();
     t.draw(|f| render(f, &h)).unwrap();
     let buf = t.backend().buffer().clone();
@@ -604,7 +604,7 @@ fn the_lobby_shows_the_settings_on_the_smallest_terminal() {
 
 #[test]
 fn f4_us3_as5_the_terminal_lobby_shows_the_teams_and_the_result_names_the_winner() {
-    use bomberust_core::{Mode, RoomSettings};
+    use eksplode_re_core::{Mode, RoomSettings};
     let host = room_host(RoomSettings {
         mode: Mode::Team,
         ..Default::default()
@@ -635,7 +635,7 @@ fn f4_us3_as5_the_terminal_lobby_shows_the_teams_and_the_result_names_the_winner
 
 #[test]
 fn f4_us4_as9_the_chaser_lobby_says_the_roles_are_drawn_at_the_start() {
-    use bomberust_core::{Mode, RoomSettings};
+    use eksplode_re_core::{Mode, RoomSettings};
     let host = room_host(RoomSettings {
         mode: Mode::Chaser,
         ..Default::default()

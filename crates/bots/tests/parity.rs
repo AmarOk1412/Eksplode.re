@@ -1,8 +1,8 @@
 mod common;
 
-use bomberust_bots::{Bot, DefaultBot};
-use bomberust_core::{Config, DropTable, GameState, Rng};
 use common::*;
+use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_core::{Config, DropTable, GameState, Rng};
 
 /// The bots crate must never reach for the full game state.
 #[test]
@@ -38,5 +38,5 @@ fn a_bot_only_acts_through_player_input() {
     let s = GameState::new(Config::default(), 1, [true; 4]).unwrap();
     let input = DefaultBot::new(1).decide(&s.observe(pid(0)));
     // the same type a human produces
-    let _: bomberust_core::PlayerInput = input;
+    let _: eksplode_re_core::PlayerInput = input;
 }

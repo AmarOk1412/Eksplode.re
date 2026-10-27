@@ -1,6 +1,6 @@
 #![allow(dead_code, clippy::unwrap_used)]
 
-use bomberust_core::{
+use eksplode_re_core::{
     Arena, Bomb, Config, Flame, GameState, Observation, PlayerId, Pos, PowerUp, PowerUpKind,
 };
 

@@ -1,15 +1,15 @@
-//! Command-line options of `bomberust-server`.
+//! Command-line options of `eksplode-re-server`.
 
 use std::fmt;
 use std::net::IpAddr;
 
-use bomberust_core::{BoardSize, Mode, MINUTES};
+use eksplode_re_core::{BoardSize, Mode, MINUTES};
 
 use crate::options::ServerOptions;
 use crate::origin::AllowedOrigins;
 
 pub const USAGE: &str = "\
-Usage: bomberust-server [OPTIONS]
+Usage: eksplode-re-server [OPTIONS]
 
 Options:
   --bind <IP>              address to listen on (default 127.0.0.1)

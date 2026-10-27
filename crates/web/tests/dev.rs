@@ -1,9 +1,9 @@
 mod common;
 
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_web::origin::warnings;
-use bomberust_web::ServerOptions;
 use common::*;
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_web::origin::warnings;
+use eksplode_re_web::ServerOptions;
 
 fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
     move |m| matches!(m, ServerMsg::Error { code: c, .. } if c == code)

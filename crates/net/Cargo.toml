@@ -1,17 +1,17 @@
 [package]
-name = "bomberust-net"
-description = "Network play for Bomberust: protocol, authoritative host and client."
+name = "eksplode-re-net"
+description = "Network play for Eksplode.re: protocol, authoritative host and client."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "bomberust_net"
+name = "eksplode_re_net"
 
 [dependencies]
-bomberust-core = { path = "../core", features = ["serde"] }
-bomberust-bots = { path = "../bots" }
+eksplode-re-core = { path = "../core", features = ["serde"] }
+eksplode-re-bots = { path = "../bots" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 

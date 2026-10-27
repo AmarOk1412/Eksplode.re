@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use bomberust_net::look::{resolve_colour, Colour, Face, Gender, Head, Look};
+use eksplode_re_net::look::{resolve_colour, Colour, Face, Gender, Head, Look};
 use serde_json::json;
 
 #[test]

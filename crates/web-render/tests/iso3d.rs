@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_web_render::commands::{Command, Kind};
-use bomberust_web_render::iso3d::*;
-use bomberust_web_render::look::{default_for, Face, Gender, Head, Look};
-use bomberust_web_render::sprites::{player_skin, Rgb};
+use eksplode_re_web_render::commands::{Command, Kind};
+use eksplode_re_web_render::iso3d::*;
+use eksplode_re_web_render::look::{default_for, Face, Gender, Head, Look};
+use eksplode_re_web_render::sprites::{player_skin, Rgb};
 
 fn look(colour: usize, head: Head, face: Face) -> Look {
     Look {

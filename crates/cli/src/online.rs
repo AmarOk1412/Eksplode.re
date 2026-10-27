@@ -4,9 +4,9 @@ use std::net::SocketAddr;
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
-use bomberust_core::{Controller, Lobby, Observation, Outcome};
-use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg};
-use bomberust_net::{Client, Host};
+use eksplode_re_core::{Controller, Lobby, Observation, Outcome};
+use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg};
+use eksplode_re_net::{Client, Host};
 use ratatui::crossterm::event::{KeyCode, KeyEvent};
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -267,12 +267,12 @@ pub fn render(frame: &mut Frame, online: &Online) {
 
 fn render_lobby(frame: &mut Frame, online: &Online) {
     let area = frame.area();
-    let ids = bomberust_core::PlayerId::all();
+    let ids = eksplode_re_core::PlayerId::all();
     let mut lines: Vec<Line> = Vec::new();
     if let Some(addr) = online.host_addr() {
         lines.push(Line::from(format!("Hosting on port {}", addr.port())));
         lines.push(Line::from(format!(
-            "Others join with: bomberust-cli join <your-ip>:{}",
+            "Others join with: eksplode-re-cli join <your-ip>:{}",
             addr.port()
         )));
         if let Some(url) = &online.web_url {
@@ -285,7 +285,7 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
             online.lobby.settings.label(),
             Style::default().add_modifier(Modifier::BOLD),
         )));
-        if online.lobby.settings.mode == bomberust_core::Mode::Chaser {
+        if online.lobby.settings.mode == eksplode_re_core::Mode::Chaser {
             lines.push(Line::from(
                 "one chaser, three runners: roles are drawn at the start",
             ));
@@ -303,8 +303,11 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
             }
         };
         let me = if Some(i) == online.slot { " (you)" } else { "" };
-        let team = if online.lobby.settings.mode == bomberust_core::Mode::Team {
-            format!("  [team {}]", team_letter(bomberust_core::team::team_of(i)))
+        let team = if online.lobby.settings.mode == eksplode_re_core::Mode::Team {
+            format!(
+                "  [team {}]",
+                team_letter(eksplode_re_core::team::team_of(i))
+            )
         } else {
             String::new()
         };
@@ -337,7 +340,7 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
     }
     let height = (lines.len() as u16 + 2).min(area.height);
     frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title(" Bomberust online ")),
+        Paragraph::new(lines).block(Block::bordered().title(" Eksplode.re online ")),
         Rect::new(area.x, area.y, area.width, height),
     );
 }

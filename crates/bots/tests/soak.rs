@@ -2,9 +2,9 @@
 
 mod common;
 
-use bomberust_bots::{Bot, DefaultBot};
-use bomberust_core::{blast, step, Config, GameState, Outcome, Phase, PlayerInput, Pos};
 use common::*;
+use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_core::{blast, step, Config, GameState, Outcome, Phase, PlayerInput, Pos};
 use std::collections::{BTreeSet, VecDeque};
 
 fn play(seed: u64) -> GameState {
@@ -54,11 +54,11 @@ fn escape_exists(s: &GameState, from: Pos, bomb_range: u8, max_moves: u32) -> bo
         if d == max_moves {
             continue;
         }
-        for dir in bomberust_core::Dir::ALL {
+        for dir in eksplode_re_core::Dir::ALL {
             let Some(n) = p.step(dir, s.arena.width(), s.arena.height()) else {
                 continue;
             };
-            if s.arena.tile(n) == bomberust_core::Tile::Floor && seen.insert(n) {
+            if s.arena.tile(n) == eksplode_re_core::Tile::Floor && seen.insert(n) {
                 queue.push_back((n, d + 1));
             }
         }
@@ -79,7 +79,7 @@ fn us2_as2_bots_escape_in_at_least_95_percent_of_scripted_scenarios() {
         let mut s = GameState::new(open, seed, active).unwrap();
         let me = s.players[0].pos;
         let range = s.players[1].range;
-        s.bombs.push(bomberust_core::Bomb {
+        s.bombs.push(eksplode_re_core::Bomb {
             owner: pid(1),
             pos: me,
             ticks_left: 30,
@@ -164,7 +164,7 @@ fn f4_us2_four_bot_normal_rounds_end_in_the_pattern_with_one_survivor_or_a_draw(
 
 #[test]
 fn f4_sc010_the_large_board_keeps_the_tick_rate_with_four_bots() {
-    use bomberust_core::{BoardSize, RoomSettings};
+    use eksplode_re_core::{BoardSize, RoomSettings};
     let config = RoomSettings {
         size: BoardSize::Large,
         ..RoomSettings::default()
@@ -200,7 +200,7 @@ fn f4_sc010_the_large_board_keeps_the_tick_rate_with_four_bots() {
 fn f4_us3_four_bot_team_rounds_always_end_with_a_team_result() {
     for friendly_fire in [true, false] {
         let config = Config {
-            mode: bomberust_core::Mode::Team,
+            mode: eksplode_re_core::Mode::Team,
             friendly_fire,
             round_limit_ticks: 600,
             closing_ticks: 300,
@@ -232,7 +232,7 @@ fn f4_us3_four_bot_team_rounds_always_end_with_a_team_result() {
 #[test]
 fn f4_us4_soak_chaser_two_hundred_rounds_end_in_time_and_nobody_gets_stuck() {
     let config = Config {
-        mode: bomberust_core::Mode::Chaser,
+        mode: eksplode_re_core::Mode::Chaser,
         round_limit_ticks: 900,
         ..Config::default()
     };
@@ -252,22 +252,22 @@ fn f4_us4_soak_chaser_two_hundred_rounds_end_in_time_and_nobody_gets_stuck() {
             let ev = step(&mut s, &inputs);
             spawned += ev
                 .iter()
-                .filter(|e| matches!(e, bomberust_core::Event::PowerUpSpawned { .. }))
+                .filter(|e| matches!(e, eksplode_re_core::Event::PowerUpSpawned { .. }))
                 .count() as u32;
             chaser_bombs += ev
                 .iter()
-                .filter(|e| matches!(e, bomberust_core::Event::BombPlaced { player, .. } if s.players[player.index()].role == bomberust_core::Role::Chaser))
+                .filter(|e| matches!(e, eksplode_re_core::Event::BombPlaced { player, .. } if s.players[player.index()].role == eksplode_re_core::Role::Chaser))
                 .count() as u32;
             for i in 0..4 {
                 let moved = s.players[i].pos != last_pos[i];
-                let bombed = ev.iter().any(|e| matches!(e, bomberust_core::Event::BombPlaced { player, .. } if player.index() == i));
+                let bombed = ev.iter().any(|e| matches!(e, eksplode_re_core::Event::BombPlaced { player, .. } if player.index() == i));
                 // a runner closed in by blocks and a bomb cannot go anywhere: that is not stuck
-                let exit = bomberust_core::Dir::ALL.iter().any(|d| {
+                let exit = eksplode_re_core::Dir::ALL.iter().any(|d| {
                     s.players[i]
                         .pos
                         .step(*d, s.arena.width(), s.arena.height())
                         .is_some_and(|n| {
-                            s.arena.tile(n) == bomberust_core::Tile::Floor
+                            s.arena.tile(n) == eksplode_re_core::Tile::Floor
                                 && !s.bombs.iter().any(|b| b.pos == n && b.flight.is_none())
                                 && !s.players.iter().any(|o| o.alive && o.pos == n)
                         })

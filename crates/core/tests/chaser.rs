@@ -2,11 +2,11 @@
 
 mod common;
 
-use bomberust_core::{
+use common::*;
+use eksplode_re_core::{
     step, Arena, BoardSize, Config, DropTable, Event, Flame, GameState, Mode, Outcome, Phase,
     PlayerInput, PowerUpKind, Rng, Role, RoomSettings, Tile,
 };
-use common::*;
 
 fn chaser_config() -> Config {
     Config {
@@ -171,7 +171,7 @@ fn the_chaser_arena_has_fewer_pillars_and_blocks_and_is_fully_reachable() {
             let mut seen = std::collections::BTreeSet::from([centre]);
             let mut queue = std::collections::VecDeque::from([centre]);
             while let Some(p) = queue.pop_front() {
-                for d in bomberust_core::Dir::ALL {
+                for d in eksplode_re_core::Dir::ALL {
                     if let Some(n) = p.step(d, w, h) {
                         if s.arena.tile(n) != Tile::Wall && seen.insert(n) {
                             queue.push_back(n);
@@ -500,7 +500,7 @@ fn f4_us4_as7_runners_use_kick_punch_and_speed_as_in_the_other_modes() {
     let mut s = duel_state(chaser_config());
     s.players[3].pos = pos(1, 3);
     s.players[3].has_punch = true;
-    s.players[3].facing = bomberust_core::Dir::Right;
+    s.players[3].facing = eksplode_re_core::Dir::Right;
     add_bomb(&mut s, 0, 2, 3, 100);
     let mut inputs = idle();
     inputs[3] = PlayerInput {
@@ -520,7 +520,7 @@ fn f4_us4_as7_runners_use_kick_punch_and_speed_as_in_the_other_modes() {
     add_bomb(&mut s, 0, 2, 3, 100);
     let mut inputs = idle();
     inputs[3] = PlayerInput {
-        mv: Some(bomberust_core::Dir::Right),
+        mv: Some(eksplode_re_core::Dir::Right),
         ..PlayerInput::default()
     };
     let ev = step(&mut s, &inputs);
@@ -535,7 +535,7 @@ fn f4_us4_as7_runners_use_kick_punch_and_speed_as_in_the_other_modes() {
     let before = s.players[1].move_cooldown;
     let mut inputs = idle();
     inputs[1] = PlayerInput {
-        mv: Some(bomberust_core::Dir::Down),
+        mv: Some(eksplode_re_core::Dir::Down),
         ..PlayerInput::default()
     };
     step(&mut s, &inputs);
@@ -543,7 +543,7 @@ fn f4_us4_as7_runners_use_kick_punch_and_speed_as_in_the_other_modes() {
 }
 
 fn powerup_at(s: &mut GameState, x: u8, y: u8, kind: PowerUpKind) {
-    s.powerups.push(bomberust_core::PowerUp {
+    s.powerups.push(eksplode_re_core::PowerUp {
         pos: pos(x, y),
         kind,
     });

@@ -1,7 +1,7 @@
 mod common;
 
-use bomberust_core::{step, Config, Dir, Event, PlayerInput, PowerUp, PowerUpKind};
 use common::*;
+use eksplode_re_core::{step, Config, Dir, Event, PlayerInput, PowerUp, PowerUpKind};
 
 fn go(d: Dir) -> [PlayerInput; 4] {
     let mut i = idle();
@@ -22,7 +22,7 @@ fn us1_as6_destroyed_block_drops_a_powerup_by_the_table() {
     let mut s = state(&WITH_BLOCK, two_safe());
     let mut chances = [0.0; 8];
     chances[1] = 1.0; // only the flame
-    s.set_drops(bomberust_core::DropTable::new(chances).unwrap())
+    s.set_drops(eksplode_re_core::DropTable::new(chances).unwrap())
         .unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     let ev = step(&mut s, &idle());
@@ -42,7 +42,7 @@ fn us1_as6_destroyed_block_drops_a_powerup_by_the_table() {
 #[test]
 fn destroyed_block_with_an_empty_table_drops_nothing() {
     let mut s = state(&WITH_BLOCK, two_safe());
-    s.set_drops(bomberust_core::DropTable::new([0.0; 8]).unwrap())
+    s.set_drops(eksplode_re_core::DropTable::new([0.0; 8]).unwrap())
         .unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     step(&mut s, &idle());

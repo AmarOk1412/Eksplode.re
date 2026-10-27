@@ -175,7 +175,7 @@ the last direction faced.
 
 ## Forcing a power (developer mode)
 
-Start the server with `--dev` (or `bomberust-cli host --dev`), join from the browser as the lobby
+Start the server with `--dev` (or `eksplode-re-cli host --dev`), join from the browser as the lobby
 owner and use the DEV MODE panel: set the slider of a power to 100 % and the others to 0 % and
 every block destroyed from then on drops that power. The "pause bots" button freezes the bots so
 you can try a punch in peace. Other players cannot use the panel; without `--dev` there is none.

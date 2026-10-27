@@ -11,7 +11,7 @@ fn us3_as3_joining_nobody_exits_with_status_1_and_a_clear_message() {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap().port()
     };
-    let out = Command::new(env!("CARGO_BIN_EXE_bomberust-cli"))
+    let out = Command::new(env!("CARGO_BIN_EXE_eksplode-re-cli"))
         .args(["join", &format!("127.0.0.1:{port}")])
         .output()
         .unwrap();

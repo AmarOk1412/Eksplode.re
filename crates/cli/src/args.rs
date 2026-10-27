@@ -3,15 +3,15 @@
 use std::fmt;
 use std::net::IpAddr;
 
-use bomberust_core::{BoardSize, Mode, RoomSettings, MINUTES};
-use bomberust_net::protocol::{valid_name, DEFAULT_PORT};
+use eksplode_re_core::{BoardSize, Mode, RoomSettings, MINUTES};
+use eksplode_re_net::protocol::{valid_name, DEFAULT_PORT};
 
 pub const USAGE: &str = "\
 Usage:
-  bomberust-cli [OPTIONS]                          play on this machine
-  bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
+  eksplode-re-cli [OPTIONS]                          play on this machine
+  eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
                      [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
-  bomberust-cli join <ADDR[:PORT]> [--name NAME]
+  eksplode-re-cli join <ADDR[:PORT]> [--name NAME]
 
 Local options:
   --players <N>   number of local human players, 0-4 (default 1)

@@ -38,7 +38,7 @@ test("the glue loads the fixture and reads commands back", async () => {
 
 test("the glue refuses a module with another stride", async () => {
   const ex = await exportsOfModule();
-  assert.throws(() => createRenderer({ ...ex, bomberust_stride: () => 12 }), /out of sync/i);
+  assert.throws(() => createRenderer({ ...ex, eksplode_re_stride: () => 12 }), /out of sync/i);
 });
 
 test("the glue reports load errors with words", async () => {

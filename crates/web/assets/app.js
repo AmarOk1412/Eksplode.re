@@ -1,4 +1,4 @@
-// Bomberust page: lobby, keyboard, WebSocket and canvas painting of the commands returned by the
+// Eksplode.re page: lobby, keyboard, WebSocket and canvas painting of the commands returned by the
 // WebAssembly graphics module. The page never decides game rules: it sends key states as `Input`
 // messages and draws the `Snapshot`s the server sends.
 //
@@ -398,7 +398,7 @@ const LOAD_ERRORS = { 0: "ok", 1: "invalid text", 2: "invalid game data", 3: "ar
 
 /** Wraps the exports of the WebAssembly module (see contracts/wasm-render-api.md). */
 export function createRenderer(ex) {
-  const stride = ex.bomberust_stride();
+  const stride = ex.eksplode_re_stride();
   if (stride !== 16) {
     throw new Error("The graphics module and the page are out of sync (stride " + stride + ").");
   }
@@ -407,46 +407,46 @@ export function createRenderer(ex) {
     load(text) {
       const bytes = encoder.encode(text);
       const size = Math.max(bytes.length, 1);
-      const ptr = ex.bomberust_alloc(size);
+      const ptr = ex.eksplode_re_alloc(size);
       if (ptr === 0) return 4;
       new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
-      const code = ex.bomberust_load(ptr, bytes.length);
-      ex.bomberust_free(ptr, size);
+      const code = ex.eksplode_re_load(ptr, bytes.length);
+      ex.eksplode_re_free(ptr, size);
       return code;
     },
     describe(code) {
       return LOAD_ERRORS[code] ?? "unknown error";
     },
     frame(width, height, alpha) {
-      const count = ex.bomberust_frame(width, height, alpha);
-      const data = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+      const count = ex.eksplode_re_frame(width, height, alpha);
+      const data = new Float32Array(ex.memory.buffer, ex.eksplode_re_output_ptr(), count * stride);
       return { count, stride, data };
     },
     pick(x, y) {
-      return ex.bomberust_pick_tile(x, y);
+      return ex.eksplode_re_pick_tile(x, y);
     },
     /** Gives the module the looks of the four slots (plain objects). */
     setLooks(looks) {
-      if (!ex.bomberust_set_looks) return -1;
+      if (!ex.eksplode_re_set_looks) return -1;
       const bytes = encoder.encode(looksJson(looks));
       const size = Math.max(bytes.length, 1);
-      const ptr = ex.bomberust_alloc(size);
+      const ptr = ex.eksplode_re_alloc(size);
       if (ptr === 0) return 4;
       new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
-      const code = ex.bomberust_set_looks(ptr, bytes.length);
-      ex.bomberust_free(ptr, size);
+      const code = ex.eksplode_re_set_looks(ptr, bytes.length);
+      ex.eksplode_re_free(ptr, size);
       return code;
     },
     /** The semi-3D character of a slot, `phase` seconds into its animation. */
     portrait3d(slot, width, height, phase) {
-      const count = ex.bomberust_portrait3d ? ex.bomberust_portrait3d(slot, width, height, phase) : 0;
-      const data = new Float32Array(ex.memory.buffer, count ? ex.bomberust_output_ptr() : 0, count * stride);
+      const count = ex.eksplode_re_portrait3d ? ex.eksplode_re_portrait3d(slot, width, height, phase) : 0;
+      const data = new Float32Array(ex.memory.buffer, count ? ex.eksplode_re_output_ptr() : 0, count * stride);
       return { count, stride, data };
     },
     /** Commands of a character fitted into width x height pixels; `rows` 0 is the whole figure. */
     portrait(slot, width, height, rows) {
-      const count = ex.bomberust_portrait(slot, width, height, rows);
-      const data = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+      const count = ex.eksplode_re_portrait(slot, width, height, rows);
+      const data = new Float32Array(ex.memory.buffer, ex.eksplode_re_output_ptr(), count * stride);
       return { count, stride, data };
     },
   };
@@ -1078,7 +1078,7 @@ function start() {
       return;
     }
     try {
-      const response = await fetch("/bomberust_render.wasm");
+      const response = await fetch("/eksplode_re_render.wasm");
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {});
       renderer = createRenderer(instance.exports);

@@ -1,12 +1,12 @@
 mod common;
 
-use bomberust_bots::{find_path, DangerMap, PathRequest};
-use bomberust_core::Dir;
 use common::*;
+use eksplode_re_bots::{find_path, DangerMap, PathRequest};
+use eksplode_re_core::Dir;
 
 fn path(
-    s: &bomberust_core::GameState,
-    goal: &dyn Fn(bomberust_core::Pos) -> bool,
+    s: &eksplode_re_core::GameState,
+    goal: &dyn Fn(eksplode_re_core::Pos) -> bool,
 ) -> Option<Vec<Dir>> {
     let o = obs(s, 0);
     let d = DangerMap::from_observation(&o);
@@ -94,7 +94,7 @@ fn goals_are_respected() {
 fn f4_a_path_never_ends_on_an_announced_square() {
     let mut s = duel(&OPEN, (3, 3), (5, 5));
     for (x, y) in [(3, 3), (3, 2), (2, 3), (4, 3), (3, 4)] {
-        s.closing.falling.push(bomberust_core::Falling {
+        s.closing.falling.push(eksplode_re_core::Falling {
             pos: pos(x, y),
             ticks_left: 30,
         });

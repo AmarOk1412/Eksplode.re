@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use bomberust_cli::args::{parse, Command, LocalOptions, UsageError};
+use eksplode_re_cli::args::{parse, Command, LocalOptions, UsageError};
 
 fn args(list: &[&str]) -> Result<Command, UsageError> {
     parse(list.iter().map(|s| s.to_string()))
@@ -100,7 +100,7 @@ fn an_empty_start_is_fine_with_the_lobby() {
 
 mod network {
     use super::*;
-    use bomberust_cli::args::{HostOptions, JoinOptions};
+    use eksplode_re_cli::args::{HostOptions, JoinOptions};
 
     fn host(port: u16, bots: u8, name: &str, seed: Option<u64>) -> Result<Command, UsageError> {
         Ok(Command::Host(HostOptions {
@@ -132,7 +132,7 @@ mod network {
             panic!();
         };
         assert!(!o.dev);
-        assert!(bomberust_cli::args::USAGE.contains("--dev"));
+        assert!(eksplode_re_cli::args::USAGE.contains("--dev"));
     }
 
     fn join(addr: &str, name: &str) -> Result<Command, UsageError> {
@@ -259,8 +259,8 @@ mod network {
 
 mod room_options {
     use super::*;
-    use bomberust_cli::args::{HostOptions, USAGE};
-    use bomberust_core::{BoardSize, Mode, RoomSettings};
+    use eksplode_re_cli::args::{HostOptions, USAGE};
+    use eksplode_re_core::{BoardSize, Mode, RoomSettings};
 
     fn host_opts(list: &[&str]) -> HostOptions {
         let mut full = vec!["host"];

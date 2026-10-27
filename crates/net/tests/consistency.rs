@@ -2,10 +2,10 @@ mod common;
 
 use std::time::{Duration, Instant};
 
-use bomberust_core::{Config, Dir, Event, Outcome};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_net::Client;
 use common::*;
+use eksplode_re_core::{Config, Dir, Event, Outcome};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::Client;
 
 /// Walks a column away from its corner and back, timing how long each step takes to show up in a snapshot.
 fn drive(c: Client, slot: usize) -> (Vec<Duration>, Option<Outcome>, u32) {

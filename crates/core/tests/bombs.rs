@@ -1,7 +1,7 @@
 mod common;
 
-use bomberust_core::{step, Config, Dir, Event, GameState, PlayerInput, Pos, Tile};
 use common::*;
+use eksplode_re_core::{step, Config, Dir, Event, GameState, PlayerInput, Pos, Tile};
 use std::collections::BTreeSet;
 
 fn flames(s: &GameState) -> BTreeSet<Pos> {

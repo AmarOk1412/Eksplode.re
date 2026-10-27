@@ -17,7 +17,8 @@ export const SIZE_DIMENSIONS = { small: [15, 13], medium: [19, 15], large: [25, 
 export const MINUTES = [2, 3, 5, 10];
 export const MAX_NAME = 24;
 
-export const ROOM_KEY = "bomberust.room.v1";
+export const ROOM_KEY = "eksplode.re.room.v1";
+const LEGACY_ROOM_KEY = "bomberust.room.v1";
 
 /** The room of the game as it was before rooms: Normal, small board, 3 minutes. */
 export function defaultRoom() {
@@ -85,7 +86,7 @@ export function setRoomMessage(room) {
 /** The settings saved on this device, or `fallback` when nothing usable is saved. */
 export function loadRoom(storage, fallback = defaultRoom()) {
   try {
-    const text = storage?.getItem(ROOM_KEY);
+    const text = storage?.getItem(ROOM_KEY) ?? storage?.getItem(LEGACY_ROOM_KEY);
     if (text) return sanitizeRoom(JSON.parse(text));
   } catch {
     // unreadable storage or broken JSON: use the fallback

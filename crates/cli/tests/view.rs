@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_cli::view::{render, required_size, ViewContext};
-use bomberust_core::{
+use eksplode_re_cli::view::{render, required_size, ViewContext};
+use eksplode_re_core::{
     Arena, Bomb, Config, Flame, GameState, Outcome, Phase, PlayerId, Pos, PowerUp, PowerUpKind,
 };
 use ratatui::backend::TestBackend;
@@ -173,15 +173,15 @@ fn f3_us2_as9_a_bomb_in_flight_looks_different_from_a_landed_one() {
         pos: Pos::new(3, 3),
         ticks_left: 30,
         range: 2,
-        flight: Some(bomberust_core::Flight {
-            dir: bomberust_core::Dir::Right,
+        flight: Some(eksplode_re_core::Flight {
+            dir: eksplode_re_core::Dir::Right,
             hop_left: 2,
             origin: Pos::new(3, 3),
         }),
         slide: None,
     });
     let obs = st.observe(pid(0));
-    let (glyph, _) = bomberust_cli::view::cell(&obs, Pos::new(3, 3));
+    let (glyph, _) = eksplode_re_cli::view::cell(&obs, Pos::new(3, 3));
     assert_eq!(glyph, "(~");
 }
 
@@ -189,11 +189,11 @@ fn f3_us2_as9_a_bomb_in_flight_looks_different_from_a_landed_one() {
 fn f3_us2_as9_status_lines_list_the_punch_and_the_malus_with_seconds() {
     let mut st = base();
     st.players[0].has_punch = true;
-    st.players[0].malus = Some(bomberust_core::ActiveMalus {
+    st.players[0].malus = Some(eksplode_re_core::ActiveMalus {
         kind: PowerUpKind::Slow,
         ticks_left: 7 * 20 - 3,
     });
-    st.players[1].malus = Some(bomberust_core::ActiveMalus {
+    st.players[1].malus = Some(eksplode_re_core::ActiveMalus {
         kind: PowerUpKind::HyperSpeed,
         ticks_left: 4 * 20,
     });
@@ -201,7 +201,7 @@ fn f3_us2_as9_status_lines_list_the_punch_and_the_malus_with_seconds() {
     assert!(s.contains("punch"), "{s}");
     assert!(s.contains("slow 7s"), "{s}");
     assert!(s.contains("hyper 4s"), "{s}");
-    st.players[1].malus = Some(bomberust_core::ActiveMalus {
+    st.players[1].malus = Some(eksplode_re_core::ActiveMalus {
         kind: PowerUpKind::SmallBomb,
         ticks_left: 9 * 20 - 19,
     });
@@ -210,7 +210,7 @@ fn f3_us2_as9_status_lines_list_the_punch_and_the_malus_with_seconds() {
 
 #[test]
 fn f3_us2_as12_a_sliding_bomb_shows_its_direction() {
-    use bomberust_core::{Dir, Slide};
+    use eksplode_re_core::{Dir, Slide};
     for (dir, glyph) in [
         (Dir::Right, "(>"),
         (Dir::Left, "(<"),
@@ -227,7 +227,7 @@ fn f3_us2_as12_a_sliding_bomb_shows_its_direction() {
             slide: Some(Slide { dir, step_left: 2 }),
         });
         let obs = st.observe(pid(0));
-        let (g, _) = bomberust_cli::view::cell(&obs, Pos::new(3, 3));
+        let (g, _) = eksplode_re_cli::view::cell(&obs, Pos::new(3, 3));
         assert_eq!(g, glyph, "{dir:?}");
     }
 }
@@ -253,7 +253,7 @@ fn f4_us2_as6_the_announcement_the_landed_blocks_and_the_time_left_are_drawn() {
         "time left in minutes and seconds:\n{plain}"
     );
 
-    st.closing.falling.push(bomberust_core::Falling {
+    st.closing.falling.push(eksplode_re_core::Falling {
         pos: Pos::new(3, 3),
         ticks_left: 12,
     });
@@ -263,7 +263,7 @@ fn f4_us2_as6_the_announcement_the_landed_blocks_and_the_time_left_are_drawn() {
     // a landed block is an ordinary wall
     st.closing.falling.clear();
     st.arena
-        .set_tile(Pos::new(3, 3), bomberust_core::Tile::Wall);
+        .set_tile(Pos::new(3, 3), eksplode_re_core::Tile::Wall);
     let landed = screen(&st, &ctx());
     assert!(!landed.contains("!!"));
     assert_eq!(
@@ -279,7 +279,7 @@ fn f4_us2_as6_the_announcement_the_landed_blocks_and_the_time_left_are_drawn() {
 #[test]
 fn a_player_on_an_announced_square_is_still_drawn_and_marked() {
     let mut st = base();
-    st.closing.falling.push(bomberust_core::Falling {
+    st.closing.falling.push(eksplode_re_core::Falling {
         pos: Pos::new(1, 1),
         ticks_left: 5,
     });
@@ -287,8 +287,8 @@ fn a_player_on_an_announced_square_is_still_drawn_and_marked() {
     assert!(s.contains("P1"));
 }
 
-fn state_of(size: bomberust_core::BoardSize) -> GameState {
-    let config = bomberust_core::RoomSettings {
+fn state_of(size: eksplode_re_core::BoardSize) -> GameState {
+    let config = eksplode_re_core::RoomSettings {
         size,
         ..Default::default()
     }
@@ -298,7 +298,7 @@ fn state_of(size: bomberust_core::BoardSize) -> GameState {
 
 #[test]
 fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
-    use bomberust_core::BoardSize;
+    use eksplode_re_core::BoardSize;
     let need = |size| required_size(&state_of(size).observe(pid(0)));
     assert_eq!(need(BoardSize::Small), (40, 20));
     assert_eq!(need(BoardSize::Medium), (40, 22));
@@ -321,7 +321,7 @@ fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
 
 fn team_game() -> GameState {
     let config = Config {
-        mode: bomberust_core::Mode::Team,
+        mode: eksplode_re_core::Mode::Team,
         ..Config::default()
     };
     let arena = Arena::from_rows(&ROWS).unwrap();
@@ -384,7 +384,7 @@ fn normal_mode_status_lines_have_no_team_marks() {
 
 fn chaser_game() -> GameState {
     let config = Config {
-        mode: bomberust_core::Mode::Chaser,
+        mode: eksplode_re_core::Mode::Chaser,
         ..Config::default()
     };
     let arena = Arena::from_rows(&ROWS).unwrap();

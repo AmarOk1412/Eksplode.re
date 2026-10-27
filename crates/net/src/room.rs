@@ -2,7 +2,7 @@
 //! field becomes its default and a value that is not an object gives the defaults, so an old
 //! page, a typo or a hostile message never breaks a room.
 
-use bomberust_core::{BoardSize, Mode, RoomSettings};
+use eksplode_re_core::{BoardSize, Mode, RoomSettings};
 use serde_json::Value;
 
 /// The settings in `value`; never fails. The mode is not checked against the playable modes

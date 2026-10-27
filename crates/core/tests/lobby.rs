@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_core::lobby::{Controller, Lobby, LobbyError};
+use eksplode_re_core::lobby::{Controller, Lobby, LobbyError};
 
 #[test]
 fn us2_as1_a_slot_can_be_given_to_a_bot() {

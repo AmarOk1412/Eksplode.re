@@ -2,10 +2,10 @@ mod common;
 
 use std::net::{IpAddr, Ipv4Addr};
 
-use bomberust_web::args::{parse, Command};
-use bomberust_web::origin::{cors_header, origin_allowed, warnings, AllowedOrigins};
-use bomberust_web::ServerOptions;
 use common::*;
+use eksplode_re_web::args::{parse, Command};
+use eksplode_re_web::origin::{cors_header, origin_allowed, warnings, AllowedOrigins};
+use eksplode_re_web::ServerOptions;
 
 const LOOPBACK: IpAddr = IpAddr::V4(Ipv4Addr::LOCALHOST);
 const LAN: IpAddr = IpAddr::V4(Ipv4Addr::new(192, 168, 1, 7));

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use bomberust_net::HostHandle;
+use eksplode_re_net::HostHandle;
 
 use crate::assets::{self, CSP};
 use crate::origin::{cors_header, origin_allowed, AllowedOrigins};

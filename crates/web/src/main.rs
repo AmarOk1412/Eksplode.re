@@ -1,9 +1,9 @@
 use std::process::ExitCode;
 use std::sync::mpsc;
 
-use bomberust_web::args::{parse, Command, USAGE};
-use bomberust_web::origin::warnings;
-use bomberust_web::Server;
+use eksplode_re_web::args::{parse, Command, USAGE};
+use eksplode_re_web::origin::warnings;
+use eksplode_re_web::Server;
 
 fn main() -> ExitCode {
     match parse(std::env::args().skip(1)) {
@@ -12,7 +12,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Command::Version) => {
-            println!("bomberust-server {}", env!("CARGO_PKG_VERSION"));
+            println!("eksplode-re-server {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         Ok(Command::Run(opts)) => {

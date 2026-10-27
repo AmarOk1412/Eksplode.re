@@ -31,10 +31,10 @@ fn client_ips(bound: IpAddr) -> Vec<IpAddr> {
     ips
 }
 
-/// What `bomberust-server` prints when it is ready.
+/// What `eksplode-re-server` prints when it is ready.
 pub fn banner(opts: &ServerOptions, http: SocketAddr, game: SocketAddr) -> String {
     let ips = client_ips(http.ip());
-    let mut out = String::from("Bomberust server running\n");
+    let mut out = String::from("Eksplode.re server running\n");
     for (i, ip) in ips.iter().enumerate() {
         let label = if i == 0 {
             "  Web page:        "
@@ -54,7 +54,7 @@ pub fn banner(opts: &ServerOptions, http: SocketAddr, game: SocketAddr) -> Strin
             "                   "
         };
         out.push_str(&format!(
-            "{label}bomberust-cli join {}:{}\n",
+            "{label}eksplode-re-cli join {}:{}\n",
             host_part(*ip),
             game.port()
         ));

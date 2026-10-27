@@ -2,8 +2,8 @@
 
 mod common;
 
-use bomberust_core::{step, Config, Controller, Flame, GameState, Lobby, Mode, Outcome, Phase};
 use common::*;
+use eksplode_re_core::{step, Config, Controller, Flame, GameState, Lobby, Mode, Outcome, Phase};
 
 fn team_config() -> Config {
     Config {
@@ -69,7 +69,7 @@ fn f4_us3_as2_a_team_wins_when_the_other_team_is_eliminated() {
     let ev = step(&mut s, &idle());
     assert_eq!(alive(&s), [true, true, false, false]);
     assert_eq!(s.phase, Phase::Ended(Outcome::TeamWin(0)));
-    assert!(ev.contains(&bomberust_core::Event::RoundEnded(Outcome::TeamWin(0))));
+    assert!(ev.contains(&eksplode_re_core::Event::RoundEnded(Outcome::TeamWin(0))));
 
     // one member of each team burns: the round goes on
     let mut s = team_state(team_config());
@@ -171,7 +171,7 @@ fn friendly_fire_off_chain_reactions_still_work_and_use_the_owner_of_each_bomb()
     let ev = step(&mut s, &idle());
     let exploded = ev
         .iter()
-        .filter(|e| matches!(e, bomberust_core::Event::BombExploded { .. }))
+        .filter(|e| matches!(e, eksplode_re_core::Event::BombExploded { .. }))
         .count();
     assert_eq!(exploded, 2, "the chain reaction goes off");
     assert!(
@@ -239,7 +239,7 @@ fn the_end_pattern_runs_in_team_mode_and_ends_in_a_team_win() {
     let mut s = state_with(config, &OPEN, starts);
     let mut started = false;
     while s.phase == Phase::Playing {
-        started |= step(&mut s, &idle()).contains(&bomberust_core::Event::PatternStarted);
+        started |= step(&mut s, &idle()).contains(&eksplode_re_core::Event::PatternStarted);
     }
     assert!(started);
     assert_eq!(s.phase, Phase::Ended(Outcome::TeamWin(0)));

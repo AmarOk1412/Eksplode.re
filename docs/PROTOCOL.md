@@ -1,11 +1,11 @@
 # Wire protocol (version 1)
 
-Bomberust has one protocol and two transports. A terminal client and a browser tab exchange
+Eksplode.re has one protocol and two transports. A terminal client and a browser tab exchange
 exactly the same messages with the match host; only the framing differs.
 
 | Transport | Used by | Framing |
 |-----------|---------|---------|
-| TCP, default port 7878 | `bomberust-cli join` | one JSON object per line (`\n` terminated, UTF-8) |
+| TCP, default port 7878 | `eksplode-re-cli join` | one JSON object per line (`\n` terminated, UTF-8) |
 | WebSocket `/ws` on the web port (default 8080) | the browser page | one JSON object per **text** frame |
 
 Every message is an object `{"type": "<Variant>", ...fields}`. The Rust definitions live in
@@ -187,6 +187,6 @@ and the protocol version stays `1`. A change that breaks an existing message bum
 
 ## Tests
 
-`cargo test -p bomberust-net` covers the codec, lobby rules, loopback matches, latency and
-agreement of all clients on the result. `cargo test -p bomberust-web` repeats the join, start,
+`cargo test -p eksplode-re-net` covers the codec, lobby rules, loopback matches, latency and
+agreement of all clients on the result. `cargo test -p eksplode-re-web` repeats the join, start,
 play and result flows over WebSocket and mixes browser and terminal players in one match.

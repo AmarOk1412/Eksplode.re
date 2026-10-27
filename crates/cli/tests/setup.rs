@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_cli::setup::{render, SetupScreen};
-use bomberust_core::{BoardSize, Mode, RoomSettings};
+use eksplode_re_cli::setup::{render, SetupScreen};
+use eksplode_re_core::{BoardSize, Mode, RoomSettings};
 use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::Terminal;
@@ -76,10 +76,10 @@ fn up_and_down_select_and_left_and_right_change() {
 fn the_mode_cycles_through_the_playable_modes_only() {
     let mut s = screen();
     keys(&mut s, &[KeyCode::Down, KeyCode::Right]);
-    assert!(bomberust_core::PLAYABLE.contains(&s.settings.mode));
+    assert!(eksplode_re_core::PLAYABLE.contains(&s.settings.mode));
     for _ in 0..5 {
         keys(&mut s, &[KeyCode::Right]);
-        assert!(bomberust_core::PLAYABLE.contains(&s.settings.mode));
+        assert!(eksplode_re_core::PLAYABLE.contains(&s.settings.mode));
     }
 }
 
@@ -90,7 +90,7 @@ fn friendly_fire_is_a_row_only_in_team_mode() {
         ..RoomSettings::default()
     });
     let t = text(&s);
-    if bomberust_core::PLAYABLE.contains(&Mode::Team) {
+    if eksplode_re_core::PLAYABLE.contains(&Mode::Team) {
         assert!(t.contains("Friendly fire") && t.contains("on"), "{t}");
         keys(
             &mut s,

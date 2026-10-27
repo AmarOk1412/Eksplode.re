@@ -1,8 +1,8 @@
 use std::net::{IpAddr, Ipv4Addr};
 
-use bomberust_web::args::{parse, Command, UsageError};
-use bomberust_web::origin::AllowedOrigins;
-use bomberust_web::ServerOptions;
+use eksplode_re_web::args::{parse, Command, UsageError};
+use eksplode_re_web::origin::AllowedOrigins;
+use eksplode_re_web::ServerOptions;
 
 fn args(list: &[&str]) -> Result<Command, UsageError> {
     parse(list.iter().map(|s| s.to_string()))
@@ -157,12 +157,12 @@ fn f3_us4_as1_dev_mode_is_off_by_default_and_parses_alone_or_with_other_options(
     let o = opts(&["--bots", "2", "--dev", "--http-port", "9000"]);
     assert!(o.dev);
     assert_eq!((o.bots, o.http_port), (2, 9000));
-    assert!(bomberust_web::args::USAGE.contains("--dev"));
+    assert!(eksplode_re_web::args::USAGE.contains("--dev"));
 }
 
 #[test]
 fn f4_room_options_set_the_defaults_of_the_creation_menu() {
-    use bomberust_core::{BoardSize, Mode};
+    use eksplode_re_core::{BoardSize, Mode};
     let o = opts(&[
         "--room-name",
         "Friday",
@@ -180,7 +180,7 @@ fn f4_room_options_set_the_defaults_of_the_creation_menu() {
     assert_eq!(o.room.size, BoardSize::Large);
     assert_eq!(o.room.minutes, 10);
     assert!(!o.room.friendly_fire);
-    assert_eq!(opts(&[]).room, bomberust_core::RoomSettings::default());
+    assert_eq!(opts(&[]).room, eksplode_re_core::RoomSettings::default());
 }
 
 #[test]

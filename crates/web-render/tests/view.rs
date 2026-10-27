@@ -1,5 +1,5 @@
-use bomberust_web_render::sprites::*;
-use bomberust_web_render::view::{fit, MARGIN};
+use eksplode_re_web_render::sprites::*;
+use eksplode_re_web_render::view::{fit, MARGIN};
 
 #[test]
 fn fit_centres_the_arena_with_a_whole_number_scale() {

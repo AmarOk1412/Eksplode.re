@@ -1,7 +1,7 @@
 //! What to draw and in which order.
 
-use bomberust_core::kick::predict_slide_stop;
-use bomberust_core::{Observation, PowerUpKind, Tile};
+use eksplode_re_core::kick::predict_slide_stop;
+use eksplode_re_core::{Observation, PowerUpKind, Tile};
 
 use crate::interp::Interp;
 use crate::look::{Frame, View};
@@ -90,7 +90,7 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
     for y in 0..h {
         for x in 0..w {
             let pos = (f32::from(x) + 0.5, f32::from(y) + 0.5);
-            match obs.arena.tile(bomberust_core::Pos::new(x, y)) {
+            match obs.arena.tile(eksplode_re_core::Pos::new(x, y)) {
                 Tile::Wall => objects.push(item(pos, Layer::Box, Sprite::Wall)),
                 Tile::Block => objects.push(item(pos, Layer::Box, Sprite::Block)),
                 Tile::Floor => {}
@@ -170,7 +170,7 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
                 let ring = Sprite::TeamRing { team };
                 objects.push(item((x + 0.5, y + 0.5 - 0.01), Layer::Player, ring));
             }
-            if p.role == bomberust_core::Role::Chaser {
+            if p.role == eksplode_re_core::Role::Chaser {
                 // drawn after the player of the same row
                 let mark = Sprite::ChaserMark {
                     hearts: p.hearts,

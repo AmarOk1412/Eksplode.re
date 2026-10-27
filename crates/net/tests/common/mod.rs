@@ -4,9 +4,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::{Duration, Instant};
 
-use bomberust_core::Config;
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_net::{Client, Host, HostConfig};
+use eksplode_re_core::Config;
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::{Client, Host, HostConfig};
 
 pub const WAIT: Duration = Duration::from_secs(5);
 

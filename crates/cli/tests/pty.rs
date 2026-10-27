@@ -5,13 +5,13 @@ use std::process::Command;
 #[test]
 fn us3_as4_every_enter_variant_starts_the_match_in_a_real_terminal() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let bin = PathBuf::from(env!("CARGO_BIN_EXE_bomberust-cli"));
+    let bin = PathBuf::from(env!("CARGO_BIN_EXE_eksplode-re-cli"));
     // `cargo test --workspace` builds the server too; the script skips its checks otherwise
-    let server = bin.with_file_name("bomberust-server");
+    let server = bin.with_file_name("eksplode-re-server");
     let Ok(out) = Command::new("python3")
         .args(["scripts/pty-enter-check.py", "--attempts", "3"])
-        .env("BOMBERUST_CLI", &bin)
-        .env("BOMBERUST_SERVER", &server)
+        .env("EKSPLODE_RE_CLI", &bin)
+        .env("EKSPLODE_RE_SERVER", &server)
         .current_dir(&root)
         .output()
     else {

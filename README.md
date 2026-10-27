@@ -1,4 +1,4 @@
-# Bomberust
+# Eksplode.re
 
 Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, and let browser and
 terminal players share the same match. The rules, the bots, the network protocol and the
@@ -29,14 +29,14 @@ required.
 
 ```sh
 cargo build --workspace                                   # 1. build everything
-cargo run -p bomberust-web -- --bots 1                    # 2. start the server with one bot
+cargo run -p eksplode-re-web -- --bots 1                    # 2. start the server with one bot
 # 3. open http://127.0.0.1:8080/ in a browser, type a name, press Join, then Start
-cargo run -p bomberust-cli -- join 127.0.0.1              # 4. optional: a terminal player in the same match
+cargo run -p eksplode-re-cli -- join 127.0.0.1              # 4. optional: a terminal player in the same match
 cargo test --workspace                                    # 5. run the tests
 ```
 
 The first person to join is the lobby owner and starts the match (Enter or the Start button).
-Prefer to host from the terminal? `cargo run -p bomberust-cli -- host --bots 1 --web-port 8080`
+Prefer to host from the terminal? `cargo run -p eksplode-re-cli -- host --bots 1 --web-port 8080`
 does the same and lets browsers join too.
 
 Screenshots are not committed yet; to see the game, run the steps above (or
@@ -47,16 +47,16 @@ capture PNGs).
 
 | Mode | Command | What it is |
 |------|---------|-----------|
-| Local | `cargo run -p bomberust-cli -- --players 2 --bots 2` | up to four people share one keyboard, bots fill the rest |
-| Local with a lobby | `cargo run -p bomberust-cli -- --lobby` | pick the slots on a lobby screen first |
-| Terminal host | `cargo run -p bomberust-cli -- host --bots 1` | host a match on port 7878 and play in it |
-| Terminal host with the page | `cargo run -p bomberust-cli -- host --web-port 8080` | the same match, joinable from browsers |
-| Server | `cargo run -p bomberust-web -- --bots 1` | headless host plus the web page; nobody has to sit at it |
-| Join | `cargo run -p bomberust-cli -- join 192.168.1.20` | a terminal player joins a host or server |
+| Local | `cargo run -p eksplode-re-cli -- --players 2 --bots 2` | up to four people share one keyboard, bots fill the rest |
+| Local with a lobby | `cargo run -p eksplode-re-cli -- --lobby` | pick the slots on a lobby screen first |
+| Terminal host | `cargo run -p eksplode-re-cli -- host --bots 1` | host a match on port 7878 and play in it |
+| Terminal host with the page | `cargo run -p eksplode-re-cli -- host --web-port 8080` | the same match, joinable from browsers |
+| Server | `cargo run -p eksplode-re-web -- --bots 1` | headless host plus the web page; nobody has to sit at it |
+| Join | `cargo run -p eksplode-re-cli -- join 192.168.1.20` | a terminal player joins a host or server |
 
 ### Terminal options
 
-`bomberust-cli [OPTIONS]` plays on this machine:
+`eksplode-re-cli [OPTIONS]` plays on this machine:
 
 - `--players <N>` local human players, 0 to 4 (default 1);
 - `--bots <N>` bots, 0 to 4 (default: fill up to 4 participants);
@@ -66,7 +66,7 @@ capture PNGs).
   `--friendly-fire <on|off>` set the room settings of the match (defaults: normal, small, 3, on);
 - `-h`, `--help` and `-V`, `--version`.
 
-`bomberust-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
+`eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
 [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]`:
 
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
@@ -83,7 +83,7 @@ capture PNGs).
   page only on `127.0.0.1`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
 
-`bomberust-cli join <ADDR[:PORT]> [--name NAME]` joins a host. `host`, `host:port` and web
+`eksplode-re-cli join <ADDR[:PORT]> [--name NAME]` joins a host. `host`, `host:port` and web
 addresses such as `http://host:8080/` work; for a web address only the host is kept. A refused
 or full match ends with a one-line explanation and exit status 1.
 
@@ -91,7 +91,7 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 
 ### Server options
 
-`bomberust-server` (`cargo run -p bomberust-web --`) takes `--bind`, `--http-port`,
+`eksplode-re-server` (`cargo run -p eksplode-re-web --`) takes `--bind`, `--http-port`,
 `--game-port`, `--bots`, `--seed`, `--allow-origin`, `--allow-any-origin`,
 `--max-connections`, `--dev` and the room defaults of the creation menu (`--room-name`, `--mode`,
 `--size`, `--time`, `--friendly-fire`); the table and examples are in [docs/WEB.md](docs/WEB.md).
@@ -128,8 +128,8 @@ Bots take any slot that is not a person. They see exactly what a human sees (the
 observation) and act through the same input type. Check them with:
 
 ```sh
-cargo test -p bomberust-bots
-cargo test -p bomberust-bots --test soak -- --nocapture   # 100 four-bot matches + escape rate
+cargo test -p eksplode-re-bots
+cargo test -p eksplode-re-bots --test soak -- --nocapture   # 100 four-bot matches + escape rate
 ```
 
 ## Network play and safety
@@ -153,7 +153,7 @@ connection that sends ten bad messages is closed. The details are in
 | `crates/bots` | the default bot, danger map and path finding |
 | `crates/net` | wire protocol, authoritative host, client |
 | `crates/cli` | the terminal game, `host` and `join` |
-| `crates/web` | `bomberust-server`, the HTTP and WebSocket server, and the page (`assets/`) |
+| `crates/web` | `eksplode-re-server`, the HTTP and WebSocket server, and the page (`assets/`) |
 | `crates/web-render` | the pixel-art view, compiled to WebAssembly |
 | `docs/` | the guides below |
 | `scripts/` | `build-wasm.sh`, `pty-enter-check.py`, `browser-smoke.mjs`, `check-scenarios.sh` |

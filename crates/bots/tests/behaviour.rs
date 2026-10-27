@@ -1,8 +1,8 @@
 mod common;
 
-use bomberust_bots::{Bot, DefaultBot};
-use bomberust_core::{step, Dir, Event, GameState, PlayerInput};
 use common::*;
+use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_core::{step, Dir, Event, GameState, PlayerInput};
 
 fn decide(s: &GameState) -> PlayerInput {
     DefaultBot::new(1).decide(&obs(s, 0))
@@ -106,9 +106,9 @@ fn walks_toward_a_block_it_can_bomb() {
 #[test]
 fn picks_up_a_nearby_powerup() {
     let mut s = duel(&OPEN, (1, 1), (5, 5));
-    s.powerups.push(bomberust_core::PowerUp {
+    s.powerups.push(eksplode_re_core::PowerUp {
         pos: pos(2, 1),
-        kind: bomberust_core::PowerUpKind::Range,
+        kind: eksplode_re_core::PowerUpKind::Range,
     });
     assert_eq!(decide(&s).mv, Some(Dir::Right));
 }
@@ -144,7 +144,7 @@ fn input_after(s: &GameState) -> PlayerInput {
 
 #[test]
 fn bonuses_attract_the_bot_but_maluses_do_not() {
-    use bomberust_core::{PowerUp, PowerUpKind};
+    use eksplode_re_core::{PowerUp, PowerUpKind};
     // a punch two squares up and a slow two squares down: the bot goes for the punch
     let mut s = duel(&OPEN, (3, 3), (5, 5));
     s.powerups.push(PowerUp {
@@ -168,7 +168,7 @@ fn bonuses_attract_the_bot_but_maluses_do_not() {
 
 #[test]
 fn a_bot_walks_around_maluses() {
-    use bomberust_core::{PowerUp, PowerUpKind};
+    use eksplode_re_core::{PowerUp, PowerUpKind};
     for kind in [
         PowerUpKind::Slow,
         PowerUpKind::HyperSpeed,
@@ -189,7 +189,7 @@ fn a_bot_walks_around_maluses() {
 
 #[test]
 fn bots_survive_every_power_on_the_board_and_never_punch() {
-    use bomberust_core::{PowerUp, PowerUpKind};
+    use eksplode_re_core::{PowerUp, PowerUpKind};
     let mut s = duel(&OPEN, (1, 1), (5, 5));
     s.players[0].has_punch = true;
     for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
@@ -211,11 +211,11 @@ fn bots_survive_every_power_on_the_board_and_never_punch() {
 /// 7x7 open arena whose pattern starts at tick 100 and announces a square every 4 ticks with a
 /// lead of 20 ticks.
 fn pattern_state(starts: [Option<(u8, u8)>; 4]) -> GameState {
-    let config = bomberust_core::Config {
+    let config = eksplode_re_core::Config {
         round_limit_ticks: 200,
         closing_ticks: 100,
         closing_lead_ticks: 20,
-        ..bomberust_core::Config::default()
+        ..eksplode_re_core::Config::default()
     };
     state_with(config, &OPEN, starts)
 }
@@ -253,10 +253,10 @@ fn f4_us2_a_bot_keeps_moving_inward_ahead_of_the_pattern() {
 }
 
 fn team_state_of(friendly_fire: bool, starts: [Option<(u8, u8)>; 4]) -> GameState {
-    let config = bomberust_core::Config {
-        mode: bomberust_core::Mode::Team,
+    let config = eksplode_re_core::Config {
+        mode: eksplode_re_core::Mode::Team,
         friendly_fire,
-        ..bomberust_core::Config::default()
+        ..eksplode_re_core::Config::default()
     };
     state_with(config, &OPEN, starts)
 }
@@ -311,9 +311,9 @@ fn f4_us3_as6_a_bot_still_flees_the_bomb_of_its_teammate() {
 }
 
 fn chaser_state(starts: [Option<(u8, u8)>; 4]) -> GameState {
-    let config = bomberust_core::Config {
-        mode: bomberust_core::Mode::Chaser,
-        ..bomberust_core::Config::default()
+    let config = eksplode_re_core::Config {
+        mode: eksplode_re_core::Mode::Chaser,
+        ..eksplode_re_core::Config::default()
     };
     // the first participant is the chaser
     state_with(config, &OPEN, starts)
@@ -323,7 +323,7 @@ fn decide_as(s: &GameState, slot: u8) -> PlayerInput {
     DefaultBot::new(1).decide(&s.observe(pid(slot)))
 }
 
-fn manhattan(a: bomberust_core::Pos, b: bomberust_core::Pos) -> u32 {
+fn manhattan(a: eksplode_re_core::Pos, b: eksplode_re_core::Pos) -> u32 {
     u32::from(a.x.abs_diff(b.x) + a.y.abs_diff(b.y))
 }
 
@@ -339,7 +339,7 @@ fn f4_us4_as8_a_chaser_bot_bombs_a_runner_in_reach_and_walks_toward_the_others()
     assert!(!input.bomb);
     let dir = input.mv.expect("it moves");
     let (dx, dy) = dir.delta();
-    let to = bomberust_core::Pos::new((3 + i16::from(dx)) as u8, (3 + i16::from(dy)) as u8);
+    let to = eksplode_re_core::Pos::new((3 + i16::from(dx)) as u8, (3 + i16::from(dy)) as u8);
     assert!(
         manhattan(to, pos(5, 5)) < manhattan(pos(3, 3), pos(5, 5)),
         "{dir:?}"
@@ -353,9 +353,9 @@ fn f4_us4_as8_a_chaser_bot_does_not_bomb_without_a_way_out_and_keeps_two_bombs_i
         "#######", "#.#####", "#.#####", "#.....#", "#.#####", "#.#####", "#######",
     ];
     let s = state_with(
-        bomberust_core::Config {
-            mode: bomberust_core::Mode::Chaser,
-            ..bomberust_core::Config::default()
+        eksplode_re_core::Config {
+            mode: eksplode_re_core::Mode::Chaser,
+            ..eksplode_re_core::Config::default()
         },
         &rows,
         [Some((1, 1)), Some((1, 2)), Some((5, 3)), None],
@@ -382,7 +382,7 @@ fn f4_us4_as8_a_runner_bot_flees_the_chaser_and_never_bombs() {
             .mv
             .unwrap_or_else(|| panic!("a runner at {me:?} must move away from {chaser:?}"));
         let (dx, dy) = dir.delta();
-        let to = bomberust_core::Pos::new(
+        let to = eksplode_re_core::Pos::new(
             (i16::from(me.0) + i16::from(dx)) as u8,
             (i16::from(me.1) + i16::from(dy)) as u8,
         );
@@ -397,9 +397,9 @@ fn f4_us4_as8_a_runner_bot_flees_the_chaser_and_never_bombs() {
 #[test]
 fn f4_us4_as8_a_runner_bot_collects_a_bonus_in_reach_when_the_chaser_is_far() {
     let mut s = chaser_state([Some((5, 5)), Some((1, 1)), None, None]);
-    s.powerups.push(bomberust_core::PowerUp {
+    s.powerups.push(eksplode_re_core::PowerUp {
         pos: pos(1, 3),
-        kind: bomberust_core::PowerUpKind::Speed,
+        kind: eksplode_re_core::PowerUpKind::Speed,
     });
     let input = decide_as(&s, 1);
     assert_eq!(input.mv, Some(Dir::Down), "toward the bonus");

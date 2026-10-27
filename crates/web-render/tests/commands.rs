@@ -1,11 +1,11 @@
 mod common;
 
-use bomberust_core::{ActiveMalus, Config, Dir, Flight, GameState, Pos, PowerUpKind};
-use bomberust_web_render::commands::{build, flatten, portrait, Command, Kind};
-use bomberust_web_render::interp::Interp;
-use bomberust_web_render::sprites::*;
-use bomberust_web_render::view::fit;
 use common::*;
+use eksplode_re_core::{ActiveMalus, Config, Dir, Flight, GameState, Pos, PowerUpKind};
+use eksplode_re_web_render::commands::{build, flatten, portrait, Command, Kind};
+use eksplode_re_web_render::interp::Interp;
+use eksplode_re_web_render::sprites::*;
+use eksplode_re_web_render::view::fit;
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
 
@@ -100,7 +100,7 @@ fn eliminated_players_are_not_drawn() {
     s.players[2].alive = false;
     let dead = commands(&s);
     let sprite =
-        bomberust_web_render::look::runs_for(&bomberust_web_render::look::default_for(2)).len();
+        eksplode_re_web_render::look::runs_for(&eksplode_re_web_render::look::default_for(2)).len();
     assert_eq!(
         alive.len() - dead.len(),
         sprite + 1,
@@ -361,8 +361,8 @@ fn f4_us2_as6_an_announced_square_is_a_red_frame_with_a_growing_block_shadow() {
     );
 
     let lead = quiet.config.closing_lead_ticks;
-    quiet.closing.falling.push(bomberust_core::Falling {
-        pos: bomberust_core::Pos::new(7, 6),
+    quiet.closing.falling.push(eksplode_re_core::Falling {
+        pos: eksplode_re_core::Pos::new(7, 6),
         ticks_left: lead,
     });
     let early = commands(&quiet);
@@ -391,10 +391,14 @@ fn f4_us2_as6_an_announced_square_is_a_red_frame_with_a_growing_block_shadow() {
 fn f4_us2_as6_a_landed_block_is_an_ordinary_wall() {
     let mut s = standard();
     let before = quads_with(&commands(&s), WALL_BASE).len();
-    s.arena
-        .set_tile(bomberust_core::Pos::new(7, 6), bomberust_core::Tile::Wall);
-    s.arena
-        .set_tile(bomberust_core::Pos::new(7, 5), bomberust_core::Tile::Wall);
+    s.arena.set_tile(
+        eksplode_re_core::Pos::new(7, 6),
+        eksplode_re_core::Tile::Wall,
+    );
+    s.arena.set_tile(
+        eksplode_re_core::Pos::new(7, 5),
+        eksplode_re_core::Tile::Wall,
+    );
     let after = quads_with(&commands(&s), WALL_BASE).len();
     assert!(after > before, "{before} -> {after}");
 }
@@ -402,7 +406,7 @@ fn f4_us2_as6_a_landed_block_is_an_ordinary_wall() {
 #[test]
 fn announced_squares_are_drawn_below_players_and_bombs() {
     let mut s = standard();
-    s.closing.falling.push(bomberust_core::Falling {
+    s.closing.falling.push(eksplode_re_core::Falling {
         pos: s.players[0].pos,
         ticks_left: 10,
     });
@@ -416,9 +420,9 @@ fn announced_squares_are_drawn_below_players_and_bombs() {
 }
 
 fn team_state() -> GameState {
-    let config = bomberust_core::Config {
-        mode: bomberust_core::Mode::Team,
-        ..bomberust_core::Config::default()
+    let config = eksplode_re_core::Config {
+        mode: eksplode_re_core::Mode::Team,
+        ..eksplode_re_core::Config::default()
     };
     with_config(config)
 }
@@ -454,16 +458,16 @@ fn normal_mode_has_no_team_rings_and_dead_players_lose_theirs() {
 }
 
 fn chaser_state() -> GameState {
-    let config = bomberust_core::Config {
-        mode: bomberust_core::Mode::Chaser,
-        ..bomberust_core::Config::default()
+    let config = eksplode_re_core::Config {
+        mode: eksplode_re_core::Mode::Chaser,
+        ..eksplode_re_core::Config::default()
     };
     with_config(config)
 }
 
 fn chaser_slot(s: &GameState) -> usize {
     (0..4)
-        .position(|i| s.players[i].role == bomberust_core::Role::Chaser)
+        .position(|i| s.players[i].role == eksplode_re_core::Role::Chaser)
         .unwrap_or(usize::MAX)
 }
 

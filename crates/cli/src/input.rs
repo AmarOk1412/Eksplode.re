@@ -1,6 +1,6 @@
 //! Key mapping for up to four players sharing one keyboard.
 
-use bomberust_core::{Dir, PlayerInput};
+use eksplode_re_core::{Dir, PlayerInput};
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 /// What a player key does.

@@ -10,15 +10,15 @@
 | Python 3 | `scripts/pty-enter-check.py` (the pseudo-terminal check of Enter) |
 | A Chromium-based browser | the optional smoke script `scripts/browser-smoke.mjs` |
 
-Playing the game needs only Rust: the compiled `bomberust_render.wasm` is committed.
+Playing the game needs only Rust: the compiled `eksplode_re_render.wasm` is committed.
 
 ## Build and run
 
 ```sh
 cargo build --workspace
-cargo run -p bomberust-cli -- --players 1 --bots 3     # local game in the terminal
-cargo run -p bomberust-web -- --bots 1                 # server and web page
-cargo run -p bomberust-cli -- join 127.0.0.1           # a terminal player on that server
+cargo run -p eksplode-re-cli -- --players 1 --bots 3     # local game in the terminal
+cargo run -p eksplode-re-web -- --bots 1                 # server and web page
+cargo run -p eksplode-re-cli -- join 127.0.0.1           # a terminal player on that server
 ```
 
 ## Test
@@ -111,7 +111,7 @@ module.
 
 **A bot behaviour.** Add a scenario to `crates/bots/tests/behaviour.rs`, then extend
 `DefaultBot` (or implement the `Bot` trait). A bot receives only an `Observation`. Run
-`cargo test -p bomberust-bots --test soak -- --nocapture` to see that matches still finish and
+`cargo test -p eksplode-re-bots --test soak -- --nocapture` to see that matches still finish and
 that bots survive bombs they drop.
 
 **A protocol message.** Add the variant to `crates/net/src/protocol.rs`, handle it in
@@ -145,7 +145,7 @@ them in `crates/web-render/tests/sprites3.rs`.
 docs test checks it). Never add an audio file.
 
 **A server option.** Add it to `crates/web/src/args.rs` (and its `USAGE` text), test it in
-`crates/web/tests/args.rs`, and paste the table that `cargo test -p bomberust-web --test docs`
+`crates/web/tests/args.rs`, and paste the table that `cargo test -p eksplode-re-web --test docs`
 prints into [WEB.md](WEB.md).
 
 ## Release checklist
@@ -153,8 +153,8 @@ prints into [WEB.md](WEB.md).
 1. `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
    `cargo test --workspace`, `node --test` in `crates/web/js-tests`.
 2. If `crates/web-render` changed: `./scripts/build-wasm.sh`, and commit the rebuilt
-   `crates/web/assets/bomberust_render.wasm` (it must stay under 300 KB).
-3. `cargo build -p bomberust-web`, start the server and play a round in a browser and a terminal.
+   `crates/web/assets/eksplode_re_render.wasm` (it must stay under 300 KB).
+3. `cargo build -p eksplode-re-web`, start the server and play a round in a browser and a terminal.
 4. `python3 scripts/pty-enter-check.py --attempts 20`.
 5. Update the README and the guides for anything user-visible; the docs tests must pass.
 6. Check the history: `git log --format=%s | awk 'length>80'` prints nothing.
@@ -163,7 +163,7 @@ prints into [WEB.md](WEB.md).
 
 | Criterion | Result | Where it is checked |
 |-----------|--------|---------------------|
-| Key press to the snapshot that shows it, p95, two browsers and two terminals at 20 Hz | about 100 ms (limit 200 ms) | `cargo test -p bomberust-web --test mixed sc003 -- --nocapture` |
+| Key press to the snapshot that shows it, p95, two browsers and two terminals at 20 Hz | about 100 ms (limit 200 ms) | `cargo test -p eksplode-re-web --test mixed sc003 -- --nocapture` |
 | WebAssembly module size | 213 KB (limit 300 KB) | `scripts/build-wasm.sh` fails above the limit; `sc005_the_whole_page_stays_small` |
 | Whole page (HTML, JS, CSS, wasm) | 293 KB (limit 500 KB) | `sc005_the_whole_page_stays_small` in `crates/web/tests/http.rs` |
 | Cross-origin WebSocket upgrades refused by default | 100 of 100 | `sc007_cross_origin_upgrades_are_refused_by_default` |

@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_core::{Arena, Config, GameState, Observation, PlayerId, Pos};
-use bomberust_web_render::interp::Interp;
+use eksplode_re_core::{Arena, Config, GameState, Observation, PlayerId, Pos};
+use eksplode_re_web_render::interp::Interp;
 
 fn obs_at(tick: u32, p0: (u8, u8)) -> Observation {
     let rows = [

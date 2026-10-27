@@ -9,8 +9,8 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bomberust_bots::{Bot, DefaultBot};
-use bomberust_core::{
+use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_core::{
     step, Config, Controller, DropTable, GameState, Lobby, Phase, PlayerId, PlayerInput,
     RoomSettings, MAX_PLAYERS,
 };
@@ -823,7 +823,7 @@ impl Server {
         }
     }
 
-    fn send_snapshots(&mut self, events: &[bomberust_core::Event]) {
+    fn send_snapshots(&mut self, events: &[eksplode_re_core::Event]) {
         let Some(game) = self.game.as_ref() else {
             return;
         };

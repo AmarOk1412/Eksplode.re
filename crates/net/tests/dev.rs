@@ -2,10 +2,10 @@
 
 mod common;
 
-use bomberust_core::{Config, Dir, DropTable, Event, PowerUpKind};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_net::{Client, Host};
 use common::*;
+use eksplode_re_core::{Config, Dir, DropTable, Event, PowerUpKind};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::{Client, Host};
 
 /// A developer host whose bombs burn so long that nobody dies during a movement test.
 fn plain_dev_host() -> Host {
@@ -277,7 +277,7 @@ fn bad_values_are_refused_and_change_nothing() {
 }
 
 /// Positions of every bot in the snapshots until `n` snapshots passed.
-fn bot_positions(c: &Client, n: usize) -> Vec<bomberust_core::Pos> {
+fn bot_positions(c: &Client, n: usize) -> Vec<eksplode_re_core::Pos> {
     let mut out = Vec::new();
     let mut tick;
     while let Some(m) = wait_for(c, |m| matches!(m, ServerMsg::Snapshot { .. })) {

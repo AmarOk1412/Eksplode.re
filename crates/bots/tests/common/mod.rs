@@ -1,6 +1,6 @@
 #![allow(dead_code, clippy::expect_used, clippy::unwrap_used)]
 
-use bomberust_core::{Arena, Bomb, Config, GameState, Observation, PlayerId, Pos};
+use eksplode_re_core::{Arena, Bomb, Config, GameState, Observation, PlayerId, Pos};
 
 pub const OPEN: [&str; 7] = [
     "#######", "#.....#", "#.....#", "#.....#", "#.....#", "#.....#", "#######",

@@ -6,11 +6,11 @@ mod common;
 use std::net::Shutdown;
 use std::time::Duration;
 
-use bomberust_core::{Observation, Outcome};
-use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg};
-use bomberust_net::Client;
-use bomberust_web::Server;
 use common::*;
+use eksplode_re_core::{Observation, Outcome};
+use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg};
+use eksplode_re_net::Client;
+use eksplode_re_web::Server;
 
 fn tcp(s: &Server, name: &str) -> (Client, u8) {
     let c = Client::connect(&s.game_addr().to_string(), name).unwrap();
@@ -46,7 +46,7 @@ fn mixed(s: &Server) -> (Ws, Client) {
 }
 
 fn without_me(mut o: Observation) -> Observation {
-    o.me = bomberust_core::PlayerId::new(0).unwrap();
+    o.me = eksplode_re_core::PlayerId::new(0).unwrap();
     o
 }
 
@@ -300,7 +300,7 @@ impl Endpoint {
 
 /// Walks a column and back, timing how long each step takes to show up in a snapshot.
 fn drive(mut end: Endpoint, slot: usize) -> Vec<Duration> {
-    use bomberust_core::{Dir, Event};
+    use eksplode_re_core::{Dir, Event};
     use std::time::Instant;
 
     let (first, back) = if slot < 2 {
@@ -351,14 +351,14 @@ fn sc003_key_to_snapshot_latency_with_two_browsers_and_two_terminals() {
 fn f4_sc010_key_to_snapshot_latency_on_the_large_board() {
     // the room created by the first join uses the server's defaults: the large board
     p95_latency(|o| {
-        o.room = bomberust_core::RoomSettings {
-            size: bomberust_core::BoardSize::Large,
+        o.room = eksplode_re_core::RoomSettings {
+            size: eksplode_re_core::BoardSize::Large,
             ..Default::default()
         }
     });
 }
 
-fn p95_latency(configure: impl FnOnce(&mut bomberust_web::ServerOptions)) {
+fn p95_latency(configure: impl FnOnce(&mut eksplode_re_web::ServerOptions)) {
     // the real 20 Hz tick; a one-tick move cooldown so a step does not wait for the cooldown
     let s = server(|o| {
         o.tick = Duration::from_millis(50);
@@ -403,8 +403,8 @@ fn p95_latency(configure: impl FnOnce(&mut bomberust_web::ServerOptions)) {
 
 /// What one client saw of a whole match.
 struct Seen {
-    looks: Vec<bomberust_net::look::Look>,
-    events: Vec<bomberust_core::Event>,
+    looks: Vec<eksplode_re_net::look::Look>,
+    events: Vec<eksplode_re_core::Event>,
     last: Observation,
     outcome: Outcome,
 }
@@ -442,7 +442,7 @@ fn watch(mut next: impl FnMut() -> Option<ServerMsg>) -> Seen {
 
 #[test]
 fn f3_us2_as9_powers_work_the_same_for_every_client() {
-    use bomberust_core::Event;
+    use eksplode_re_core::Event;
     let s = server(|o| {
         o.seed = Some(3);
         o.game.block_density = 1.0;

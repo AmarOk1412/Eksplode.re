@@ -4,9 +4,9 @@
 
 mod common;
 
-use bomberust_core::{BoardSize, RoomSettings};
-use bomberust_net::protocol::ServerMsg;
 use common::*;
+use eksplode_re_core::{BoardSize, RoomSettings};
+use eksplode_re_net::protocol::ServerMsg;
 use serde_json::json;
 use tungstenite::Message;
 

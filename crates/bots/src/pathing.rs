@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use bomberust_core::{Dir, Observation, Pos, Tile};
+use eksplode_re_core::{Dir, Observation, Pos, Tile};
 
 use crate::danger::DangerMap;
 

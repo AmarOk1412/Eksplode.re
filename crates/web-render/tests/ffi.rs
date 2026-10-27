@@ -2,16 +2,16 @@
 
 mod common;
 
-use bomberust_web_render::ffi::*;
 use common::*;
+use eksplode_re_web_render::ffi::*;
 
 fn load(bytes: &[u8]) -> i32 {
     let size = bytes.len().max(1);
-    let ptr = bomberust_alloc(size);
+    let ptr = eksplode_re_alloc(size);
     assert!(!ptr.is_null());
     unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
-    let code = unsafe { bomberust_load(ptr, bytes.len()) };
-    unsafe { bomberust_free(ptr, size) };
+    let code = unsafe { eksplode_re_load(ptr, bytes.len()) };
+    unsafe { eksplode_re_free(ptr, size) };
     code
 }
 
@@ -21,40 +21,40 @@ fn fixture_json() -> Vec<u8> {
 
 #[test]
 fn allocation_limits() {
-    assert!(bomberust_alloc(0).is_null());
-    assert!(bomberust_alloc(2_000_000).is_null());
-    let p = bomberust_alloc(64);
+    assert!(eksplode_re_alloc(0).is_null());
+    assert!(eksplode_re_alloc(2_000_000).is_null());
+    let p = eksplode_re_alloc(64);
     assert!(!p.is_null());
     unsafe {
         for i in 0..64 {
             p.add(i).write(i as u8);
         }
-        bomberust_free(p, 64);
+        eksplode_re_free(p, 64);
     }
-    unsafe { bomberust_free(std::ptr::null_mut(), 10) };
+    unsafe { eksplode_re_free(std::ptr::null_mut(), 10) };
 }
 
 #[test]
 fn the_stride_is_sixteen() {
-    assert_eq!(bomberust_stride(), 16);
+    assert_eq!(eksplode_re_stride(), 16);
 }
 
 #[test]
 fn nothing_is_drawn_before_a_load() {
-    assert_eq!(bomberust_frame(800.0, 600.0, 0.5), 0);
+    assert_eq!(eksplode_re_frame(800.0, 600.0, 0.5), 0);
 }
 
 #[test]
 fn loading_the_fixture_works_and_frames_have_commands() {
     assert_eq!(load(&fixture_json()), 0);
-    let n = bomberust_frame(800.0, 600.0, 1.0);
+    let n = eksplode_re_frame(800.0, 600.0, 1.0);
     assert!(n > 100, "{n}");
-    let ptr = bomberust_output_ptr();
+    let ptr = eksplode_re_output_ptr();
     assert!(!ptr.is_null());
     let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
     assert_eq!(first[0], 0.0, "first command is a quad");
     // calling again with the same arguments gives the same count
-    assert_eq!(bomberust_frame(800.0, 600.0, 1.0), n);
+    assert_eq!(eksplode_re_frame(800.0, 600.0, 1.0), n);
 }
 
 #[test]
@@ -111,7 +111,7 @@ fn odd_frame_arguments_are_handled() {
         (f32::NAN, 100.0, 0.5),
         (800.0, 600.0, f32::NAN),
     ] {
-        let n = bomberust_frame(w, h, a);
+        let n = eksplode_re_frame(w, h, a);
         assert!(n < 100_000);
     }
 }
@@ -119,40 +119,40 @@ fn odd_frame_arguments_are_handled() {
 #[test]
 fn picking_a_tile_finds_the_tile_under_a_point() {
     assert_eq!(load(&fixture_json()), 0);
-    bomberust_frame(800.0, 600.0, 1.0);
+    eksplode_re_frame(800.0, 600.0, 1.0);
     // the centre of the arena is the centre of the canvas
-    let t = bomberust_pick_tile(400.0, 300.0);
+    let t = eksplode_re_pick_tile(400.0, 300.0);
     assert!(t >= 0, "{t}");
-    assert_eq!(bomberust_pick_tile(-100.0, -100.0), -1);
+    assert_eq!(eksplode_re_pick_tile(-100.0, -100.0), -1);
 }
 
 #[test]
 fn portraits_work_without_a_loaded_game() {
-    let n = bomberust_portrait(1, 160.0, 226.0, 8);
+    let n = eksplode_re_portrait(1, 160.0, 226.0, 8);
     assert!(n > 10, "{n}");
-    let ptr = bomberust_output_ptr();
+    let ptr = eksplode_re_output_ptr();
     assert!(!ptr.is_null());
     let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
     assert_eq!(first[0], 0.0, "a portrait is made of quads");
     assert!(
-        bomberust_portrait(0, 160.0, 226.0, 0) > n,
+        eksplode_re_portrait(0, 160.0, 226.0, 0) > n,
         "the whole figure has more pixels"
     );
-    assert_eq!(bomberust_portrait(0, 0.0, 10.0, 0), 0);
-    assert_eq!(bomberust_portrait(u32::MAX, f32::NAN, 10.0, u32::MAX), 0);
+    assert_eq!(eksplode_re_portrait(0, 0.0, 10.0, 0), 0);
+    assert_eq!(eksplode_re_portrait(u32::MAX, f32::NAN, 10.0, u32::MAX), 0);
     assert!(
-        bomberust_portrait(7, 50.0, 50.0, u32::MAX) > 0,
+        eksplode_re_portrait(7, 50.0, 50.0, u32::MAX) > 0,
         "slot and rows are clamped"
     );
 }
 
 fn set_looks(bytes: &[u8]) -> i32 {
     let size = bytes.len().max(1);
-    let ptr = bomberust_alloc(size);
+    let ptr = eksplode_re_alloc(size);
     assert!(!ptr.is_null());
     unsafe { std::ptr::copy_nonoverlapping(bytes.as_ptr(), ptr, bytes.len()) };
-    let code = unsafe { bomberust_set_looks(ptr, bytes.len()) };
-    unsafe { bomberust_free(ptr, size) };
+    let code = unsafe { eksplode_re_set_looks(ptr, bytes.len()) };
+    unsafe { eksplode_re_free(ptr, size) };
     code
 }
 
@@ -186,41 +186,44 @@ fn set_looks_codes_and_leniency() {
 
 #[test]
 fn f3_us1_as5_frames_and_portraits_use_the_loaded_looks() {
-    use bomberust_web_render::look::CROWN;
+    use eksplode_re_web_render::look::CROWN;
     let crowns = |n: usize| {
-        let data = unsafe { std::slice::from_raw_parts(bomberust_output_ptr(), n * 16) };
+        let data = unsafe { std::slice::from_raw_parts(eksplode_re_output_ptr(), n * 16) };
         data.chunks(16)
             .filter(|c| c[0] == 0.0 && c[1..4] == CROWN[..] && c[4] == 1.0)
             .count()
     };
     assert_eq!(load(&fixture_json()), 0);
     assert_eq!(set_looks(b"[]"), 0);
-    let n = bomberust_frame(800.0, 600.0, 1.0);
+    let n = eksplode_re_frame(800.0, 600.0, 1.0);
     assert_eq!(crowns(n), 0);
     assert_eq!(
         set_looks(br#"[{"head":"Crown"},{},{},{"head":"Crown"}]"#),
         0
     );
-    let n = bomberust_frame(800.0, 600.0, 1.0);
+    let n = eksplode_re_frame(800.0, 600.0, 1.0);
     assert!(crowns(n) > 0, "players in the match wear the crown");
-    let p = bomberust_portrait(3, 160.0, 226.0, 7);
+    let p = eksplode_re_portrait(3, 160.0, 226.0, 7);
     assert!(crowns(p) > 0, "portraits use the looks too");
-    let p = bomberust_portrait(1, 160.0, 226.0, 7);
+    let p = eksplode_re_portrait(1, 160.0, 226.0, 7);
     assert_eq!(crowns(p), 0);
 }
 
 #[test]
 fn f3_us1_as3_the_3d_portrait_export_draws_quads_and_rejects_bad_sizes() {
-    let n = bomberust_portrait3d(1, 160.0, 226.0, 0.0);
+    let n = eksplode_re_portrait3d(1, 160.0, 226.0, 0.0);
     assert!(n > 20, "{n}");
-    let ptr = bomberust_output_ptr();
+    let ptr = eksplode_re_output_ptr();
     let first = unsafe { std::slice::from_raw_parts(ptr, 16) };
     assert_eq!(first[0], 0.0, "made of quads");
-    assert_eq!(bomberust_portrait3d(0, 0.0, 10.0, 0.0), 0);
-    assert_eq!(bomberust_portrait3d(0, -1.0, 10.0, 0.0), 0);
-    assert_eq!(bomberust_portrait3d(u32::MAX, f32::NAN, 10.0, f32::NAN), 0);
+    assert_eq!(eksplode_re_portrait3d(0, 0.0, 10.0, 0.0), 0);
+    assert_eq!(eksplode_re_portrait3d(0, -1.0, 10.0, 0.0), 0);
+    assert_eq!(
+        eksplode_re_portrait3d(u32::MAX, f32::NAN, 10.0, f32::NAN),
+        0
+    );
     assert!(
-        bomberust_portrait3d(7, 50.0, 50.0, f32::NAN) > 0,
+        eksplode_re_portrait3d(7, 50.0, 50.0, f32::NAN) > 0,
         "slot is clamped and a bad phase is harmless"
     );
 }
@@ -252,7 +255,7 @@ fn f3_random_bytes_and_floats_never_break_set_looks_or_portrait3d() {
         };
         let slot = noise(&mut seed) as u32;
         let (w, h, phase) = (float(&mut seed), float(&mut seed), float(&mut seed));
-        let n = bomberust_portrait3d(slot, w, h, phase);
+        let n = eksplode_re_portrait3d(slot, w, h, phase);
         let finite_size = w.is_finite() && h.is_finite() && w > 0.0 && h > 0.0;
         assert_eq!(n > 0, finite_size, "{w} x {h}");
     }

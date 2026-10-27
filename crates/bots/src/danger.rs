@@ -1,8 +1,8 @@
 //! When and for how long each tile is going to burn, derived from the public observation.
 
-use bomberust_core::kick::{predict_slide_explosion, predict_slide_stop};
-use bomberust_core::punch::predict_landing;
-use bomberust_core::{blast, Observation, Pos};
+use eksplode_re_core::kick::{predict_slide_explosion, predict_slide_stop};
+use eksplode_re_core::punch::predict_landing;
+use eksplode_re_core::{blast, Observation, Pos};
 
 /// The last step of a window that never ends.
 const FOREVER: u32 = u32::MAX / 2;

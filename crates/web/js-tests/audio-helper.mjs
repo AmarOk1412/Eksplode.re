@@ -1,7 +1,7 @@
 // A fake Web Audio implementation for node tests: it records what the page builds and schedules.
 
-export function fakeAudio() {
-  const log = { contexts: [], nodes: [], oscillators: [], noises: [], resumed: 0, suspended: 0 };
+export function fakeAudio({ resumeFailures = 0 } = {}) {
+  const log = { contexts: [], nodes: [], oscillators: [], noises: [], resumeAttempts: 0, resumed: 0, suspended: 0 };
 
   class Param {
     constructor(value) {
@@ -125,6 +125,11 @@ export function fakeAudio() {
       return { numberOfChannels: channels, length, sampleRate: rate, getChannelData: () => data };
     }
     resume() {
+      log.resumeAttempts += 1;
+      if (resumeFailures > 0) {
+        resumeFailures -= 1;
+        return Promise.reject(new Error("resume blocked"));
+      }
       this.state = "running";
       log.resumed += 1;
       return Promise.resolve();

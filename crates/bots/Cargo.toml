@@ -1,16 +1,16 @@
 [package]
-name = "bomberust-bots"
-description = "Computer-controlled Bomberust players that only use the public observation."
+name = "eksplode-re-bots"
+description = "Computer-controlled Eksplode.re players that only use the public observation."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "bomberust_bots"
+name = "eksplode_re_bots"
 
 [dependencies]
-bomberust-core = { path = "../core" }
+eksplode-re-core = { path = "../core" }
 
 [lints]
 workspace = true

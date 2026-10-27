@@ -6,7 +6,7 @@ import path from "node:path";
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const FIXTURE = path.join(here, "../../web-render/tests/fixtures/observation.json");
-export const WASM = path.join(here, "../assets/bomberust_render.wasm");
+export const WASM = path.join(here, "../assets/eksplode_re_render.wasm");
 
 export async function loadModule() {
   const { instance } = await WebAssembly.instantiate(readFileSync(WASM), {});
@@ -15,43 +15,43 @@ export async function loadModule() {
   function loadJson(text) {
     const bytes = typeof text === "string" ? new TextEncoder().encode(text) : text;
     const size = Math.max(bytes.length, 1);
-    const ptr = ex.bomberust_alloc(size);
+    const ptr = ex.eksplode_re_alloc(size);
     if (ptr === 0) return -1;
     new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
-    const code = ex.bomberust_load(ptr, bytes.length);
-    ex.bomberust_free(ptr, size);
+    const code = ex.eksplode_re_load(ptr, bytes.length);
+    ex.eksplode_re_free(ptr, size);
     return code;
   }
 
   function frame(width, height, alpha) {
-    const count = ex.bomberust_frame(width, height, alpha);
-    const stride = ex.bomberust_stride();
-    const view = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+    const count = ex.eksplode_re_frame(width, height, alpha);
+    const stride = ex.eksplode_re_stride();
+    const view = new Float32Array(ex.memory.buffer, ex.eksplode_re_output_ptr(), count * stride);
     return { count, stride, data: Float32Array.from(view) };
   }
 
   /** Optional exports of feature 003 may be missing from an older module. */
   function setLooks(looks) {
-    if (!ex.bomberust_set_looks) return -1;
-    return loadWith(ex.bomberust_set_looks, JSON.stringify(looks));
+    if (!ex.eksplode_re_set_looks) return -1;
+    return loadWith(ex.eksplode_re_set_looks, JSON.stringify(looks));
   }
 
   function loadWith(fn, text) {
     const bytes = new TextEncoder().encode(text);
     const size = Math.max(bytes.length, 1);
-    const ptr = ex.bomberust_alloc(size);
+    const ptr = ex.eksplode_re_alloc(size);
     if (ptr === 0) return -1;
     new Uint8Array(ex.memory.buffer, ptr, bytes.length).set(bytes);
     const code = fn(ptr, bytes.length);
-    ex.bomberust_free(ptr, size);
+    ex.eksplode_re_free(ptr, size);
     return code;
   }
 
   function portrait3d(slot, width, height, phase) {
-    if (!ex.bomberust_portrait3d) return { count: 0, stride: 16, data: new Float32Array(0) };
-    const count = ex.bomberust_portrait3d(slot, width, height, phase);
-    const stride = ex.bomberust_stride();
-    const view = new Float32Array(ex.memory.buffer, ex.bomberust_output_ptr(), count * stride);
+    if (!ex.eksplode_re_portrait3d) return { count: 0, stride: 16, data: new Float32Array(0) };
+    const count = ex.eksplode_re_portrait3d(slot, width, height, phase);
+    const stride = ex.eksplode_re_stride();
+    const view = new Float32Array(ex.memory.buffer, ex.eksplode_re_output_ptr(), count * stride);
     return { count, stride, data: Float32Array.from(view) };
   }
 

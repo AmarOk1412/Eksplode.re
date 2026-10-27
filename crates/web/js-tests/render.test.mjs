@@ -8,19 +8,19 @@ test("exports the documented functions", async () => {
   const { ex } = await loadModule();
   for (const name of [
     "memory",
-    "bomberust_alloc",
-    "bomberust_free",
-    "bomberust_load",
-    "bomberust_frame",
-    "bomberust_output_ptr",
-    "bomberust_stride",
-    "bomberust_pick_tile",
-    "bomberust_portrait",
-    "bomberust_portrait3d",
+    "eksplode_re_alloc",
+    "eksplode_re_free",
+    "eksplode_re_load",
+    "eksplode_re_frame",
+    "eksplode_re_output_ptr",
+    "eksplode_re_stride",
+    "eksplode_re_pick_tile",
+    "eksplode_re_portrait",
+    "eksplode_re_portrait3d",
   ]) {
     assert.ok(name in ex, `missing export ${name}`);
   }
-  assert.equal(ex.bomberust_stride(), 16);
+  assert.equal(ex.eksplode_re_stride(), 16);
 });
 
 test("us1_as3_four_characters_in_their_own_colours", async () => {
@@ -37,12 +37,12 @@ test("us1_as3_four_characters_in_their_own_colours", async () => {
 
 test("a portrait fills the command buffer without a loaded game", async () => {
   const { ex } = await loadModule();
-  const head = ex.bomberust_portrait(1, 160, 226, 8);
+  const head = ex.eksplode_re_portrait(1, 160, 226, 8);
   assert.ok(head > 10);
-  const full = ex.bomberust_portrait(1, 160, 226, 0);
+  const full = ex.eksplode_re_portrait(1, 160, 226, 0);
   assert.ok(full > head);
-  assert.equal(ex.bomberust_portrait(0, 0, 10, 0), 0);
-  assert.equal(ex.bomberust_portrait(0, NaN, 10, 0), 0);
+  assert.equal(ex.eksplode_re_portrait(0, 0, 10, 0), 0);
+  assert.equal(ex.eksplode_re_portrait(0, NaN, 10, 0), 0);
 });
 
 test("us1_as3_commands are ordered back to front", async () => {
@@ -92,11 +92,11 @@ test("load error codes", async () => {
 
 test("allocation limits", async () => {
   const { ex } = await loadModule();
-  assert.equal(ex.bomberust_alloc(0), 0);
-  assert.equal(ex.bomberust_alloc(2_000_000), 0);
-  const p = ex.bomberust_alloc(16);
+  assert.equal(ex.eksplode_re_alloc(0), 0);
+  assert.equal(ex.eksplode_re_alloc(2_000_000), 0);
+  const p = ex.eksplode_re_alloc(16);
   assert.notEqual(p, 0);
-  ex.bomberust_free(p, 16);
+  ex.eksplode_re_free(p, 16);
 });
 
 test("random bytes never trap the module", async () => {
@@ -117,8 +117,8 @@ test("a loaded game can be picked by canvas position", async () => {
   const m = await loadModule();
   assert.equal(m.loadJson(fixtureText()), 0);
   m.frame(...CANVAS, 1);
-  assert.ok(m.ex.bomberust_pick_tile(400, 300) >= 0);
-  assert.equal(m.ex.bomberust_pick_tile(-50, -50), -1);
+  assert.ok(m.ex.eksplode_re_pick_tile(400, 300) >= 0);
+  assert.equal(m.ex.eksplode_re_pick_tile(-50, -50), -1);
 });
 
 test("f3_us2_as10_the_wasm_draws_every_power_as_a_pixel_icon_and_the_malus_pulse", async () => {

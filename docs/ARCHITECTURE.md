@@ -1,6 +1,6 @@
 # Architecture
 
-Bomberust is a four-player Bomberman. People play in a terminal or in a web page, computers play
+Eksplode.re is a four-player Bomberman. People play in a terminal or in a web page, computers play
 as bots, and everybody can share one match. This page explains how the parts fit together and
 where to change things.
 
@@ -25,9 +25,9 @@ where to change things.
 ```mermaid
 flowchart LR
   subgraph Browser
-    JS["app.js: lobby, keys, canvas"] <--> WASM["bomberust_render.wasm: pixel-art view"]
+    JS["app.js: lobby, keys, canvas"] <--> WASM["eksplode_re_render.wasm: pixel-art view"]
   end
-  subgraph Server["bomberust-server (one process)"]
+  subgraph Server["eksplode-re-server (one process)"]
     HTTP["HTTP: page, app.js, wasm"] --- WS["WebSocket /ws + Origin check"]
     WS --> BR["bridge: JSON to in-process Client"]
     BR --> HOST
@@ -35,10 +35,10 @@ flowchart LR
     HOST --> CORE["core: rules"]
     HOST --> BOTS["bots"]
   end
-  JS -- "GET /, /app.js, /bomberust_render.wasm" --> HTTP
+  JS -- "GET /, /app.js, /eksplode_re_render.wasm" --> HTTP
   JS -- "ws://host:8080/ws" --> WS
-  CLI["bomberust-cli join host:7878"] --> TCP
-  LOCAL["bomberust-cli (local match)"] --> CORE
+  CLI["eksplode-re-cli join host:7878"] --> TCP
+  LOCAL["eksplode-re-cli (local match)"] --> CORE
   LOCAL --> BOTS
 ```
 
@@ -48,7 +48,7 @@ flowchart LR
 | [`bots`](#bots) | `core` | computer players |
 | [`net`](#net) | `core`, `bots` | wire protocol, authoritative host, client |
 | [`cli`](#cli) | `core`, `bots`, `net`, `web` | terminal game, `host` and `join` |
-| [`web`](#web) | `core`, `net`, `bots` | HTTP and WebSocket server, `bomberust-server` |
+| [`web`](#web) | `core`, `net`, `bots` | HTTP and WebSocket server, `eksplode-re-server` |
 | [`web-render`](#web-render) | `core` | pixel-art view compiled to WebAssembly |
 
 ### `core`
@@ -124,7 +124,7 @@ tells the others (`PlayerLeft`). In the lobby the slot is freed.
 
 ### `web`
 
-[`crates/web`](../crates/web) is the backend of the web page and the `bomberust-server` binary.
+[`crates/web`](../crates/web) is the backend of the web page and the `eksplode-re-server` binary.
 
 | Module | Role |
 |--------|------|
@@ -148,7 +148,7 @@ isometric cube character of the lobby cards), `depth` (draw order: layer, then r
 motion between ticks), `commands` (the flat draw list and the character portraits). Only
 `ffi.rs` uses `unsafe` (allocate, free, expose the buffer) so the module can
 exchange memory with JavaScript without generated glue. It compiles to
-`bomberust_render.wasm`, which is committed so that nobody needs a WebAssembly toolchain to play.
+`eksplode_re_render.wasm`, which is committed so that nobody needs a WebAssembly toolchain to play.
 
 ## The life of a key press
 
@@ -166,8 +166,8 @@ sequenceDiagram
   C-->>H: events
   H-->>S: Snapshot {tick, state: Observation, events}
   S-->>B: text frame (JSON)
-  B->>W: bomberust_load(Observation JSON)
-  B->>W: bomberust_frame(width, height, alpha)
+  B->>W: eksplode_re_load(Observation JSON)
+  B->>W: eksplode_re_frame(width, height, alpha)
   W-->>B: draw commands (flat f32 buffer)
   B->>B: paint quads, circles, text on the canvas
 ```

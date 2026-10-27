@@ -2,10 +2,10 @@
 
 mod common;
 
-use bomberust_core::{step, Dir, Event, PlayerInput};
 use common::*;
+use eksplode_re_core::{step, Dir, Event, PlayerInput};
 
-fn exploded(ev: &[Event]) -> Vec<bomberust_core::Pos> {
+fn exploded(ev: &[Event]) -> Vec<eksplode_re_core::Pos> {
     ev.iter()
         .filter_map(|e| match e {
             Event::BombExploded { pos, .. } => Some(*pos),
@@ -99,7 +99,7 @@ fn walls_shield_players_from_blasts() {
     assert!(s.players[2].alive, "wall at (3,3) blocks the ray to (4,3)");
 }
 
-fn owners_at(s: &bomberust_core::GameState, x: u8, y: u8) -> Vec<u8> {
+fn owners_at(s: &eksplode_re_core::GameState, x: u8, y: u8) -> Vec<u8> {
     let f = s
         .flames
         .iter()

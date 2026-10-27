@@ -2,10 +2,10 @@
 
 mod common;
 
-use bomberust_core::{BoardSize, Lobby, Mode, RoomSettings};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_net::Host;
 use common::*;
+use eksplode_re_core::{BoardSize, Lobby, Mode, RoomSettings};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::Host;
 use serde_json::{json, Value};
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -388,7 +388,7 @@ fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
     a.send(&ClientMsg::Start);
     match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
         Some(ServerMsg::Snapshot { state, .. }) => {
-            use bomberust_core::Role;
+            use eksplode_re_core::Role;
             assert_eq!(
                 state
                     .players

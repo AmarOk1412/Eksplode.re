@@ -4,9 +4,9 @@ use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::time::Duration;
 
-use bomberust_core::Config;
-use bomberust_net::protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
-use bomberust_web::{Server, ServerOptions};
+use eksplode_re_core::Config;
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
+use eksplode_re_web::{Server, ServerOptions};
 use tungstenite::client::IntoClientRequest;
 use tungstenite::{Message, WebSocket};
 

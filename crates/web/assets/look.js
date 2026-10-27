@@ -20,7 +20,8 @@ export const COLOUR_CSS = {
   White: "#e8e8ee",
 };
 
-export const LOOK_KEY = "bomberust.look.v1";
+export const LOOK_KEY = "eksplode.re.look.v1";
+const LEGACY_LOOK_KEY = "bomberust.look.v1";
 
 /** The look of a slot nobody customised: blue, black, red and purple characters. */
 export function defaultLook(slot = 0) {
@@ -61,7 +62,7 @@ export function editorReducer(look, action) {
 /** The look saved on this device, or the slot default when nothing usable is saved. */
 export function loadLook(storage, slot = 0) {
   try {
-    const text = storage?.getItem(LOOK_KEY);
+    const text = storage?.getItem(LOOK_KEY) ?? storage?.getItem(LEGACY_LOOK_KEY);
     if (text) return sanitizeLook(JSON.parse(text), slot);
   } catch {
     // unreadable storage or broken JSON: use the default

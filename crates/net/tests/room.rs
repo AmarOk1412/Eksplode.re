@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use bomberust_core::{BoardSize, Mode, RoomSettings};
-use bomberust_net::room::from_wire;
+use eksplode_re_core::{BoardSize, Mode, RoomSettings};
+use eksplode_re_net::room::from_wire;
 use serde_json::json;
 
 #[test]

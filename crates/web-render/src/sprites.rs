@@ -1,6 +1,6 @@
 //! Pixel-art sprites and the colour palette.
 
-use bomberust_core::PowerUpKind;
+use eksplode_re_core::PowerUpKind;
 
 pub type Rgb = [f32; 3];
 

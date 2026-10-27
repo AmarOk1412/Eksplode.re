@@ -86,6 +86,13 @@ test("the settings are remembered on this device and bad storage gives the defau
   assert.equal(loadRoom(null, { size: "medium" }).size, "medium");
 });
 
+test("room settings migrate from the Bomberust storage key", () => {
+  const storage = memory();
+  const room = { ...defaultRoom(), name: "Old room", size: "large" };
+  storage.data.set("bomberust.room.v1", JSON.stringify(room));
+  assert.deepEqual(loadRoom(storage), room);
+});
+
 test("the payloads for Join and SetRoom carry sanitized settings", () => {
   assert.deepEqual(roomPayload({ size: "large", minutes: 99 }), { ...defaultRoom(), size: "large" });
   assert.deepEqual(setRoomMessage({ name: "A", minutes: 5 }), {

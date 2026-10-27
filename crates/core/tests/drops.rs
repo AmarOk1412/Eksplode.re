@@ -2,9 +2,9 @@
 
 mod common;
 
-use bomberust_core::drops::{DropTable, DEFAULT_SHARES};
-use bomberust_core::{step, Config, CoreError, Event, PowerUpKind, Rng};
 use common::*;
+use eksplode_re_core::drops::{DropTable, DEFAULT_SHARES};
+use eksplode_re_core::{step, Config, CoreError, Event, PowerUpKind, Rng};
 
 const ALL: [PowerUpKind; 8] = [
     PowerUpKind::ExtraBomb,
@@ -224,10 +224,10 @@ fn an_invalid_table_is_refused_and_changes_nothing() {
 #[test]
 fn the_same_seed_and_inputs_give_the_same_items() {
     let run = |seed: u64| {
-        let arena = bomberust_core::Arena::from_rows(&BLOCKS).unwrap();
+        let arena = eksplode_re_core::Arena::from_rows(&BLOCKS).unwrap();
         let starts = two_safe().map(|s| s.map(|(x, y)| pos(x, y)));
         let mut s =
-            bomberust_core::GameState::custom(Config::default(), arena, starts, seed).unwrap();
+            eksplode_re_core::GameState::custom(Config::default(), arena, starts, seed).unwrap();
         s.set_drops(DropTable::defaults(1.0)).unwrap();
         add_bomb(&mut s, 0, 3, 3, 1);
         step(&mut s, &idle());

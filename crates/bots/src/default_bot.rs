@@ -1,7 +1,7 @@
 //! The default bot: flee fire, grab power-ups, hunt opponents, break blocks.
 
-use bomberust_core::closing::closing_order;
-use bomberust_core::{
+use eksplode_re_core::closing::closing_order;
+use eksplode_re_core::{
     blast, Dir, Mode, Observation, Participant, Phase, PlayerInput, Pos, Rng, Role,
 };
 

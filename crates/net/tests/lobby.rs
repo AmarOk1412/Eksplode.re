@@ -1,8 +1,8 @@
 mod common;
 
-use bomberust_core::Controller;
-use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg, PROTOCOL_VERSION};
 use common::*;
+use eksplode_re_core::Controller;
+use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg, PROTOCOL_VERSION};
 
 fn join_msg(name: &str) -> ClientMsg {
     ClientMsg::Join {
@@ -203,7 +203,7 @@ fn error_code(raw: &mut Raw) -> Option<String> {
     }
 }
 
-fn joined_raw(host: &bomberust_net::Host, name: &str) -> Raw {
+fn joined_raw(host: &eksplode_re_net::Host, name: &str) -> Raw {
     let mut raw = Raw::connect(host.addr());
     raw.send(&join_msg(name));
     assert!(raw

@@ -6,7 +6,8 @@ export const MODULE = "audio";
 
 // --- settings -------------------------------------------------------------------------------
 
-export const STORAGE_KEY = "bomberust.audio.v1";
+export const STORAGE_KEY = "eksplode.re.audio.v1";
+const LEGACY_STORAGE_KEY = "bomberust.audio.v1";
 export const DEFAULT_SETTINGS = Object.freeze({ music: 0.35, effects: 0.7, muted: false });
 const RAMP_SECONDS = 0.05;
 const FADE_SECONDS = 0.3;
@@ -28,7 +29,7 @@ export function sanitizeSettings(raw) {
 
 export function loadSettings(storage) {
   try {
-    const text = storage?.getItem(STORAGE_KEY);
+    const text = storage?.getItem(STORAGE_KEY) ?? storage?.getItem(LEGACY_STORAGE_KEY);
     return text ? sanitizeSettings(JSON.parse(text)) : sanitizeSettings(undefined);
   } catch {
     return sanitizeSettings(undefined);
@@ -350,7 +351,6 @@ export class AudioEngine {
   /** Creates the context on the first keydown, pointerdown or touchstart of `target`. */
   attach(target) {
     const handler = () => {
-      for (const type of GESTURES) target.removeEventListener(type, handler);
       this.unlock();
     };
     for (const type of GESTURES) target.addEventListener(type, handler);
@@ -358,7 +358,11 @@ export class AudioEngine {
 
   /** Creates the context and the buses; does nothing when Web Audio is missing or refuses. */
   unlock() {
-    if (this.ctx || this.failed) return;
+    if (this.failed) return;
+    if (this.ctx) {
+      this.resume();
+      return;
+    }
     if (typeof this.AudioContextClass !== "function") {
       this.failed = true;
       return;
@@ -374,7 +378,7 @@ export class AudioEngine {
       this.ctx = ctx;
       this.buses = { master, music, effects };
       this.applyGains(true);
-      if (!this.hidden) this.quietly(ctx.resume());
+      this.resume();
       this.applyTune();
     } catch {
       this.ctx = null;
@@ -386,6 +390,15 @@ export class AudioEngine {
 
   quietly(promise) {
     if (promise && typeof promise.catch === "function") promise.catch(() => {});
+  }
+
+  resume() {
+    if (!this.ctx || this.hidden || this.ctx.state === "running") return;
+    try {
+      this.quietly(this.ctx.resume());
+    } catch {
+      /* a later user gesture can retry */
+    }
   }
 
   applyGains(immediate) {
@@ -420,7 +433,8 @@ export class AudioEngine {
     this.hidden = hidden === true;
     if (!this.ctx) return;
     try {
-      this.quietly(this.hidden ? this.ctx.suspend() : this.ctx.resume());
+      if (this.hidden) this.quietly(this.ctx.suspend());
+      else this.resume();
     } catch {
       /* ignored */
     }

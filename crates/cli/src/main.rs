@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use bomberust_cli::app;
-use bomberust_cli::args::{self, Command, USAGE};
+use eksplode_re_cli::app;
+use eksplode_re_cli::args::{self, Command, USAGE};
 
 fn main() -> ExitCode {
     match args::parse(std::env::args().skip(1)) {
@@ -11,7 +11,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Ok(Command::Version) => {
-            println!("bomberust-cli {}", env!("CARGO_PKG_VERSION"));
+            println!("eksplode-re-cli {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
         Ok(Command::Host(opts)) => finish(app::run_host(&opts)),

@@ -1,6 +1,6 @@
 //! Room setup screen: the terminal host sets the room before the lobby opens.
 
-use bomberust_core::{Mode, RoomSettings};
+use eksplode_re_core::{Mode, RoomSettings};
 use ratatui::crossterm::event::KeyCode;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -15,7 +15,7 @@ const TIME: usize = 3;
 const FRIENDLY_FIRE: usize = 4;
 const CREATE: usize = 5;
 /// The longest name that can be typed, in characters.
-const MAX_NAME: usize = bomberust_core::room::MAX_NAME_CHARS;
+const MAX_NAME: usize = eksplode_re_core::room::MAX_NAME_CHARS;
 
 /// State of the setup screen.
 pub struct SetupScreen {

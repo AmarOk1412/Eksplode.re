@@ -1,4 +1,4 @@
-//! Terminal frontend of Bomberust. Contains no game rules; see `bomberust-core`.
+//! Terminal frontend of Eksplode.re. Contains no game rules; see `eksplode-re-core`.
 
 pub mod app;
 pub mod args;

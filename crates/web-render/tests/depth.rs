@@ -1,11 +1,11 @@
 mod common;
 
-use bomberust_core::PowerUpKind;
-use bomberust_web_render::depth::{draw_list, Item, Layer, Sprite};
-use bomberust_web_render::interp::Interp;
 use common::*;
+use eksplode_re_core::PowerUpKind;
+use eksplode_re_web_render::depth::{draw_list, Item, Layer, Sprite};
+use eksplode_re_web_render::interp::Interp;
 
-fn items(s: &bomberust_core::GameState) -> Vec<Item> {
+fn items(s: &eksplode_re_core::GameState) -> Vec<Item> {
     let o = obs(s);
     let mut i = Interp::default();
     i.update(&o);

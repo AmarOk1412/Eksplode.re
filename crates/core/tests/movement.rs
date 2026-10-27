@@ -1,7 +1,7 @@
 mod common;
 
-use bomberust_core::{step, Config, Dir, Event, PlayerInput};
 use common::*;
+use eksplode_re_core::{step, Config, Dir, Event, PlayerInput};
 
 fn mv(d: Dir) -> PlayerInput {
     PlayerInput {

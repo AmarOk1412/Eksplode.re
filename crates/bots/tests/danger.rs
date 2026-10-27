@@ -2,11 +2,11 @@
 
 mod common;
 
-use bomberust_bots::DangerMap;
 use common::*;
+use eksplode_re_bots::DangerMap;
 
 fn flame_ticks() -> u32 {
-    bomberust_core::Config::default().flame_ticks
+    eksplode_re_core::Config::default().flame_ticks
 }
 
 #[test]
@@ -64,7 +64,7 @@ fn walls_and_blocks_shield_tiles() {
 #[test]
 fn existing_flames_are_dangerous_until_they_expire() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
-    s.flames.push(bomberust_core::Flame {
+    s.flames.push(eksplode_re_core::Flame {
         pos: pos(2, 2),
         ticks_left: 4,
         owners: 0,
@@ -87,10 +87,10 @@ fn a_hypothetical_bomb_can_be_added() {
     );
 }
 
-fn fly(s: &mut bomberust_core::GameState, at: (u8, u8), dir: bomberust_core::Dir, fuse: u32) {
+fn fly(s: &mut eksplode_re_core::GameState, at: (u8, u8), dir: eksplode_re_core::Dir, fuse: u32) {
     add_bomb(s, 1, at.0, at.1, fuse);
     let b = s.bombs.last_mut().unwrap();
-    b.flight = Some(bomberust_core::Flight {
+    b.flight = Some(eksplode_re_core::Flight {
         dir,
         hop_left: 2,
         origin: pos(at.0, at.1),
@@ -100,7 +100,7 @@ fn fly(s: &mut bomberust_core::GameState, at: (u8, u8), dir: bomberust_core::Dir
 #[test]
 fn a_bomb_in_flight_is_dangerous_where_it_will_land_and_where_it_is() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
-    fly(&mut s, (2, 3), bomberust_core::Dir::Right, 10);
+    fly(&mut s, (2, 3), eksplode_re_core::Dir::Right, 10);
     let d = DangerMap::from_observation(&obs(&s, 0));
     // it will land on (3, 3): that cross burns
     for p in [pos(3, 3), pos(3, 1), pos(3, 5), pos(5, 3)] {
@@ -121,32 +121,32 @@ fn the_landing_prediction_hops_over_blocks_players_and_other_bombs() {
         "#######", "#.....#", "#.....#", "#..+..#", "#.....#", "#.....#", "#######",
     ];
     let mut s = duel(&rows, (1, 5), (4, 3));
-    s.arena = bomberust_core::Arena::from_rows(&[
+    s.arena = eksplode_re_core::Arena::from_rows(&[
         "#######", "#.....#", "#.....#", "#.+...#", "#.....#", "#.....#", "#######",
     ])
     .unwrap();
-    fly(&mut s, (1, 3), bomberust_core::Dir::Right, 12);
+    fly(&mut s, (1, 3), eksplode_re_core::Dir::Right, 12);
     // (2, 3) is a block and (3, 3) free: it lands on (3, 3)
-    let landing = bomberust_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
+    let landing = eksplode_re_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
     assert_eq!(landing, pos(3, 3));
     // a player on (3, 3) moves the prediction on to (4, 3) ... which holds player 1: (5, 3)
     s.players[0].pos = pos(3, 3);
-    let landing = bomberust_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
+    let landing = eksplode_re_core::punch::predict_landing(&s.arena, &s.players, &s.bombs, 0);
     assert_eq!(landing, pos(5, 3));
     let d = DangerMap::from_observation(&obs(&s, 0));
     assert_eq!(d.first_danger(pos(5, 3)), Some(12));
 }
 
-fn slide(s: &mut bomberust_core::GameState, at: (u8, u8), dir: bomberust_core::Dir, fuse: u32) {
+fn slide(s: &mut eksplode_re_core::GameState, at: (u8, u8), dir: eksplode_re_core::Dir, fuse: u32) {
     add_bomb(s, 1, at.0, at.1, fuse);
     let b = s.bombs.last_mut().unwrap();
-    b.slide = Some(bomberust_core::Slide { dir, step_left: 2 });
+    b.slide = Some(eksplode_re_core::Slide { dir, step_left: 2 });
 }
 
 #[test]
 fn f3_us2_as12_a_sliding_bomb_is_dangerous_where_it_is_and_where_it_will_stop() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
-    slide(&mut s, (1, 3), bomberust_core::Dir::Right, 10);
+    slide(&mut s, (1, 3), eksplode_re_core::Dir::Right, 10);
     let d = DangerMap::from_observation(&obs(&s, 0));
     // it will stop on (5, 3), the last free square before the wall: that cross burns
     for p in [pos(5, 3), pos(5, 1), pos(5, 5), pos(3, 3)] {
@@ -161,8 +161,8 @@ fn f3_us2_as12_a_sliding_bomb_is_dangerous_where_it_is_and_where_it_will_stop() 
 fn f3_us2_as12_the_stop_square_follows_blockers_on_the_way() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
     s.players[1].pos = pos(4, 3);
-    slide(&mut s, (1, 3), bomberust_core::Dir::Right, 12);
-    let landing = bomberust_core::kick::predict_slide_stop(&s.arena, &s.players, &s.bombs, 0);
+    slide(&mut s, (1, 3), eksplode_re_core::Dir::Right, 12);
+    let landing = eksplode_re_core::kick::predict_slide_stop(&s.arena, &s.players, &s.bombs, 0);
     assert_eq!(landing, pos(3, 3), "it stops before the living player");
     let d = DangerMap::from_observation(&obs(&s, 0));
     assert_eq!(d.first_danger(pos(3, 2)), Some(12));
@@ -171,7 +171,7 @@ fn f3_us2_as12_the_stop_square_follows_blockers_on_the_way() {
 #[test]
 fn an_announced_square_is_lethal_from_its_landing_on() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
-    s.closing.falling.push(bomberust_core::Falling {
+    s.closing.falling.push(eksplode_re_core::Falling {
         pos: pos(3, 3),
         ticks_left: 7,
     });

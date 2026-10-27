@@ -7,7 +7,7 @@
 
 use std::cell::RefCell;
 
-use bomberust_core::Observation;
+use eksplode_re_core::Observation;
 
 use crate::commands::{build_with_looks, flatten, portrait_look, Command};
 use crate::interp::Interp;
@@ -37,19 +37,19 @@ thread_local! {
 
 /// Reserves `len` bytes (1 byte to 1 MiB); returns null otherwise.
 #[no_mangle]
-pub extern "C" fn bomberust_alloc(len: usize) -> *mut u8 {
+pub extern "C" fn eksplode_re_alloc(len: usize) -> *mut u8 {
     if len == 0 || len > MAX_ALLOC {
         return std::ptr::null_mut();
     }
     Box::into_raw(vec![0u8; len].into_boxed_slice()).cast::<u8>()
 }
 
-/// Releases a block from [`bomberust_alloc`]. `len` must be the size it was allocated with.
+/// Releases a block from [`eksplode_re_alloc`]. `len` must be the size it was allocated with.
 ///
 /// # Safety
-/// `ptr` must be null or come from `bomberust_alloc(len)` and not be freed twice.
+/// `ptr` must be null or come from `eksplode_re_alloc(len)` and not be freed twice.
 #[no_mangle]
-pub unsafe extern "C" fn bomberust_free(ptr: *mut u8, len: usize) {
+pub unsafe extern "C" fn eksplode_re_free(ptr: *mut u8, len: usize) {
     if ptr.is_null() || len == 0 || len > MAX_ALLOC {
         return;
     }
@@ -62,7 +62,7 @@ pub unsafe extern "C" fn bomberust_free(ptr: *mut u8, len: usize) {
 /// # Safety
 /// `ptr` must point to `len` readable bytes (or `len` must be 0).
 #[no_mangle]
-pub unsafe extern "C" fn bomberust_load(ptr: *const u8, len: usize) -> i32 {
+pub unsafe extern "C" fn eksplode_re_load(ptr: *const u8, len: usize) -> i32 {
     let bytes: &[u8] = if ptr.is_null() || len == 0 {
         &[]
     } else {
@@ -95,7 +95,7 @@ pub unsafe extern "C" fn bomberust_load(ptr: *const u8, len: usize) -> i32 {
 /// # Safety
 /// `ptr` must point to `len` readable bytes (or `len` must be 0).
 #[no_mangle]
-pub unsafe extern "C" fn bomberust_set_looks(ptr: *const u8, len: usize) -> i32 {
+pub unsafe extern "C" fn eksplode_re_set_looks(ptr: *const u8, len: usize) -> i32 {
     let bytes: &[u8] = if ptr.is_null() || len == 0 {
         &[]
     } else {
@@ -119,7 +119,7 @@ pub unsafe extern "C" fn bomberust_set_looks(ptr: *const u8, len: usize) -> i32 
 
 /// Builds the drawing commands for a canvas; returns how many (0 if nothing is loaded).
 #[no_mangle]
-pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize {
+pub extern "C" fn eksplode_re_frame(width: f32, height: f32, alpha: f32) -> usize {
     if !(width.is_finite() && height.is_finite() && width > 0.0 && height > 0.0) {
         return 0;
     }
@@ -138,7 +138,7 @@ pub extern "C" fn bomberust_frame(width: f32, height: f32, alpha: f32) -> usize 
 /// Builds the commands of a character card: slot `slot` fitted into `width` x `height` pixels,
 /// the whole figure for `rows == 0`, otherwise its first `rows` rows. Returns how many.
 #[no_mangle]
-pub extern "C" fn bomberust_portrait(slot: u32, width: f32, height: f32, rows: u32) -> usize {
+pub extern "C" fn eksplode_re_portrait(slot: u32, width: f32, height: f32, rows: u32) -> usize {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         let list = portrait_look(
@@ -154,7 +154,7 @@ pub extern "C" fn bomberust_portrait(slot: u32, width: f32, height: f32, rows: u
 /// Builds the commands of the semi-3D character of slot `slot` inside `width` x `height`
 /// pixels, `phase` seconds into its animation. Returns how many; bad sizes give 0.
 #[no_mangle]
-pub extern "C" fn bomberust_portrait3d(slot: u32, width: f32, height: f32, phase: f32) -> usize {
+pub extern "C" fn eksplode_re_portrait3d(slot: u32, width: f32, height: f32, phase: f32) -> usize {
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         let list = crate::iso3d::portrait3d(&s.looks[(slot % 4) as usize], (width, height), phase);
@@ -163,21 +163,21 @@ pub extern "C" fn bomberust_portrait3d(slot: u32, width: f32, height: f32, phase
     })
 }
 
-/// Pointer to the command buffer, valid until the next [`bomberust_frame`] or portrait call.
+/// Pointer to the command buffer, valid until the next [`eksplode_re_frame`] or portrait call.
 #[no_mangle]
-pub extern "C" fn bomberust_output_ptr() -> *const f32 {
+pub extern "C" fn eksplode_re_output_ptr() -> *const f32 {
     STATE.with(|s| s.borrow().out.as_ptr())
 }
 
 /// Floats per command.
 #[no_mangle]
-pub extern "C" fn bomberust_stride() -> usize {
+pub extern "C" fn eksplode_re_stride() -> usize {
     Command::STRIDE
 }
 
 /// The tile (`y * width + x`) under a canvas point of the last frame, or -1.
 #[no_mangle]
-pub extern "C" fn bomberust_pick_tile(x: f32, y: f32) -> i32 {
+pub extern "C" fn eksplode_re_pick_tile(x: f32, y: f32) -> i32 {
     STATE.with(|s| {
         let s = s.borrow();
         let Some(obs) = s.obs.as_ref() else {

@@ -2,9 +2,9 @@
 
 use std::io::Cursor;
 
-use bomberust_core::{Config, Controller, Dir, Event, GameState, Lobby, Outcome, PlayerId, Pos};
-use bomberust_net::codec::{decode, encode, LineReader, NetError};
-use bomberust_net::protocol::{valid_name, ClientMsg, RejectReason, ServerMsg, MAX_LINE};
+use eksplode_re_core::{Config, Controller, Dir, Event, GameState, Lobby, Outcome, PlayerId, Pos};
+use eksplode_re_net::codec::{decode, encode, LineReader, NetError};
+use eksplode_re_net::protocol::{valid_name, ClientMsg, RejectReason, ServerMsg, MAX_LINE};
 
 fn roundtrip<T>(msg: T)
 where
@@ -225,14 +225,14 @@ fn an_input_with_punch_round_trips() {
 
 #[test]
 fn the_observation_carries_punch_malus_and_flight() {
-    use bomberust_core::{ActiveMalus, Flight, PowerUpKind};
+    use eksplode_re_core::{ActiveMalus, Flight, PowerUpKind};
     let mut s = GameState::new(Config::default(), 3, [true; 4]).unwrap();
     s.players[1].has_punch = true;
     s.players[1].malus = Some(ActiveMalus {
         kind: PowerUpKind::Slow,
         ticks_left: 120,
     });
-    let bomb = bomberust_core::Bomb {
+    let bomb = eksplode_re_core::Bomb {
         owner: PlayerId::new(1).unwrap(),
         pos: Pos::new(3, 1),
         ticks_left: 30,
@@ -246,13 +246,13 @@ fn the_observation_carries_punch_malus_and_flight() {
     };
     s.bombs.push(bomb);
     s.players[2].has_kick = true;
-    s.bombs.push(bomberust_core::Bomb {
+    s.bombs.push(eksplode_re_core::Bomb {
         owner: PlayerId::new(2).unwrap(),
         pos: Pos::new(5, 5),
         ticks_left: 30,
         range: 2,
         flight: None,
-        slide: Some(bomberust_core::Slide {
+        slide: Some(eksplode_re_core::Slide {
             dir: Dir::Left,
             step_left: 2,
         }),
@@ -364,7 +364,7 @@ fn f4_old_messages_without_the_new_fields_still_decode() {
     .unwrap();
     match lobby {
         ServerMsg::Lobby { lobby, .. } => {
-            assert_eq!(lobby.settings, bomberust_core::RoomSettings::default());
+            assert_eq!(lobby.settings, eksplode_re_core::RoomSettings::default());
         }
         other => panic!("{other:?}"),
     }
@@ -392,7 +392,7 @@ fn f4_a_client_that_does_not_know_a_message_gets_an_error_not_a_panic() {
     }
     roundtrip(ServerMsg::RoomInfo {
         open: true,
-        settings: bomberust_core::RoomSettings::default(),
+        settings: eksplode_re_core::RoomSettings::default(),
         humans: 2,
     });
     roundtrip(ClientMsg::RoomQuery);

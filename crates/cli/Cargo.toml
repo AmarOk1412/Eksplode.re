@@ -1,23 +1,23 @@
 [package]
-name = "bomberust-cli"
-description = "Terminal version of Bomberust."
+name = "eksplode-re-cli"
+description = "Terminal version of Eksplode.re."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "bomberust_cli"
+name = "eksplode_re_cli"
 
 [[bin]]
-name = "bomberust-cli"
+name = "eksplode-re-cli"
 path = "src/main.rs"
 
 [dependencies]
-bomberust-bots = { path = "../bots" }
-bomberust-core = { path = "../core" }
-bomberust-net = { path = "../net" }
-bomberust-web = { path = "../web" }
+eksplode-re-bots = { path = "../bots" }
+eksplode-re-core = { path = "../core" }
+eksplode-re-net = { path = "../net" }
+eksplode-re-web = { path = "../web" }
 ratatui = "0.29"
 
 [lints]

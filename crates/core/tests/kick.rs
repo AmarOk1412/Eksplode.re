@@ -2,12 +2,12 @@
 
 mod common;
 
-use bomberust_core::kick::predict_slide_stop;
-use bomberust_core::{
+use common::*;
+use eksplode_re_core::kick::predict_slide_stop;
+use eksplode_re_core::{
     step, Arena, Config, Dir, Event, Flight, GameState, PlayerInput, Pos, PowerUp, PowerUpKind,
     Slide,
 };
-use common::*;
 
 fn p(x: u8, y: u8) -> Pos {
     Pos::new(x, y)
@@ -327,7 +327,7 @@ fn f3_us2_as12_the_explosion_prediction_matches_where_a_sliding_bomb_goes_off() 
         let mut s = setup(&[], &[], &[]);
         s.bombs[0].ticks_left = fuse;
         let mut all = step(&mut s, &walk_right());
-        let predicted = bomberust_core::kick::predict_slide_explosion(
+        let predicted = eksplode_re_core::kick::predict_slide_explosion(
             &s.arena,
             &s.players,
             &s.bombs,

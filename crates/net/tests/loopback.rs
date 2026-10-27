@@ -2,17 +2,17 @@ mod common;
 
 use std::time::Duration;
 
-use bomberust_core::{Dir, Outcome};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_net::Client;
 use common::*;
+use eksplode_re_core::{Dir, Outcome};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::Client;
 
 /// Everything a client saw of one match.
 #[derive(Default)]
 struct Record {
     start: Option<(u64, u32)>,
-    first_arena: Option<bomberust_core::Arena>,
-    last: Option<bomberust_core::Observation>,
+    first_arena: Option<eksplode_re_core::Arena>,
+    last: Option<eksplode_re_core::Observation>,
     ended: Option<Outcome>,
     snapshots: u32,
 }
@@ -47,7 +47,7 @@ fn follow(c: &Client) -> Record {
     r
 }
 
-fn quick_host() -> bomberust_net::Host {
+fn quick_host() -> eksplode_re_net::Host {
     host_with(|c| c.game = quick_game(60))
 }
 
@@ -327,7 +327,7 @@ fn the_host_leaving_tells_everyone() {
 #[test]
 fn inputs_from_a_player_move_their_character() {
     let host = host_with(|c| {
-        c.game = bomberust_core::Config {
+        c.game = eksplode_re_core::Config {
             block_density: 0.0,
             ..quick_game(100_000)
         };
@@ -351,7 +351,7 @@ fn inputs_from_a_player_move_their_character() {
         {
             tick = t;
             moved |= events.iter().any(
-                |e| matches!(e, bomberust_core::Event::Moved { player, .. } if player.index() == 0),
+                |e| matches!(e, eksplode_re_core::Event::Moved { player, .. } if player.index() == 0),
             );
         }
         if moved {

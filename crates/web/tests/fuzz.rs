@@ -5,9 +5,9 @@ mod common;
 
 use std::io::Cursor;
 
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
-use bomberust_web::http::{parse_head, read_head};
 use common::*;
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_web::http::{parse_head, read_head};
 use tungstenite::Message;
 
 /// A small deterministic xorshift generator so failures are reproducible.

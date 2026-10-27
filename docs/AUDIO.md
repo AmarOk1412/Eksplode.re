@@ -21,7 +21,7 @@ and free of third-party rights.
 
 The speaker button on the join screen, the lobby and the match opens the sound settings: a music
 slider, an effects slider, a mute toggle and a test-sound button. Changes apply within 50 ms
-and are stored in the browser (`localStorage` key `bomberust.audio.v1`) as
+and are stored in the browser (`localStorage` key `eksplode.re.audio.v1`) as
 `{"music":0.35,"effects":0.7,"muted":false}`, which are also the defaults. Levels are clamped
 to 0..1. Three gain buses carry the sound: music and effects both feed a master bus that feeds the
 speakers; the effective gain of a bus is zero while muted.

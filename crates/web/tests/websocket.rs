@@ -2,9 +2,9 @@ mod common;
 
 use std::time::Duration;
 
-use bomberust_core::{Config, Dir, Event};
-use bomberust_net::protocol::{ClientMsg, RejectReason, ServerMsg};
 use common::*;
+use eksplode_re_core::{Config, Dir, Event};
+use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg};
 
 fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
     move |m| matches!(m, ServerMsg::Error { code: c, .. } if c == code)

@@ -2,12 +2,12 @@
 
 mod common;
 
-use bomberust_core::closing::{closing_order, interval};
-use bomberust_core::{
+use common::*;
+use eksplode_re_core::closing::{closing_order, interval};
+use eksplode_re_core::{
     step, Config, Dir, Event, Falling, Flame, GameState, Phase, PlayerInput, PowerUp, PowerUpKind,
     Rng, Tile,
 };
-use common::*;
 
 /// A 7x7 open arena whose pattern starts at tick 50, announces a square every 2 ticks (25 squares,
 /// 50 ticks) and lands it 5 ticks later.
@@ -179,7 +179,7 @@ fn the_interval_covers_the_board_in_the_pattern_time_on_every_size() {
             ..Config::default()
         };
         let mut rng = Rng::new(7);
-        let arena = bomberust_core::Arena::generate(&c, &mut rng);
+        let arena = eksplode_re_core::Arena::generate(&c, &mut rng);
         let n = closing_order(w, h)
             .iter()
             .filter(|p| arena.tile(**p) != Tile::Wall)
@@ -220,7 +220,7 @@ fn the_whole_board_is_covered_within_the_pattern_time_plus_the_lead() {
         let mut ev = Vec::new();
         s.tick = t0;
         while s.tick < c.round_limit_ticks + c.closing_lead_ticks {
-            bomberust_core::closing::advance(&mut s, &mut ev);
+            eksplode_re_core::closing::advance(&mut s, &mut ev);
             s.tick += 1;
         }
         for p in before {
@@ -357,7 +357,7 @@ fn a_flying_bomb_is_unaffected_until_it_lands() {
     let mut s = open_state([Some((5, 5)), Some((3, 5)), None, None]);
     run_to(&mut s, 55);
     add_bomb(&mut s, 0, 1, 1, 500);
-    s.bombs[0].flight = Some(bomberust_core::Flight {
+    s.bombs[0].flight = Some(eksplode_re_core::Flight {
         dir: Dir::Down,
         hop_left: 1000,
         origin: pos(1, 1),

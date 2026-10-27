@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Runs bomberust-cli in pseudo-terminals and checks that every kind of Enter works.
+"""Runs eksplode-re-cli in pseudo-terminals and checks that every kind of Enter works.
 
 Usage: scripts/pty-enter-check.py [--attempts N]
-The binary is taken from $BOMBERUST_CLI or target/debug/bomberust-cli (build it first).
+The binary is taken from $EKSPLODE_RE_CLI or target/debug/eksplode-re-cli (build it first).
 Exit status 0 when every check passes.
 """
 import fcntl
@@ -18,8 +18,8 @@ import termios
 import time
 import urllib.request
 
-BIN = os.environ.get("BOMBERUST_CLI", "target/debug/bomberust-cli")
-SERVER = os.environ.get("BOMBERUST_SERVER", "target/debug/bomberust-server")
+BIN = os.environ.get("EKSPLODE_RE_CLI", "target/debug/eksplode-re-cli")
+SERVER = os.environ.get("EKSPLODE_RE_SERVER", "target/debug/eksplode-re-server")
 ENTERS = {
     "CR": b"\r",
     "LF": b"\n",
@@ -38,7 +38,7 @@ def free_port():
 def spawn(args):
     pid, fd = pty.fork()
     if pid == 0:
-        os.execv(BIN, ["bomberust-cli"] + args)
+        os.execv(BIN, ["eksplode-re-cli"] + args)
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
     return pid, fd
 
@@ -97,7 +97,7 @@ def check_host_enter(label, seq):
 
 
 def start_server():
-    """A headless bomberust-server; returns (process, game_port, http_port)."""
+    """A headless eksplode-re-server; returns (process, game_port, http_port)."""
     game, http = free_port(), free_port()
     proc = subprocess.Popen(
         [SERVER, "--game-port", str(game), "--http-port", str(http)],
@@ -112,7 +112,7 @@ def start_server():
         except OSError:
             time.sleep(0.05)
     proc.kill()
-    raise RuntimeError("bomberust-server did not start")
+    raise RuntimeError("eksplode-re-server did not start")
 
 
 def check_owner_through_server(seq):
@@ -140,7 +140,7 @@ def check_host_serves_the_page():
     if ok:
         try:
             with urllib.request.urlopen(url, timeout=3) as r:
-                ok = r.status == 200 and b"Bomberust" in r.read()
+                ok = r.status == 200 and b"Eksplode.re" in r.read()
         except OSError:
             ok = False
     stop(host)
@@ -166,7 +166,7 @@ def main():
     if "--attempts" in sys.argv:
         attempts = int(sys.argv[sys.argv.index("--attempts") + 1])
     if not os.path.exists(BIN):
-        print(f"missing {BIN}; run cargo build -p bomberust-cli first")
+        print(f"missing {BIN}; run cargo build -p eksplode-re-cli first")
         return 2
     failures = 0
     for label, seq in ENTERS.items():
@@ -182,9 +182,9 @@ def main():
             results = [check_owner_through_server(seq) for _ in range(attempts)]
             good = all(results)
             failures += 0 if good else 1
-            print(f"joined owner on bomberust-server, {label}: {'ok' if good else 'FAILED'} ({sum(results)}/{attempts})")
+            print(f"joined owner on eksplode-re-server, {label}: {'ok' if good else 'FAILED'} ({sum(results)}/{attempts})")
     else:
-        print(f"skipped the bomberust-server checks: {SERVER} is not built")
+        print(f"skipped the eksplode-re-server checks: {SERVER} is not built")
     good = check_host_serves_the_page()
     failures += 0 if good else 1
     print(f"host --web-port serves the page: {'ok' if good else 'FAILED'}")

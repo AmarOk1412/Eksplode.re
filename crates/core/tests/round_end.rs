@@ -1,7 +1,7 @@
 mod common;
 
-use bomberust_core::{step, Config, Event, Outcome, Phase};
 use common::*;
+use eksplode_re_core::{step, Config, Event, Outcome, Phase};
 
 #[test]
 fn us1_as7_last_survivor_wins() {
@@ -83,7 +83,7 @@ fn pattern_config() -> Config {
     }
 }
 
-fn run_until(s: &mut bomberust_core::GameState, tick: u32) {
+fn run_until(s: &mut eksplode_re_core::GameState, tick: u32) {
     while s.tick < tick && s.phase == Phase::Playing {
         step(s, &idle());
     }
@@ -132,7 +132,7 @@ fn f4_us2_as4_the_covered_board_ends_the_round_with_the_last_survivor_or_a_draw(
         [Some((2, 3)), Some((3, 3)), None, None],
     );
     run_until(&mut s, 101);
-    s.flames.push(bomberust_core::Flame {
+    s.flames.push(eksplode_re_core::Flame {
         pos: pos(3, 3),
         ticks_left: 2,
         owners: 0,

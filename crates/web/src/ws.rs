@@ -6,9 +6,9 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
-use bomberust_net::codec::decode;
-use bomberust_net::protocol::{ClientMsg, ServerMsg, MAX_LINE};
-use bomberust_net::Client;
+use eksplode_re_net::codec::decode;
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg, MAX_LINE};
+use eksplode_re_net::Client;
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::{CloseFrame, WebSocketConfig};
 use tungstenite::{Error, HandshakeError, Message, WebSocket};

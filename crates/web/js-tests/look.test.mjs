@@ -77,6 +77,13 @@ test("f3_us1_as2_the_look_is_remembered_after_a_reload", () => {
   assert.deepEqual(loadLook(storage, 0), look, "a new page load finds it again");
 });
 
+test("looks migrate from the Bomberust storage key", () => {
+  const storage = fakeStorage();
+  const look = { colour: "Pink", gender: "Female", head: "Cap", face: "Glasses" };
+  storage.setItem("bomberust.look.v1", JSON.stringify(look));
+  assert.deepEqual(loadLook(storage), look);
+});
+
 test("a missing, corrupt or unavailable store gives the default", () => {
   assert.deepEqual(loadLook(fakeStorage(), 1), defaultLook(1));
   const corrupt = fakeStorage();

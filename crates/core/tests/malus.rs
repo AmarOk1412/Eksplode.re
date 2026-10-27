@@ -1,10 +1,10 @@
 mod common;
 
-use bomberust_core::state::ActiveMalus;
-use bomberust_core::{
+use common::*;
+use eksplode_re_core::state::ActiveMalus;
+use eksplode_re_core::{
     step, Config, Dir, Event, Flame, GameState, PlayerInput, PowerUp, PowerUpKind,
 };
-use common::*;
 
 const CORRIDOR: [&str; 7] = [
     "#########################",
@@ -273,7 +273,7 @@ fn the_malus_clock_stops_with_the_round() {
     pick_up(&mut s, PowerUpKind::Slow);
     s.players[1].alive = false;
     step(&mut s, &idle());
-    assert!(matches!(s.phase, bomberust_core::Phase::Ended(_)));
+    assert!(matches!(s.phase, eksplode_re_core::Phase::Ended(_)));
     let left = s.players[0].malus.unwrap().ticks_left;
     step(&mut s, &idle());
     assert_eq!(

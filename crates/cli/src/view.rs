@@ -1,6 +1,6 @@
 //! Rendering of a game to a ratatui frame.
 
-use bomberust_core::{Dir, Observation, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
+use eksplode_re_core::{Dir, Observation, Outcome, Phase, PlayerId, Pos, PowerUpKind, Tile};
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
@@ -39,7 +39,7 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
             // a block is about to land on this player
             style = style.add_modifier(Modifier::REVERSED);
         }
-        if p.role == bomberust_core::Role::Chaser {
+        if p.role == eksplode_re_core::Role::Chaser {
             style = style.bg(Color::Yellow).fg(Color::Black);
         }
         return (format!("P{}", p.id.index() + 1), style);
@@ -147,7 +147,7 @@ pub fn render(frame: &mut Frame, state: &Observation, ctx: &ViewContext) {
         })
         .collect();
     frame.render_widget(
-        Paragraph::new(lines).block(Block::bordered().title(" Bomberust ")),
+        Paragraph::new(lines).block(Block::bordered().title(" Eksplode.re ")),
         arena_rect,
     );
 
@@ -164,7 +164,7 @@ pub fn clock(state: &Observation) -> String {
     let c = &state.config;
     let pattern = matches!(
         c.mode,
-        bomberust_core::Mode::Normal | bomberust_core::Mode::Team
+        eksplode_re_core::Mode::Normal | eksplode_re_core::Mode::Team
     ) && c.closing_ticks > 0
         && c.closing_ticks < c.round_limit_ticks;
     if pattern && state.tick >= c.round_limit_ticks - c.closing_ticks {
@@ -208,12 +208,12 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
                 effects.push_str(&format!(" {name} {seconds}s"));
             }
             let role = match p.role {
-                bomberust_core::Role::Chaser => {
+                eksplode_re_core::Role::Chaser => {
                     let shield = if p.shield_left > 0 { " []" } else { "" };
                     format!(" <3 x{}{shield}", p.hearts)
                 }
-                bomberust_core::Role::Runner => " runner".to_string(),
-                bomberust_core::Role::Normal => String::new(),
+                eksplode_re_core::Role::Runner => " runner".to_string(),
+                eksplode_re_core::Role::Normal => String::new(),
             };
             format!(
                 "{tag:<6} bombs {}/{} range {} speed {speed}{effects}{role}",
@@ -223,7 +223,7 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
             format!("{tag:<6} eliminated")
         };
         let mut spans = vec![name];
-        if p.role == bomberust_core::Role::Chaser {
+        if p.role == eksplode_re_core::Role::Chaser {
             spans.push(Span::styled(
                 "* ",
                 Style::default()

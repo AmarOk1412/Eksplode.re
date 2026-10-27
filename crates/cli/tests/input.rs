@@ -1,5 +1,5 @@
-use bomberust_cli::input::{map_key, InputState, KeyAction, PlayerAction};
-use bomberust_core::Dir;
+use eksplode_re_cli::input::{map_key, InputState, KeyAction, PlayerAction};
+use eksplode_re_core::Dir;
 use ratatui::crossterm::event::KeyCode;
 
 fn player(slot: usize, action: PlayerAction) -> Option<KeyAction> {

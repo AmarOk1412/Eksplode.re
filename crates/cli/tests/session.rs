@@ -1,8 +1,8 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_cli::app::Session;
-use bomberust_cli::args::LocalOptions;
-use bomberust_core::{Controller, Event, Lobby, Outcome, Phase, Pos};
+use eksplode_re_cli::app::Session;
+use eksplode_re_cli::args::LocalOptions;
+use eksplode_re_core::{Controller, Event, Lobby, Outcome, Phase, Pos};
 use ratatui::crossterm::event::KeyCode;
 
 fn session(players: u8, bots: u8) -> Session {

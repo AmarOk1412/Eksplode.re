@@ -2,12 +2,12 @@
 
 mod common;
 
-use bomberust_net::look::{Colour, Face, Gender, Head, Look};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
 use common::*;
+use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use serde_json::{json, Value};
 
-fn join(host: &bomberust_net::Host, name: &str, look: Option<Value>) -> (Raw, u8, Vec<Look>) {
+fn join(host: &eksplode_re_net::Host, name: &str, look: Option<Value>) -> (Raw, u8, Vec<Look>) {
     let mut raw = Raw::connect(host.addr());
     let mut msg = json!({"type": "Join", "version": 1, "name": name});
     if let Some(look) = look {

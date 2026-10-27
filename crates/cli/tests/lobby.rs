@@ -1,7 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
-use bomberust_cli::lobby::{render, LobbyScreen};
-use bomberust_core::{Controller, Lobby};
+use eksplode_re_cli::lobby::{render, LobbyScreen};
+use eksplode_re_core::{Controller, Lobby};
 use ratatui::backend::TestBackend;
 use ratatui::crossterm::event::KeyCode;
 use ratatui::Terminal;

@@ -1,6 +1,6 @@
 //! Messages exchanged between host and clients; see contracts/network-protocol.md.
 
-use bomberust_core::{Config, Dir, Event, Lobby, Observation, Outcome, RoomSettings};
+use eksplode_re_core::{Config, Dir, Event, Lobby, Observation, Outcome, RoomSettings};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

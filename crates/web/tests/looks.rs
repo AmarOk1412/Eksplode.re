@@ -3,9 +3,9 @@
 
 mod common;
 
-use bomberust_net::look::{Colour, Face, Gender, Head, Look};
-use bomberust_net::protocol::{ClientMsg, ServerMsg};
 use common::*;
+use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use serde_json::json;
 
 fn welcome_looks(ws: &mut Ws) -> Vec<Look> {

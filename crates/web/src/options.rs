@@ -3,11 +3,11 @@
 use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
-use bomberust_core::{Config, RoomSettings};
+use eksplode_re_core::{Config, RoomSettings};
 
 use crate::origin::AllowedOrigins;
 
-/// Everything `bomberust-server` can be configured with.
+/// Everything `eksplode-re-server` can be configured with.
 #[derive(Clone, Debug)]
 pub struct ServerOptions {
     /// Address both ports listen on.
@@ -41,7 +41,7 @@ impl Default for ServerOptions {
         Self {
             bind: IpAddr::V4(Ipv4Addr::LOCALHOST),
             http_port: 8080,
-            game_port: bomberust_net::DEFAULT_PORT,
+            game_port: eksplode_re_net::DEFAULT_PORT,
             bots: 0,
             seed: None,
             origins: AllowedOrigins::SameOrigin,

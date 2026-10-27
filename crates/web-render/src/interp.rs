@@ -1,6 +1,6 @@
 //! Smooth player movement between two server ticks.
 
-use bomberust_core::Observation;
+use eksplode_re_core::Observation;
 
 use crate::look::Frame;
 

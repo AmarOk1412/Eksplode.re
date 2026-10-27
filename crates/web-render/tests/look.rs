@@ -2,11 +2,11 @@
 
 mod common;
 
-use bomberust_web_render::commands::{build, build_with_looks, portrait_look, Command, Kind};
-use bomberust_web_render::interp::Interp;
-use bomberust_web_render::look::*;
-use bomberust_web_render::sprites::{player_skin, Rgb};
 use common::*;
+use eksplode_re_web_render::commands::{build, build_with_looks, portrait_look, Command, Kind};
+use eksplode_re_web_render::interp::Interp;
+use eksplode_re_web_render::look::*;
+use eksplode_re_web_render::sprites::{player_skin, Rgb};
 use serde_json::json;
 
 fn look(colour: usize, gender: Gender, head: Head, face: Face) -> Look {

@@ -1,9 +1,9 @@
 //! A player's look as the renderer understands it: colour, gender look and accessories.
 //!
-//! This mirrors the look of the server (`bomberust_net::look`): the names are the wire names, and
+//! This mirrors the look of the server (`eksplode_re_net::look`): the names are the wire names, and
 //! reading a look from JSON is as lenient as the host's, so a bad entry only ever gives a default.
 
-use bomberust_core::Dir;
+use eksplode_re_core::Dir;
 use serde_json::Value;
 
 use crate::sprites::{hex, mix, player_skin, runs, Rgb, Run, Skin, PLAYER};

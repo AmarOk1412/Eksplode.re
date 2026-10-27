@@ -3,9 +3,9 @@ mod common;
 use std::net::TcpListener;
 use std::process::Command;
 
-use bomberust_net::protocol::ServerMsg;
-use bomberust_web::{Server, ServerError};
 use common::*;
+use eksplode_re_net::protocol::ServerMsg;
+use eksplode_re_web::{Server, ServerError};
 
 #[test]
 fn a_busy_http_port_is_reported_with_its_number() {
@@ -34,7 +34,7 @@ fn shutdown_tells_every_client_and_closes_the_sockets() {
     let mut ws = Ws::open(s.http_addr());
     ws.join("Web");
     ws.welcome_slot();
-    let tcp = bomberust_net::Client::connect(&s.game_addr().to_string(), "Tcp").unwrap();
+    let tcp = eksplode_re_net::Client::connect(&s.game_addr().to_string(), "Tcp").unwrap();
     // wait for the terminal client to be in the lobby
     let welcome = tcp.recv_timeout(WAIT).unwrap();
     assert!(matches!(welcome, ServerMsg::Welcome { slot: 1, .. }));
@@ -57,13 +57,13 @@ fn shutdown_tells_every_client_and_closes_the_sockets() {
 fn the_banner_shows_the_addresses_and_how_to_stop() {
     let s = server(|_| {});
     let banner = s.banner();
-    assert!(banner.contains("Bomberust server running"), "{banner}");
+    assert!(banner.contains("Eksplode.re server running"), "{banner}");
     assert!(banner.contains(&format!(
         "Web page:        http://127.0.0.1:{}/",
         s.http_addr().port()
     )));
     assert!(banner.contains(&format!(
-        "Terminal client: bomberust-cli join 127.0.0.1:{}",
+        "Terminal client: eksplode-re-cli join 127.0.0.1:{}",
         s.game_addr().port()
     )));
     assert!(banner.contains("Stop:            Ctrl+C"));
@@ -85,7 +85,7 @@ fn us3_as2_the_binary_reports_a_busy_port_and_exits_with_status_1() {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         l.local_addr().unwrap().port()
     };
-    let out = Command::new(env!("CARGO_BIN_EXE_bomberust-server"))
+    let out = Command::new(env!("CARGO_BIN_EXE_eksplode-re-server"))
         .args([
             "--http-port",
             &port.to_string(),
@@ -100,12 +100,12 @@ fn us3_as2_the_binary_reports_a_busy_port_and_exits_with_status_1() {
 
 #[test]
 fn the_binary_rejects_bad_usage_with_status_2() {
-    let out = Command::new(env!("CARGO_BIN_EXE_bomberust-server"))
+    let out = Command::new(env!("CARGO_BIN_EXE_eksplode-re-server"))
         .arg("--nope")
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2));
-    let out = Command::new(env!("CARGO_BIN_EXE_bomberust-server"))
+    let out = Command::new(env!("CARGO_BIN_EXE_eksplode-re-server"))
         .arg("--help")
         .output()
         .unwrap();
@@ -115,12 +115,12 @@ fn the_binary_rejects_bad_usage_with_status_2() {
 
 #[test]
 fn us3_as1_attach_shares_a_match_host_that_someone_else_owns() {
-    let host = bomberust_net::Host::start(bomberust_net::HostConfig {
+    let host = eksplode_re_net::Host::start(eksplode_re_net::HostConfig {
         bind: "127.0.0.1:0".into(),
         tick: std::time::Duration::from_millis(4),
         seed: Some(5),
         game: options().game,
-        ..bomberust_net::HostConfig::default()
+        ..eksplode_re_net::HostConfig::default()
     })
     .unwrap();
     let web = Server::attach(host.handle(), host.addr(), options()).unwrap();
@@ -129,7 +129,7 @@ fn us3_as1_attach_shares_a_match_host_that_someone_else_owns() {
     let mut ws = Ws::open(web.http_addr());
     ws.join("Web");
     assert_eq!(ws.welcome_slot(), 0);
-    let tcp = bomberust_net::Client::connect(&host.addr().to_string(), "Term").unwrap();
+    let tcp = eksplode_re_net::Client::connect(&host.addr().to_string(), "Term").unwrap();
     let joined = tcp.recv_timeout(WAIT).unwrap();
     assert!(
         matches!(joined, ServerMsg::Welcome { slot: 1, .. }),

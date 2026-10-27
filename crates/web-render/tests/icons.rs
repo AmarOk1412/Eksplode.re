@@ -2,12 +2,12 @@
 
 mod common;
 
-use bomberust_core::{Config, Dir, GameState, PowerUpKind, Slide};
-use bomberust_web_render::commands::{build, Command, Kind};
-use bomberust_web_render::interp::Interp;
-use bomberust_web_render::sprites::{icon, icon_colour, BOMB_BODY};
-use bomberust_web_render::view::fit;
 use common::*;
+use eksplode_re_core::{Config, Dir, GameState, PowerUpKind, Slide};
+use eksplode_re_web_render::commands::{build, Command, Kind};
+use eksplode_re_web_render::interp::Interp;
+use eksplode_re_web_render::sprites::{icon, icon_colour, BOMB_BODY};
+use eksplode_re_web_render::view::fit;
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
 

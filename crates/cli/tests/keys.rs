@@ -1,4 +1,4 @@
-use bomberust_cli::input::normalize;
+use eksplode_re_cli::input::normalize;
 use ratatui::crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {

@@ -2,12 +2,12 @@
 
 mod common;
 
-use bomberust_core::{Dir, GameState};
-use bomberust_web_render::commands::{build, Command, Kind};
-use bomberust_web_render::interp::Interp;
-use bomberust_web_render::look::*;
-use bomberust_web_render::sprites::{player_skin, Rgb};
 use common::*;
+use eksplode_re_core::{Dir, GameState};
+use eksplode_re_web_render::commands::{build, Command, Kind};
+use eksplode_re_web_render::interp::Interp;
+use eksplode_re_web_render::look::*;
+use eksplode_re_web_render::sprites::{player_skin, Rgb};
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
 const VIEWS: [View; 4] = [View::Down, View::Up, View::Left, View::Right];
@@ -232,9 +232,9 @@ fn f3_us1_as9_the_walk_frames_differ_from_standing_and_from_each_other() {
 
 // --- choosing view and frame while the match runs --------------------------------------------
 
-fn at_tick(s: &mut GameState, tick: u32, x: u8) -> bomberust_core::Observation {
+fn at_tick(s: &mut GameState, tick: u32, x: u8) -> eksplode_re_core::Observation {
     s.tick = tick;
-    s.players[0].pos = bomberust_core::Pos::new(x, 3);
+    s.players[0].pos = eksplode_re_core::Pos::new(x, 3);
     obs(s)
 }
 

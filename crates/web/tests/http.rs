@@ -19,7 +19,7 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/room.js", "text/javascript; charset=utf-8"),
         ("/audio.js", "text/javascript; charset=utf-8"),
         ("/style.css", "text/css; charset=utf-8"),
-        ("/bomberust_render.wasm", "application/wasm"),
+        ("/eksplode_re_render.wasm", "application/wasm"),
     ] {
         let r = get(s.http_addr(), path);
         assert_eq!(r.status, 200, "{path}");
@@ -39,7 +39,7 @@ fn us1_as1_the_page_and_its_files_are_served() {
 #[test]
 fn the_wasm_file_is_a_real_module() {
     let s = server(|_| {});
-    let r = get(s.http_addr(), "/bomberust_render.wasm");
+    let r = get(s.http_addr(), "/eksplode_re_render.wasm");
     assert_eq!(&r.body[..4], b"\0asm");
 }
 
@@ -208,12 +208,12 @@ fn sc005_the_whole_page_stays_small() {
         "/room.js",
         "/audio.js",
         "/style.css",
-        "/bomberust_render.wasm",
+        "/eksplode_re_render.wasm",
     ]
     .iter()
-    .map(|p| bomberust_web::assets::lookup(p).unwrap().body.len())
+    .map(|p| eksplode_re_web::assets::lookup(p).unwrap().body.len())
     .sum();
-    let wasm = bomberust_web::assets::lookup("/bomberust_render.wasm")
+    let wasm = eksplode_re_web::assets::lookup("/eksplode_re_render.wasm")
         .unwrap()
         .body
         .len();

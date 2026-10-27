@@ -2,8 +2,8 @@
 
 mod common;
 
-use bomberust_core::{step, Config, Dir, GameState, PlayerInput, Rng, Tile};
 use common::*;
+use eksplode_re_core::{step, Config, Dir, GameState, PlayerInput, Rng, Tile};
 use std::collections::BTreeSet;
 
 fn random_inputs(rng: &mut Rng) -> [PlayerInput; 4] {
@@ -80,7 +80,7 @@ fn the_round_always_ends_within_the_limit_plus_the_last_announcement() {
     for _ in 0..s.config.round_limit_ticks + s.config.closing_lead_ticks + 1 {
         step(&mut s, &random_inputs(&mut rng));
     }
-    assert_ne!(s.phase, bomberust_core::Phase::Playing);
+    assert_ne!(s.phase, eksplode_re_core::Phase::Playing);
 }
 
 #[test]
@@ -104,7 +104,7 @@ fn arena_text(s: &GameState) -> String {
     let mut out = String::new();
     for y in 0..s.arena.height() {
         for x in 0..s.arena.width() {
-            out.push(match s.arena.tile(bomberust_core::Pos::new(x, y)) {
+            out.push(match s.arena.tile(eksplode_re_core::Pos::new(x, y)) {
                 Tile::Wall => '#',
                 Tile::Block => 'b',
                 Tile::Floor => '.',
@@ -170,14 +170,14 @@ fn f4_us2_as7_the_same_seed_settings_and_inputs_give_the_same_pattern_and_result
             let ea = step(&mut a, &ia);
             let eb = step(&mut b, &ib);
             assert_eq!(ea, eb, "seed {seed}");
-            if ea.contains(&bomberust_core::Event::PatternStarted) {
+            if ea.contains(&eksplode_re_core::Event::PatternStarted) {
                 started += 1;
             }
         }
         assert_eq!(a, b, "seed {seed}");
         assert_ne!(
             a.phase,
-            bomberust_core::Phase::Playing,
+            eksplode_re_core::Phase::Playing,
             "seed {seed} must end"
         );
     }
@@ -186,7 +186,7 @@ fn f4_us2_as7_the_same_seed_settings_and_inputs_give_the_same_pattern_and_result
 
 #[test]
 fn f4_every_mode_and_size_is_deterministic_for_a_seed_and_the_inputs() {
-    use bomberust_core::{BoardSize, Mode, RoomSettings};
+    use eksplode_re_core::{BoardSize, Mode, RoomSettings};
     for mode in Mode::ALL {
         for size in BoardSize::ALL {
             let config = RoomSettings {
@@ -209,7 +209,7 @@ fn f4_every_mode_and_size_is_deterministic_for_a_seed_and_the_inputs() {
                 assert_eq!(a, b, "{mode:?} {size:?} seed {seed}");
                 assert_ne!(
                     a.phase,
-                    bomberust_core::Phase::Playing,
+                    eksplode_re_core::Phase::Playing,
                     "{mode:?} {size:?} seed {seed} must end"
                 );
             }

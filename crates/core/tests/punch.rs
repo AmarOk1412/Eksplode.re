@@ -2,10 +2,10 @@
 
 mod common;
 
-use bomberust_core::{
+use common::*;
+use eksplode_re_core::{
     step, Arena, Config, Dir, Event, GameState, PlayerInput, Pos, PowerUp, PowerUpKind,
 };
-use common::*;
 
 const ROW: &str = "#...........#";
 
@@ -229,7 +229,7 @@ fn a_flame_or_a_power_up_on_the_landing_square_does_not_stop_the_bomb() {
         pos: p(3, 3),
         kind: PowerUpKind::Speed,
     });
-    s.flames.push(bomberust_core::Flame {
+    s.flames.push(eksplode_re_core::Flame {
         pos: p(3, 3),
         ticks_left: 50,
         owners: 0,

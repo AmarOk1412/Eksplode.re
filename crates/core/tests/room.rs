@@ -1,4 +1,4 @@
-use bomberust_core::{BoardSize, Config, Mode, RoomSettings};
+use eksplode_re_core::{BoardSize, Config, Mode, RoomSettings};
 
 #[test]
 fn defaults_are_the_game_as_it_was() {
@@ -56,13 +56,13 @@ fn a_mode_that_is_not_playable_yet_becomes_normal() {
             ..RoomSettings::default()
         }
         .sanitize();
-        if bomberust_core::PLAYABLE.contains(&mode) {
+        if eksplode_re_core::PLAYABLE.contains(&mode) {
             assert_eq!(s.mode, mode);
         } else {
             assert_eq!(s.mode, Mode::Normal);
         }
     }
-    assert!(bomberust_core::PLAYABLE.contains(&Mode::Normal));
+    assert!(eksplode_re_core::PLAYABLE.contains(&Mode::Normal));
 }
 
 #[test]

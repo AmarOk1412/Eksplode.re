@@ -1,5 +1,5 @@
 [package]
-name = "bomberust-core"
+name = "eksplode-re-core"
 description = "Pure, deterministic Bomberman rules: no I/O, no rendering, no networking."
 version.workspace = true
 edition.workspace = true
@@ -7,7 +7,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [lib]
-name = "bomberust_core"
+name = "eksplode_re_core"
 
 [features]
 default = []

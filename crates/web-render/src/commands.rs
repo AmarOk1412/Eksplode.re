@@ -1,6 +1,6 @@
 //! Turns the draw list into a flat buffer of drawing commands for the page.
 
-use bomberust_core::{Observation, PowerUpKind};
+use eksplode_re_core::{Observation, PowerUpKind};
 
 use crate::depth::{draw_list, Item, Sprite};
 use crate::interp::Interp;

@@ -1,6 +1,6 @@
 # Security
 
-Bomberust is a game for friends on a network you trust. Read this page before you let anybody
+Eksplode.re is a game for friends on a network you trust. Read this page before you let anybody
 else reach it.
 
 ## What is not protected
@@ -16,18 +16,18 @@ else reach it.
 
 | Setting | Default | Why |
 |---------|---------|-----|
-| `bomberust-server --bind` | `127.0.0.1` | only this machine can connect |
-| Web page for `bomberust-cli host --web-port` | `127.0.0.1` | the page is only offered locally unless you pass `--bind` |
+| `eksplode-re-server --bind` | `127.0.0.1` | only this machine can connect |
+| Web page for `eksplode-re-cli host --web-port` | `127.0.0.1` | the page is only offered locally unless you pass `--bind` |
 | WebSocket `Origin` | same origin only | a web page from another site cannot drive your game |
 
-The game port of `bomberust-cli host` listens on every interface (`0.0.0.0`), as it always did,
+The game port of `eksplode-re-cli host` listens on every interface (`0.0.0.0`), as it always did,
 so friends can join by address. The program prints a `WARNING:` line to stderr when it listens
 on anything but loopback. Use `--bind 127.0.0.1` to play only on this machine.
 
 ## Exposing the game to a network
 
 Passing `--bind 0.0.0.0` (or a LAN address) makes the web page, the WebSocket and the terminal
-port reachable by every machine that can route to you. `bomberust-server` prints:
+port reachable by every machine that can route to you. `eksplode-re-server` prints:
 
 ```text
 WARNING: listening on 0.0.0.0: the game has no encryption and no authentication, ...

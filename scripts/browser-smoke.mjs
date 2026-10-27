@@ -15,7 +15,7 @@ const url = process.argv[2] ?? "http://127.0.0.1:8080/";
 const out = process.argv[3] ?? "browser-smoke";
 const browser = process.env.BROWSER ?? "chromium-browser";
 const port = 9300 + Math.floor(Math.random() * 500);
-const profile = mkdtempSync(path.join(homedir(), ".bomberust-smoke-"));
+const profile = mkdtempSync(path.join(homedir(), ".eksplode_re-smoke-"));
 mkdirSync(out, { recursive: true });
 
 const child = spawn(
@@ -130,7 +130,7 @@ async function main() {
   })()`);
   await sleep(200);
   await shot("1a-sound.png");
-  console.log("audio settings:", await evaluate("localStorage.getItem('bomberust.audio.v1')"));
+  console.log("audio settings:", await evaluate("localStorage.getItem('eksplode.re.audio.v1')"));
   await evaluate("document.getElementById('mute').click(); document.getElementById('close-sound').click(); 1");
 
   // pick a look in the character editor (feature 003) and save a screenshot of it
@@ -145,7 +145,7 @@ async function main() {
   })()`);
   await sleep(300);
   await shot("1b-editor.png");
-  console.log("stored look:", await evaluate("localStorage.getItem('bomberust.look.v1')"));
+  console.log("stored look:", await evaluate("localStorage.getItem('eksplode.re.look.v1')"));
 
   await evaluate("document.getElementById('name').value = 'SmokeTest'; document.getElementById('join').click(); 1");
   await waitFor("!document.getElementById('lobby-panel').hidden", "the lobby");
