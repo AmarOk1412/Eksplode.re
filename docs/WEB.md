@@ -98,6 +98,7 @@ eksplode-re-cli join http://192.168.1.20:8080/     # web addresses work too; onl
 | `GET /room.js` | `200 text/javascript` - the room settings: options, menu state and storage |
 | `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
 | `GET /controls.js` | `200 text/javascript` - keyboard preferences and controller input mapping |
+| `GET /nav.js` | `200 text/javascript` - focus movement, menu layers and controller navigation |
 | `GET /style.css` | `200 text/css` |
 | `GET /eksplode_re_render.wasm` | `200 application/wasm` - the graphics module |
 | `GET /ws` with `Upgrade: websocket` | `101` - see [PROTOCOL.md](PROTOCOL.md) |
@@ -130,8 +131,9 @@ When the page and the server share an origin (the normal case) there is nothing 
 |------|------|
 | [`index.html`](../crates/web/assets/index.html) | structure: join form, lobby list, canvas, HUD, notices; no inline script |
 | [`look.js`](../crates/web/assets/look.js), [`room.js`](../crates/web/assets/room.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the room settings, menu state and storage; the generated sound and settings |
-| [`controls.js`](../crates/web/assets/controls.js) | keyboard defaults, validation and local preferences; standard gamepad mapping and device state |
-| [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard/controller input, DOM updates, and painting of the draw commands on the canvas |
+| [`controls.js`](../crates/web/assets/controls.js) | keyboard defaults, validation and local preferences; standard gameplay gamepad mapping and device state |
+| [`nav.js`](../crates/web/assets/nav.js) | focus geometry, layer stack, navigation controller sampling and on-screen keyboard reducer |
+| [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard/controller navigation and gameplay input, DOM updates, and canvas painting |
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`eksplode_re_render.wasm`](../crates/web/assets/eksplode_re_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
 
@@ -151,6 +153,27 @@ colour, a gender look, a head accessory and a face accessory with a live preview
 WebAssembly module. The choice is saved on the device (`localStorage`, key `eksplode.re.look.v1`),
 sent with `Join`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
 [PROTOCOL.md](PROTOCOL.md#looks)). During a match the editor is locked.
+
+## Mouse-free navigation
+
+Tab and Shift+Tab traverse enabled, visible controls in page order. Arrow keys move between
+buttons and choices; native text fields, selects and sliders retain their editing keys. Enter or
+Space activates the focused control, and Escape opens the menu hub or closes the top panel and
+returns focus to its opener. The hub offers Sound, Controls, Resume and, only in developer mode,
+Developer. Escape never exits the match.
+
+A selected standard-mapped controller uses the D-pad or left stick to move focus, A to activate,
+B to go back and Start to open or close the hub. Left and right change focused selects, sliders and
+radio choices. When a text field is focused, A opens the on-screen keyboard; its character, Shift,
+Space and Backspace keys edit the buffer, Confirm writes it to the field, and Cancel or B restores
+the original. The keyboard respects each field's maximum length. A button held while a view changes
+is ignored until it is released.
+
+Room creation, joining, lobby settings, character editing, Sound, Controls, the optional Developer
+panel and the in-match hub use the same focus model. While a menu or text-entry panel is open,
+movement, bomb and punch input is suppressed; gameplay mappings resume when the last panel closes.
+Controller navigation remains optional: keyboard navigation works when no compatible controller
+is available or the selected device disconnects. Mouse use remains supported.
 
 **Control settings.** The keyboard icon in the page header opens the controls panel. Select one of
 the six actions and press a key to replace its current assignment; a conflicting or reserved key
@@ -173,10 +196,11 @@ six comma-separated keys in `up,down,left,right,bomb,punch` order. Values may be
 `q`, `p` and `r` commands are refused. Terminal bindings apply only to that process; web keyboard
 preferences persist on that browser device.
 
-The page never evaluates game rules. It sends keyboard and controller state as the existing `Input`
-messages every 50 ms and draws the `Snapshot`s it receives. Keyboard defaults are arrows or WASD
-to move, Space or E for a bomb, Z or Q to punch; held inputs are cleared when the window loses
-focus or becomes hidden. Messages from the server show up as notices
+The page never evaluates game rules. During play it sends keyboard and controller state as the
+existing `Input` messages every 50 ms and draws the `Snapshot`s it receives. Navigation samples the
+controller on that same interval; an open panel sends neutral gameplay input and clears held state.
+Keyboard defaults are arrows or WASD to move, Space or E for a bomb, Z or Q to punch; held inputs
+are cleared when the window loses focus or becomes hidden. Messages from the server show up as notices
 (`Only Ann can start the match`, `Player 3 left, a bot took over`, `You won!`), and when the
 connection drops the page says so and offers a Retry button.
 

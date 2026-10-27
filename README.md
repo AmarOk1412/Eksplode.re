@@ -127,6 +127,14 @@ Movement uses the left stick or D-pad, A places a bomb and B punches a bomb. Key
 available when a controller is disconnected or unsupported. See [docs/WEB.md](docs/WEB.md) for
 browser setup details.
 
+Every browser screen is also keyboard/controller navigable: Tab and Shift+Tab move focus, arrows
+move between choices, Enter or Space activates, and Escape opens or backs out of the menu hub.
+Controller D-pad or left stick moves focus, A activates, B goes back, and Start opens or closes the
+hub. Activate a focused text field with A to enter text through the on-screen keyboard; its B or
+Cancel action restores the original text. The hub provides Sound, Controls, Resume and, in developer
+mode, Developer. Navigation panels suppress match input until they close. See
+[docs/WEB.md](docs/WEB.md) for screen-by-screen details.
+
 ## Rules in short
 
 Bombs explode after 3 s in a cross, stop at walls and destroy the first block, trigger other
