@@ -23,8 +23,8 @@ fn same_origin_is_always_allowed() {
     ] {
         assert!(origin_allowed(
             &policy,
-            Some("http://127.0.0.1:8080"),
-            Some("127.0.0.1:8080"),
+            Some("http://0.0.0.0:8080"),
+            Some("0.0.0.0:8080"),
             LAN
         ));
         assert!(origin_allowed(
@@ -42,25 +42,25 @@ fn another_origin_is_refused_by_default() {
     assert!(!origin_allowed(
         &p,
         Some("http://evil.example"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
     assert!(!origin_allowed(
         &p,
-        Some("http://127.0.0.1:9999"),
-        Some("127.0.0.1:8080"),
+        Some("http://0.0.0.0:9999"),
+        Some("0.0.0.0:8080"),
         LOOPBACK
     ));
     assert!(!origin_allowed(
         &p,
         Some("null"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LOOPBACK
     ));
     assert!(!origin_allowed(
         &p,
-        Some("http://127.0.0.1:8080.evil.example"),
-        Some("127.0.0.1:8080"),
+        Some("http://0.0.0.0:8080.evil.example"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
 }
@@ -68,7 +68,7 @@ fn another_origin_is_refused_by_default() {
 #[test]
 fn a_missing_origin_is_only_accepted_from_loopback() {
     let p = AllowedOrigins::SameOrigin;
-    assert!(origin_allowed(&p, None, Some("127.0.0.1:8080"), LOOPBACK));
+    assert!(origin_allowed(&p, None, Some("0.0.0.0:8080"), LOOPBACK));
     assert!(!origin_allowed(&p, None, Some("192.168.1.7:8080"), LAN));
 }
 
@@ -78,25 +78,25 @@ fn listed_origins_match_exactly() {
     assert!(origin_allowed(
         &p,
         Some("http://localhost:3000"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
     assert!(origin_allowed(
         &p,
         Some("HTTP://LOCALHOST:3000"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
     assert!(!origin_allowed(
         &p,
         Some("http://localhost:3001"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
     assert!(!origin_allowed(
         &p,
         Some("http://localhost:3000.evil.example"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
 }
@@ -107,7 +107,7 @@ fn any_origin_accepts_everything() {
     assert!(origin_allowed(
         &p,
         Some("http://evil.example"),
-        Some("127.0.0.1:8080"),
+        Some("0.0.0.0:8080"),
         LAN
     ));
     assert!(origin_allowed(&p, None, Some("x"), LAN));

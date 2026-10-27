@@ -32,8 +32,8 @@ required.
 ```sh
 cargo build --workspace                                   # 1. build everything
 cargo run -p eksplode-re-web -- --bots 1                    # 2. start the server with one bot
-# 3. open http://127.0.0.1:8080/ in a browser, type a name, press Join, then Start
-cargo run -p eksplode-re-cli -- join 127.0.0.1              # 4. optional: a terminal player in the same match
+# 3. open http://0.0.0.0:8080/ in a browser, type a name, press Join, then Start
+cargo run -p eksplode-re-cli -- join 0.0.0.0              # 4. optional: a terminal player in the same match
 cargo test --workspace                                    # 5. run the tests
 ```
 
@@ -42,7 +42,7 @@ Prefer to host from the terminal? `cargo run -p eksplode-re-cli -- host --bots 1
 does the same and lets browsers join too.
 
 Screenshots are not committed yet; to see the game, run the steps above (or
-`node scripts/browser-smoke.mjs http://127.0.0.1:8080/ /tmp/shots` with a server running to
+`node scripts/browser-smoke.mjs http://0.0.0.0:8080/ /tmp/shots` with a server running to
 capture PNGs).
 
 ## Modes
@@ -86,7 +86,7 @@ capture PNGs).
 - `--dev` developer mode (testing only): the owner can pause bots and set drop chances from the
   web page; see [docs/WEB.md](docs/WEB.md);
 - `--bind <IP>` listening address. By default the game port listens on every interface and the
-  page only on `127.0.0.1`; a non-loopback address prints a `WARNING:`. See
+  page only on `0.0.0.0`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
 
 `eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS]` joins a host. `--keys` uses the
@@ -162,7 +162,7 @@ The host is authoritative: it runs the simulation, validates every message and s
 player its own view 20 times per second. If a player disconnects or stays silent for 10 s, a
 bot takes the slot and the match goes on; if the host leaves, everybody is told.
 
-**There is no encryption and no authentication.** The server listens on `127.0.0.1` by default;
+**There is no encryption and no authentication.** The server listens on `0.0.0.0` by default;
 only expose it on a network you trust, or behind a firewall, an SSH tunnel or a TLS reverse
 proxy. WebSocket connections from other web origins are refused unless you opt in with
 `--allow-origin` (or the unsafe `--allow-any-origin`). Messages over 64 KiB are refused and a

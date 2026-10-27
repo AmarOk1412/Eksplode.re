@@ -31,7 +31,7 @@ bufs = {}
 
 def free_port():
     with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
+        s.bind(("0.0.0.0", 0))
         return s.getsockname()[1]
 
 
@@ -107,7 +107,7 @@ def start_server():
     end = time.time() + 5
     while time.time() < end:
         try:
-            socket.create_connection(("127.0.0.1", game), timeout=0.2).close()
+            socket.create_connection(("0.0.0.0", game), timeout=0.2).close()
             return proc, game, http
         except OSError:
             time.sleep(0.05)
@@ -119,7 +119,7 @@ def check_owner_through_server(seq):
     """The first terminal player of a headless server is the owner and can start."""
     proc, game, _ = start_server()
     try:
-        client = spawn(["join", f"127.0.0.1:{game}", "--name", "Own"])
+        client = spawn(["join", f"0.0.0.0:{game}", "--name", "Own"])
         ok = wait_for([client[1]], client[1], "Slot 1")
         if ok:
             os.write(client[1], seq)
@@ -134,8 +134,8 @@ def check_owner_through_server(seq):
 def check_host_serves_the_page():
     """host --web-port shows the page address and really serves the page."""
     web = free_port()
-    host = spawn(["host", "--no-setup", "--port", str(free_port()), "--web-port", str(web), "--bind", "127.0.0.1"])
-    url = f"http://127.0.0.1:{web}/"
+    host = spawn(["host", "--no-setup", "--port", str(free_port()), "--web-port", str(web), "--bind", "0.0.0.0"])
+    url = f"http://0.0.0.0:{web}/"
     ok = wait_for([host[1]], host[1], url)
     if ok:
         try:
@@ -151,7 +151,7 @@ def check_joined_non_owner():
     port = free_port()
     host = spawn(["host", "--no-setup", "--port", str(port), "--name", "Host"])
     wait_for([host[1]], host[1], "Slot 1")
-    client = spawn(["join", f"127.0.0.1:{port}", "--name", "Cli"])
+    client = spawn(["join", f"0.0.0.0:{port}", "--name", "Cli"])
     fds = [host[1], client[1]]
     ok = wait_for(fds, client[1], "Slot 2")
     if ok:

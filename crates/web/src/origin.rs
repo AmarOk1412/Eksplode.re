@@ -62,7 +62,7 @@ pub fn warnings(opts: &ServerOptions) -> Vec<String> {
     if !opts.bind.is_loopback() {
         out.push(format!(
             "WARNING: listening on {}: the game has no encryption and no authentication, so \
-             anyone who can reach this machine on these ports can play. Use --bind 127.0.0.1 \
+             anyone who can reach this machine on these ports can play. Use --bind 0.0.0.0 \
              (the default) or a firewall or tunnel to restrict access.",
             opts.bind
         ));

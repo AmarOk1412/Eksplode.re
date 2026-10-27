@@ -1,7 +1,7 @@
 // Drives a real headless browser through the Chrome DevTools Protocol: joins the server's page,
 // starts a match, plays a few keys and saves screenshots. Optional manual-style check, not part of
 // `cargo test`. Usage:
-//   node scripts/browser-smoke.mjs http://127.0.0.1:8080/ [out-dir]
+//   node scripts/browser-smoke.mjs http://0.0.0.0:8080/ [out-dir]
 // MODE=normal|team picks the mode of the room (default normal).
 // SIZE=small|medium|large picks the board of the room (default medium).
 // CLOSING=1 plays a 2-minute round and saves screenshots of the end pattern (takes about 80 s).
@@ -11,7 +11,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const url = process.argv[2] ?? "http://127.0.0.1:8080/";
+const url = process.argv[2] ?? "http://0.0.0.0:8080/";
 const out = process.argv[3] ?? "browser-smoke";
 const browser = process.env.BROWSER ?? "chromium-browser";
 const port = 9300 + Math.floor(Math.random() * 500);
@@ -40,7 +40,7 @@ const dimensions = { small: "15 x 13", medium: "19 x 15", large: "25 x 19" };
 async function targetSocket() {
   for (let i = 0; i < 50; i += 1) {
     try {
-      const list = await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+      const list = await (await fetch(`http://0.0.0.0:${port}/json`)).json();
       const page = list.find((t) => t.type === "page");
       if (page) return page.webSocketDebuggerUrl;
     } catch {

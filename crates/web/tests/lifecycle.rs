@@ -9,7 +9,7 @@ use eksplode_re_web::{Server, ServerError};
 
 #[test]
 fn a_busy_http_port_is_reported_with_its_number() {
-    let busy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let busy = TcpListener::bind("0.0.0.0:0").unwrap();
     let port = busy.local_addr().unwrap().port();
     let mut o = options();
     o.http_port = port;
@@ -20,7 +20,7 @@ fn a_busy_http_port_is_reported_with_its_number() {
 
 #[test]
 fn a_busy_game_port_is_reported_too() {
-    let busy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let busy = TcpListener::bind("0.0.0.0:0").unwrap();
     let port = busy.local_addr().unwrap().port();
     let mut o = options();
     o.game_port = port;
@@ -59,11 +59,11 @@ fn the_banner_shows_the_addresses_and_how_to_stop() {
     let banner = s.banner();
     assert!(banner.contains("Eksplode.re server running"), "{banner}");
     assert!(banner.contains(&format!(
-        "Web page:        http://127.0.0.1:{}/",
+        "Web page:        http://0.0.0.0:{}/",
         s.http_addr().port()
     )));
     assert!(banner.contains(&format!(
-        "Terminal client: eksplode-re-cli join 127.0.0.1:{}",
+        "Terminal client: eksplode-re-cli join 0.0.0.0:{}",
         s.game_addr().port()
     )));
     assert!(banner.contains("Stop:            Ctrl+C"));
@@ -79,10 +79,10 @@ fn bots_are_pre_added_to_the_lobby() {
 
 #[test]
 fn us3_as2_the_binary_reports_a_busy_port_and_exits_with_status_1() {
-    let busy = TcpListener::bind("127.0.0.1:0").unwrap();
+    let busy = TcpListener::bind("0.0.0.0:0").unwrap();
     let port = busy.local_addr().unwrap().port();
     let free = {
-        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let l = TcpListener::bind("0.0.0.0:0").unwrap();
         l.local_addr().unwrap().port()
     };
     let out = Command::new(env!("CARGO_BIN_EXE_eksplode-re-server"))
@@ -116,7 +116,7 @@ fn the_binary_rejects_bad_usage_with_status_2() {
 #[test]
 fn us3_as1_attach_shares_a_match_host_that_someone_else_owns() {
     let host = eksplode_re_net::Host::start(eksplode_re_net::HostConfig {
-        bind: "127.0.0.1:0".into(),
+        bind: "0.0.0.0:0".into(),
         tick: std::time::Duration::from_millis(4),
         seed: Some(5),
         game: options().game,

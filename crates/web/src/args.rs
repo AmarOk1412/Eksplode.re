@@ -12,7 +12,7 @@ pub const USAGE: &str = "\
 Usage: eksplode-re-server [OPTIONS]
 
 Options:
-  --bind <IP>              address to listen on (default 127.0.0.1)
+  --bind <IP>              address to listen on (default 0.0.0.0)
   --http-port <N>          web page and WebSocket port (default 8080)
   --game-port <N>          terminal client port (default 7878)
   --bots <N>               bots to add to the lobby, 0-3 (default 0)

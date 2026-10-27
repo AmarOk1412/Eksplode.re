@@ -18,7 +18,7 @@ Playing the game needs only Rust: the compiled `eksplode_re_render.wasm` is comm
 cargo build --workspace
 cargo run -p eksplode-re-cli -- --players 1 --bots 3     # local game in the terminal
 cargo run -p eksplode-re-web -- --bots 1                 # server and web page
-cargo run -p eksplode-re-cli -- join 127.0.0.1           # a terminal player on that server
+cargo run -p eksplode-re-cli -- join 0.0.0.0           # a terminal player on that server
 ```
 
 ## Test
@@ -27,7 +27,7 @@ cargo run -p eksplode-re-cli -- join 127.0.0.1           # a terminal player on 
 cargo test --workspace                       # all Rust tests, including the docs tests
 cd crates/web/js-tests && node --test        # page helpers and the compiled wasm module
 python3 scripts/pty-enter-check.py           # Enter in a real pseudo-terminal (add --attempts 20)
-node scripts/browser-smoke.mjs http://127.0.0.1:8080/ /tmp/smoke   # a server must be running
+node scripts/browser-smoke.mjs http://0.0.0.0:8080/ /tmp/smoke   # a server must be running
 scripts/check-scenarios.sh                   # every acceptance scenario has a test or a manual check
 ```
 

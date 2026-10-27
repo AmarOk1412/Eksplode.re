@@ -161,12 +161,12 @@ mod network {
 
     #[test]
     fn us3_as1_host_accepts_a_web_port_and_a_bind_address() {
-        let Ok(Command::Host(o)) = args(&["host", "--web-port", "8080", "--bind", "127.0.0.1"])
+        let Ok(Command::Host(o)) = args(&["host", "--web-port", "8080", "--bind", "0.0.0.0"])
         else {
             panic!("must parse");
         };
         assert_eq!(o.web_port, Some(8080));
-        assert_eq!(o.bind, Some("127.0.0.1".parse().unwrap()));
+        assert_eq!(o.bind, Some("0.0.0.0".parse().unwrap()));
         assert_eq!((o.port, o.bots, o.name.as_str()), (7878, 0, "Host"));
         let Ok(Command::Host(o)) = args(&["host", "--bind", "::1"]) else {
             panic!("must parse");

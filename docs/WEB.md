@@ -6,8 +6,8 @@ host over a WebSocket.
 
 ```sh
 cargo run -p eksplode-re-web -- --bots 1
-# Web page:        http://127.0.0.1:8080/
-# Terminal client: eksplode-re-cli join 127.0.0.1:7878
+# Web page:        http://0.0.0.0:8080/
+# Terminal client: eksplode-re-cli join 0.0.0.0:7878
 ```
 
 Open the address in a browser, type a name and press Join. The first person to join is the lobby
@@ -40,7 +40,7 @@ network, see [SECURITY.md](SECURITY.md).
 <!-- options:begin -->
 | Option | Meaning |
 |--------|---------|
-| `--bind <IP>` | address to listen on (default 127.0.0.1) |
+| `--bind <IP>` | address to listen on (default 0.0.0.0) |
 | `--http-port <N>` | web page and WebSocket port (default 8080) |
 | `--game-port <N>` | terminal client port (default 7878) |
 | `--bots <N>` | bots to add to the lobby, 0-3 (default 0) |

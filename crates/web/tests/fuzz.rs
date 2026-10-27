@@ -32,8 +32,8 @@ impl Rng {
     }
 }
 
-const VALID_HEAD: &[u8] = b"GET /ws HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nUpgrade: websocket\r\n\
-Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://127.0.0.1:8080\r\n\r\n";
+const VALID_HEAD: &[u8] = b"GET /ws HTTP/1.1\r\nHost: 0.0.0.0:8080\r\nUpgrade: websocket\r\n\
+Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nOrigin: http://0.0.0.0:8080\r\n\r\n";
 
 #[test]
 fn the_http_head_parser_survives_random_and_mutated_input() {

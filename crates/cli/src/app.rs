@@ -284,7 +284,7 @@ pub fn host_warnings(opts: &HostOptions) -> Vec<String> {
     if !game_ip.is_loopback() {
         out.push(format!(
             "WARNING: listening on {game_ip}: the game has no encryption and no authentication, \
-             so anyone who can reach this machine on {ports} can play. Use --bind 127.0.0.1 to \
+             so anyone who can reach this machine on {ports} can play. Use --bind 0.0.0.0 to \
              play only on this machine, or a firewall or tunnel to restrict access."
         ));
     }

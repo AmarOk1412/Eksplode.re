@@ -16,13 +16,13 @@ else reach it.
 
 | Setting | Default | Why |
 |---------|---------|-----|
-| `eksplode-re-server --bind` | `127.0.0.1` | only this machine can connect |
-| Web page for `eksplode-re-cli host --web-port` | `127.0.0.1` | the page is only offered locally unless you pass `--bind` |
+| `eksplode-re-server --bind` | `0.0.0.0` | only this machine can connect |
+| Web page for `eksplode-re-cli host --web-port` | `0.0.0.0` | the page is only offered locally unless you pass `--bind` |
 | WebSocket `Origin` | same origin only | a web page from another site cannot drive your game |
 
 The game port of `eksplode-re-cli host` listens on every interface (`0.0.0.0`), as it always did,
 so friends can join by address. The program prints a `WARNING:` line to stderr when it listens
-on anything but loopback. Use `--bind 127.0.0.1` to play only on this machine.
+on anything but loopback. Use `--bind 0.0.0.0` to play only on this machine.
 
 ## Exposing the game to a network
 
@@ -36,7 +36,7 @@ WARNING: listening on 0.0.0.0: the game has no encryption and no authentication,
 Do this only on a network you trust, or put one of these in front:
 
 - a **firewall** rule that allows only your friends' addresses;
-- an **SSH tunnel**: `ssh -L 8080:127.0.0.1:8080 -L 7878:127.0.0.1:7878 you@server`, with the
+- an **SSH tunnel**: `ssh -L 8080:0.0.0.0:8080 -L 7878:0.0.0.0:7878 you@server`, with the
   server bound to loopback, so the traffic is encrypted and authenticated by SSH;
 - a **reverse proxy with TLS** (for example nginx or Caddy) that terminates HTTPS and forwards
   `/` and the `/ws` WebSocket to the loopback web port. Pass the public origin with
@@ -53,7 +53,7 @@ never on an exposed network.
 
 ## The Origin and CORS policy
 
-Browsers let any web page open a WebSocket to any address, including `127.0.0.1`. Without a
+Browsers let any web page open a WebSocket to any address, including `0.0.0.0`. Without a
 check, a page on a hostile site could connect to a game running on your machine and drive it.
 The WebSocket handshake therefore carries an `Origin` header and the server decides:
 

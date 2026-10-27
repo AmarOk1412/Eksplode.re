@@ -12,7 +12,7 @@ use ratatui::Terminal;
 
 fn host_with(game: Config) -> Host {
     Host::start(HostConfig {
-        bind: "127.0.0.1:0".into(),
+        bind: "0.0.0.0:0".into(),
         tick: Duration::from_millis(4),
         seed: Some(3),
         game,
@@ -353,7 +353,7 @@ fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
 
 #[test]
 fn f3_us4_as6_host_dev_prints_the_developer_warning_and_the_default_does_not() {
-    let mut opts = host_opts(Some("127.0.0.1"), Some(8080));
+    let mut opts = host_opts(Some("0.0.0.0"), Some(8080));
     assert!(app::host_warnings(&opts).is_empty());
     opts.dev = true;
     let w = app::host_warnings(&opts);
@@ -379,20 +379,20 @@ fn us3_as1_the_lobby_shows_the_web_page_only_when_there_is_one() {
     );
     assert!(s.contains("q quit"), "{s}");
 
-    h.web_url = Some("http://127.0.0.1:8080/".into());
+    h.web_url = Some("http://0.0.0.0:8080/".into());
     let s = screen(&h);
-    assert!(s.contains("Web page: http://127.0.0.1:8080/"), "{s}");
+    assert!(s.contains("Web page: http://0.0.0.0:8080/"), "{s}");
 }
 
 #[test]
 fn us3_as1_the_web_page_address_uses_loopback_for_wildcards() {
     assert_eq!(
         app::web_url("0.0.0.0:8080".parse().unwrap()),
-        "http://127.0.0.1:8080/"
+        "http://0.0.0.0:8080/"
     );
     assert_eq!(
-        app::web_url("127.0.0.1:9000".parse().unwrap()),
-        "http://127.0.0.1:9000/"
+        app::web_url("0.0.0.0:9000".parse().unwrap()),
+        "http://0.0.0.0:9000/"
     );
     assert_eq!(
         app::web_url("[::1]:80".parse().unwrap()),
@@ -417,7 +417,7 @@ fn us3_as1_non_loopback_binds_print_the_exposure_warning() {
     let w = app::host_warnings(&host_opts(None, None));
     assert!(w.len() == 1 && w[0].contains("0.0.0.0"), "{w:?}");
     // loopback is quiet
-    assert!(app::host_warnings(&host_opts(Some("127.0.0.1"), Some(8080))).is_empty());
+    assert!(app::host_warnings(&host_opts(Some("0.0.0.0"), Some(8080))).is_empty());
     assert!(app::host_warnings(&host_opts(Some("::1"), None)).is_empty());
 }
 
@@ -431,17 +431,17 @@ fn one_line(e: &AppError) -> String {
 #[test]
 fn us3_as3_a_refused_connection_is_explained_in_one_line() {
     let port = {
-        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let l = std::net::TcpListener::bind("0.0.0.0:0").unwrap();
         l.local_addr().unwrap().port()
     };
     let err = app::run_join(&JoinOptions {
-        addr: format!("127.0.0.1:{port}"),
+        addr: format!("0.0.0.0:{port}"),
         name: "Ann".into(),
         key_bindings: eksplode_re_cli::input::KeyBindings::default_for_slot(0),
     })
     .expect_err("nobody listens there");
     let text = one_line(&err);
-    assert!(text.contains(&format!("127.0.0.1:{port}")), "{text}");
+    assert!(text.contains(&format!("0.0.0.0:{port}")), "{text}");
     assert!(text.to_lowercase().contains("refused"), "{text}");
     assert!(text.contains("host"), "{text}");
 }
@@ -534,7 +534,7 @@ fn lobby_text_has(o: &Online, needle: &str) -> bool {
 
 fn room_host(defaults: eksplode_re_core::RoomSettings) -> Host {
     Host::start(HostConfig {
-        bind: "127.0.0.1:0".into(),
+        bind: "0.0.0.0:0".into(),
         tick: Duration::from_millis(4),
         seed: Some(3),
         game: open_game(1000),

@@ -34,7 +34,7 @@ Local options:
 Host options:
   --web-port <N>  also serve the web page on this port so browsers can join
   --bind <IP>     address to listen on (default: game port on all interfaces,
-                  web page on 127.0.0.1)
+                  web page on 0.0.0.0)
   --dev           developer mode: the owner can pause bots and set drop chances in
                   the web page (testing only)
   --room-name <TEXT>  name of the room (at most 24 characters; default: your name plus 's room)

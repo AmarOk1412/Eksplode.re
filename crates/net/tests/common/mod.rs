@@ -17,7 +17,7 @@ pub fn host() -> Host {
 
 pub fn host_with(f: impl FnOnce(&mut HostConfig)) -> Host {
     let mut cfg = HostConfig {
-        bind: "127.0.0.1:0".into(),
+        bind: "0.0.0.0:0".into(),
         tick: Duration::from_millis(4),
         seed: Some(11),
         ..HostConfig::default()
