@@ -824,7 +824,9 @@ function start() {
   }
 
   function openNavigationLayer(id, root, opener = document.activeElement) {
+    const parent = navigationLayers.top;
     if (!root || !navigationLayers.open(id, root, opener)) return false;
+    if (parent?.id === "hub") parent.root.hidden = true;
     root.hidden = false;
     syncLayerInert();
     navTracker.contextChanged();
@@ -851,6 +853,7 @@ function start() {
     }
     if (closed.closed.id !== "dev") closed.closed.root.hidden = true;
     else el.devPanel.classList.remove("navigation-layer");
+    if (navigationLayers.top?.id === "hub") navigationLayers.top.root.hidden = false;
     syncLayerInert();
     navTracker.contextChanged();
     keys.clear();

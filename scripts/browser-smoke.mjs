@@ -288,6 +288,7 @@ async function main() {
   await waitFor("!document.getElementById('menu-hub').hidden", "the keyboard-opened menu hub");
   await key("Enter", "Enter", 13);
   await waitFor("!document.getElementById('sound-panel').hidden", "Sound from the menu hub");
+  await waitFor("document.getElementById('menu-hub').hidden", "hiding the hub while Sound is open");
   const musicBefore = await evaluate("Number(document.getElementById('music-volume').value)");
   await key("ArrowRight", "ArrowRight", 39);
   await waitFor(`Number(document.getElementById('music-volume').value) !== ${musicBefore}`, "keyboard sound adjustment");
@@ -297,6 +298,7 @@ async function main() {
   await waitFor("document.activeElement.id === 'hub-controls'", "keyboard focus moving through the hub");
   await key("Enter", "Enter", 13);
   await waitFor("!document.getElementById('controls-panel').hidden", "Controls from the hub");
+  await waitFor("document.getElementById('menu-hub').hidden", "hiding the hub while Controls is open");
   const upBindingBefore = await evaluate("document.querySelector('[data-bind-action=up]').textContent");
   await key("Enter", "Enter", 13);
   await key("Escape", "Escape", 27);
@@ -323,6 +325,7 @@ async function main() {
   await waitFor("!document.getElementById('menu-hub').hidden", "controller Start opening the hub");
   await pulseGamepad([0]);
   await waitFor("!document.getElementById('sound-panel').hidden", "controller A opening Sound");
+  await waitFor("document.getElementById('menu-hub').hidden", "controller hiding the hub while Sound is open");
   const controllerMusicBefore = await evaluate("Number(document.getElementById('music-volume').value)");
   await pulseGamepad([15]);
   await waitFor(`Number(document.getElementById('music-volume').value) !== ${controllerMusicBefore}`, "controller sound adjustment");
@@ -335,6 +338,7 @@ async function main() {
   await pulseGamepad([13]);
   await pulseGamepad([0]);
   await waitFor("!document.getElementById('controls-panel').hidden", "controller A opening Controls");
+  await waitFor("document.getElementById('menu-hub').hidden", "controller hiding the hub while Controls is open");
   await waitFor("document.getElementById('controller-select').options.length === 2", "controller selector choices");
   const controllerIndexBefore = await evaluate("document.getElementById('controller-select').value");
   for (let i = 0; i < 6; i += 1) await pulseGamepad([13]);
