@@ -95,6 +95,7 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   outline-offset: 3px;
   box-shadow: 0 0 0 1px #fff;
 }
+#view:focus-visible { outline: none; box-shadow: none; }
 button:hover:not(:disabled), button:focus-visible { background: var(--ink); color: #fff; }
 .menu button { width: min(270px, 100%); font-size: 1.6rem; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }

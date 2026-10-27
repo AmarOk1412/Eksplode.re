@@ -199,6 +199,7 @@ async function main() {
       await key("Escape", "Escape", 27);
       await waitFor("document.getElementById('menu-hub').hidden", "keyboard resuming the match");
       await waitFor("document.activeElement.id === 'view'", "keyboard focus returning to the arena");
+      await waitFor("getComputedStyle(document.getElementById('view')).outlineStyle === 'none'", "no red focus ring on the playing map");
     } else {
       await setFakeGamepad([], [0, 0], "standard", 1);
       await sleep(100);
@@ -258,6 +259,7 @@ async function main() {
       await pulseGamepad([9]);
       await waitFor("document.getElementById('menu-hub').hidden", "controller resuming the match");
       await waitFor("document.activeElement.id === 'view'", "controller focus returning to the arena");
+      await waitFor("getComputedStyle(document.getElementById('view')).outlineStyle === 'none'", "no red focus ring on the playing map");
     }
     console.log(`${flow} main-screen flow passed`);
     return;
