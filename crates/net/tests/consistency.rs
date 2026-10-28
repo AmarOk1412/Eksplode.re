@@ -2,6 +2,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use common::wait_for_game as wait_for;
 use common::*;
 use eksplode_re_core::{Config, Dir, Event, Outcome};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
@@ -50,13 +51,14 @@ fn drive(c: Client, slot: usize) -> (Vec<Duration>, Option<Outcome>, u32) {
 #[test]
 fn sc006_sc007_actions_show_up_quickly_and_everyone_agrees_on_the_result() {
     let host = host_with(|c| {
+        c.tick = Duration::from_millis(20);
         c.game = Config {
             block_density: 0.0,
             ..quick_game(400)
         };
     });
-    let clients = join_all(&host, 4);
-    host.start_match();
+    let (clients, room) = join_room_all(&host, 4);
+    host.handle().start_room(&room).unwrap();
     let handles: Vec<_> = clients
         .into_iter()
         .enumerate()

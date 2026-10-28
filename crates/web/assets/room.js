@@ -83,6 +83,22 @@ export function setRoomMessage(room) {
   return { type: "SetRoom", settings: sanitizeRoom(room) };
 }
 
+export function roomProtocolMessage(state, message, requestId) {
+  if (["Join", "RoomQuery", "Leave"].includes(message.type)) return null;
+  if (message.type === "Hello" || message.type === "Ping") return { ...message };
+  if (["ListRooms", "CreateRoom", "JoinRoom", "ResumeRoom", "RequestStatus", "CancelRequest"].includes(message.type)) {
+    return { ...message, request_id: requestId };
+  }
+  if (!state.room_id) return null;
+  if (message.type === "Input") return { ...message, room_id: state.room_id };
+  const scoped = { ...message, room_id: state.room_id, request_id: requestId };
+  if (message.type === "SetRoom") {
+    scoped.expected_revision = state.revision;
+    scoped.capacity = message.capacity ?? state.capacity;
+  }
+  return scoped;
+}
+
 /** The settings saved on this device, or `fallback` when nothing usable is saved. */
 export function loadRoom(storage, fallback = defaultRoom()) {
   try {
@@ -106,7 +122,8 @@ export function saveRoom(storage, room) {
 /** What the lobby shows about the room and what the owner may change. */
 export function roomControls(state) {
   const settings = sanitizeRoom(state.lobby?.settings);
-  const owner = state.lobby?.slots?.findIndex((s) => s.controller === "Local" || s.controller === "Remote");
+  const owner = state.lobby && Object.hasOwn(state.lobby, "owner_slot") ? state.lobby.owner_slot :
+    state.lobby?.slots?.findIndex((s) => s.controller === "Local" || s.controller === "Remote");
   const enabled = state.stage === "lobby" && owner !== undefined && owner >= 0 && owner === state.slot;
   return {
     settings,

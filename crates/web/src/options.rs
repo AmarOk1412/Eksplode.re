@@ -22,6 +22,8 @@ pub struct ServerOptions {
     pub origins: AllowedOrigins,
     /// Open HTTP/WebSocket connections at the same time.
     pub max_connections: usize,
+    pub max_rooms: u16,
+    pub server_id: Option<String>,
     /// Time a client has to send its request head.
     pub request_timeout: Duration,
     /// A player silent for this long during a match is replaced by a bot.
@@ -45,7 +47,9 @@ impl Default for ServerOptions {
             bots: 0,
             seed: None,
             origins: AllowedOrigins::SameOrigin,
-            max_connections: 64,
+            max_connections: 256,
+            max_rooms: 32,
+            server_id: None,
             request_timeout: Duration::from_secs(5),
             silence_timeout: Duration::from_secs(10),
             tick: Duration::from_secs(1) / game.tick_hz,

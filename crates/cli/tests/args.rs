@@ -117,6 +117,8 @@ mod network {
             room: Default::default(),
             room_given: false,
             no_setup: false,
+            server_id: None,
+            limits: Default::default(),
         }))
     }
 
@@ -143,12 +145,55 @@ mod network {
             addr: addr.into(),
             name: name.into(),
             key_bindings: KeyBindings::default_for_slot(0),
+            room_id: None,
         }))
+    }
+
+    #[test]
+    fn joining_a_specific_room_is_explicit_and_bounded() {
+        let room_id = "ab".repeat(16);
+        let Ok(Command::Join(options)) = args(&["join", "127.0.0.1:7878", "--room-id", &room_id])
+        else {
+            panic!("explicit room selection must parse");
+        };
+        assert_eq!(options.room_id.as_deref(), Some(room_id.as_str()));
+        for invalid in ["".to_string(), "not-a-room".into(), "ab".repeat(33)] {
+            assert!(args(&["join", "127.0.0.1", "--room-id", &invalid]).is_err());
+        }
     }
 
     #[test]
     fn host_defaults() {
         assert_eq!(args(&["host"]), host(7878, 0, "Host", None));
+    }
+
+    #[test]
+    fn terminal_host_room_identity_and_limits_match_the_server() {
+        let Ok(Command::Host(options)) = args(&[
+            "host",
+            "--server-id",
+            "alpha",
+            "--max-rooms",
+            "128",
+            "--max-connections",
+            "1024",
+        ]) else {
+            panic!("room host options must parse");
+        };
+        assert_eq!(options.server_id.as_deref(), Some("alpha"));
+        assert_eq!(
+            (options.limits.max_rooms, options.limits.max_connections),
+            (128, 1024)
+        );
+        for (flag, value) in [
+            ("--server-id", "bad name"),
+            ("--max-rooms", "0"),
+            ("--max-rooms", "129"),
+            ("--max-connections", "3"),
+            ("--max-connections", "1025"),
+        ] {
+            assert!(args(&["host", flag, value]).is_err());
+        }
     }
 
     #[test]

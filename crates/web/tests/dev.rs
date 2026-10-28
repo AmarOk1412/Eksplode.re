@@ -12,8 +12,7 @@ fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
 #[test]
 fn f3_us4_as1_the_dev_panel_is_offered_only_in_dev_mode() {
     let s = server(|o| o.dev = true);
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     match ws.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
         Some(ServerMsg::Welcome { dev, .. }) => assert!(dev),
         other => panic!("{other:?}"),
@@ -29,14 +28,13 @@ fn f3_us4_as1_the_dev_panel_is_offered_only_in_dev_mode() {
     ));
 
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     match ws.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
         Some(ServerMsg::Welcome { dev, .. }) => assert!(!dev),
         other => panic!("{other:?}"),
     }
     ws.send(&ClientMsg::DevResetDrops);
-    assert!(ws.recv_until(is_error("DevDisabled")).is_some());
+    assert!(ws.recv_until(is_error("Unsupported")).is_some());
 }
 
 #[test]

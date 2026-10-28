@@ -284,7 +284,7 @@ pub fn host_warnings(opts: &HostOptions) -> Vec<String> {
     if !game_ip.is_loopback() {
         out.push(format!(
             "WARNING: listening on {game_ip}: the game has no encryption and no authentication, \
-             so anyone who can reach this machine on {ports} can play. Use --bind 0.0.0.0 to \
+             so anyone who can reach this machine on {ports} can play. Use --bind 127.0.0.1 to \
              play only on this machine, or a firewall or tunnel to restrict access."
         ));
     }
@@ -354,11 +354,11 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
         seed: opts.seed,
         dev: opts.dev,
         defaults: room.clone(),
+        default_bots: opts.bots,
+        server_id: opts.server_id.clone(),
+        limits: opts.limits,
         ..HostConfig::default()
     })?;
-    for _ in 0..opts.bots {
-        host.add_bot();
-    }
     let web = match opts.web_port {
         Some(port) => Some(Server::attach(
             host.handle(),
@@ -370,13 +370,16 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
                 seed: opts.seed,
                 dev: opts.dev,
                 room: room.clone(),
+                server_id: opts.server_id.clone(),
+                max_rooms: opts.limits.max_rooms,
+                max_connections: usize::from(opts.limits.max_connections),
                 ..ServerOptions::default()
             },
         )?),
         None => None,
     };
-    let client = host.local_client(&opts.name)?;
-    let mut online = Online::hosting(host, client);
+    let client = host.connect(true)?;
+    let mut online = Online::hosting_room(host, client, opts.name.clone(), room);
     online.web_url = web.as_ref().map(|s| web_url(s.http_addr()));
     let result = online_loop(online);
     // the match host is gone by now, so every browser has been told before the page stops
@@ -405,8 +408,11 @@ fn setup_room(
 /// Joins a match hosted elsewhere.
 pub fn run_join(opts: &JoinOptions) -> Result<(), AppError> {
     let client =
-        Client::connect(&opts.addr, &opts.name).map_err(|e| connect_failure(&opts.addr, e))?;
-    online_loop(Online::with_key_bindings(client, opts.key_bindings))
+        Client::connect_unjoined(&opts.addr).map_err(|e| connect_failure(&opts.addr, e))?;
+    online_loop(
+        Online::directory(client, opts.name.clone(), opts.key_bindings)
+            .with_room_id(opts.room_id.clone()),
+    )
 }
 
 fn online_loop(mut online: Online) -> Result<(), AppError> {

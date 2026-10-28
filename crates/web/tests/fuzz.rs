@@ -77,13 +77,11 @@ fn the_websocket_bridge_survives_random_frames_and_stays_fair() {
     let s = server(|_| {});
     let mut rng = Rng(0xdead_beef_cafe_f00d);
 
-    let mut good = Ws::open(s.http_addr());
-    good.join("Ann");
+    let mut good = RoomWs::create(s.http_addr(), "Ann");
     good.welcome_slot();
 
     for round in 0..4 {
-        let mut bad = Ws::open(s.http_addr());
-        bad.join(&format!("Mal{round}"));
+        let mut bad = RoomWs::join(s.http_addr(), &good.reference, &format!("Mal{round}"));
         bad.welcome_slot();
         // the connection closes after ten bad messages; sending more must not hurt anybody
         for _ in 0..40 {
@@ -140,10 +138,10 @@ fn f3_random_developer_frames_are_refused_or_ignored_and_never_hurt_the_server()
     for dev in [false, true] {
         let s = server(|o| o.dev = dev);
         let mut rng = Rng(0x0dd5_eed5_0000_0001 ^ u64::from(dev));
-        let mut owner = Ws::open(s.http_addr());
-        owner.join("Ann");
+        let mut owner = RoomWs::create(s.http_addr(), "Ann");
         owner.welcome_slot();
-        for _ in 0..200 {
+        let room_id = owner.reference.room_id.clone();
+        for attempt in 0..200 {
             let chances: Vec<String> = (0..rng.below(10))
                 .map(|_| match rng.below(5) {
                     0 => "null".to_string(),
@@ -155,14 +153,14 @@ fn f3_random_developer_frames_are_refused_or_ignored_and_never_hurt_the_server()
                 .collect();
             let text = match rng.below(4) {
                 0 => format!(
-                    "{{\"type\":\"DevSetDrops\",\"chances\":[{}]}}",
+                    "{{\"type\":\"DevSetDrops\",\"room_id\":\"{room_id}\",\"request_id\":\"dev-{attempt}\",\"chances\":[{}]}}",
                     chances.join(",")
                 ),
                 1 => format!(
-                    "{{\"type\":\"DevPauseBots\",\"paused\":{}}}",
+                    "{{\"type\":\"DevPauseBots\",\"room_id\":\"{room_id}\",\"request_id\":\"dev-{attempt}\",\"paused\":{}}}",
                     ["true", "false", "3", "null"][rng.below(4)]
                 ),
-                2 => "{\"type\":\"DevResetDrops\"}".to_string(),
+                2 => format!("{{\"type\":\"DevResetDrops\",\"room_id\":\"{room_id}\",\"request_id\":\"dev-{attempt}\"}}"),
                 _ => String::from_utf8_lossy(&rng.bytes(60)).to_string(),
             };
             if owner.socket.send(Message::text(text)).is_err() {
@@ -170,11 +168,8 @@ fn f3_random_developer_frames_are_refused_or_ignored_and_never_hurt_the_server()
             }
         }
         // whatever happened, the owner (if still connected) and the server are fine
-        let mut fresh = Ws::open(s.http_addr());
-        fresh.join("Bob");
-        assert!(fresh
-            .recv_until(|m| matches!(m, ServerMsg::Welcome { .. } | ServerMsg::Rejected { .. }))
-            .is_some());
+        let mut fresh = RoomWs::create(s.http_addr(), "Bob");
+        assert_eq!(fresh.welcome_slot(), 0);
         assert_eq!(get(s.http_addr(), "/").status, 200);
     }
 }

@@ -226,12 +226,10 @@ fn listed_and_any_origins_can_be_enabled() {
 #[test]
 fn a_refused_upgrade_never_reaches_the_match() {
     let s = server(|_| {});
-    let mut good = Ws::open(s.http_addr());
-    good.join("Ann");
+    let mut good = RoomWs::create(s.http_addr(), "Ann");
     assert_eq!(good.welcome_slot(), 0);
     assert!(Ws::connect(s.http_addr(), Some("http://evil.example")).is_err());
-    let mut next = Ws::open(s.http_addr());
-    next.join("Bob");
+    let mut next = RoomWs::join(s.http_addr(), &good.reference, "Bob");
     assert_eq!(next.welcome_slot(), 1, "the refused client took no slot");
 }
 

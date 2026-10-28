@@ -13,7 +13,7 @@ Usage:
   eksplode-re-cli [OPTIONS]                          play on this machine
   eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
                      [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
-    eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS]
+    eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS] [--room-id ID]
 
 Local options:
   --players <N>   number of local human players, 0-4 (default 1)
@@ -41,6 +41,9 @@ Host options:
   --mode, --size, --time, --friendly-fire  the room settings, as above
   --no-setup      do not show the room setup screen before the lobby (it is also skipped
                   when a room setting is given)
+    --server-id <ID>  stable host identifier, 1-64 ASCII identifier characters
+    --max-rooms <N>   simultaneous room limit, 1-128 (default 32)
+    --max-connections <N>  connection limit, 4-1024 (default 256)
 
 Network play: the host listens on port 7878 by default; up to 4 participants (humans and bots).
 Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
@@ -81,6 +84,8 @@ pub struct HostOptions {
     pub room_given: bool,
     /// Skip the room setup screen.
     pub no_setup: bool,
+    pub server_id: Option<String>,
+    pub limits: eksplode_re_net::room::RoomLimits,
 }
 
 /// Options of `join`.
@@ -91,6 +96,7 @@ pub struct JoinOptions {
     pub name: String,
     /// Gameplay keys for this client during this run.
     pub key_bindings: KeyBindings,
+    pub room_id: Option<String>,
 }
 
 /// What the user asked the program to do.
@@ -244,6 +250,8 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         room: RoomSettings::default(),
         room_given: false,
         no_setup: false,
+        server_id: None,
+        limits: eksplode_re_net::room::RoomLimits::default(),
     };
     while let Some(arg) = it.next() {
         match arg.as_str() {
@@ -255,6 +263,27 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
             "--web-port" => opts.web_port = Some(web_port(&arg, it.next())?),
             "--bind" => opts.bind = Some(number(&arg, it.next())?),
             "--dev" => opts.dev = true,
+            "--server-id" => {
+                let identifier = value(&arg, it.next())?;
+                if !eksplode_re_net::room::valid_server_id(&identifier) {
+                    return Err(invalid(&arg, identifier));
+                }
+                opts.server_id = Some(identifier);
+            }
+            "--max-rooms" => {
+                let input = value(&arg, it.next())?;
+                opts.limits.max_rooms = match input.parse::<u16>() {
+                    Ok(count) if (1..=128).contains(&count) => count,
+                    _ => return Err(invalid(&arg, input)),
+                };
+            }
+            "--max-connections" => {
+                let input = value(&arg, it.next())?;
+                opts.limits.max_connections = match input.parse::<u16>() {
+                    Ok(count) if (4..=1024).contains(&count) => count,
+                    _ => return Err(invalid(&arg, input)),
+                };
+            }
             "--no-setup" => opts.no_setup = true,
             "--room-name" => {
                 opts.room.name = value(&arg, it.next())?;
@@ -272,11 +301,23 @@ fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
     let mut addr = None;
     let mut player = "Player".to_string();
     let mut key_bindings = KeyBindings::default_for_slot(0);
+    let mut room_id = None;
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
             "--name" => player = name(&arg, it.next())?,
             "--keys" => key_bindings = parse_key_bindings(&arg, it.next())?,
+            "--room-id" => {
+                let identifier = value(&arg, it.next())?;
+                if identifier.len() != 32
+                    || !identifier
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                {
+                    return Err(invalid(&arg, identifier));
+                }
+                room_id = Some(identifier);
+            }
             a if a.starts_with('-') => return Err(UsageError::UnknownOption(arg)),
             _ if addr.is_none() => addr = Some(arg),
             _ => return Err(UsageError::UnknownOption(arg)),
@@ -292,6 +333,7 @@ fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
         addr,
         name: player,
         key_bindings,
+        room_id,
     }))
 }
 

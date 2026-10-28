@@ -1,3 +1,30 @@
+.directory {
+  width: min(100%, 56rem);
+  margin: 0 auto;
+}
+.directory-rooms {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.directory-rooms button {
+  width: 100%;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.directory-rooms button[aria-pressed="true"] {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+.directory-rooms span {
+  font-size: 0.875rem;
+}
 :root {
   --bg: #dddbdf;
   --grid: #cfccd2;
@@ -31,6 +58,7 @@ body {
   margin: 0 auto;
   padding: 16px;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   justify-items: center;
 }
@@ -65,6 +93,10 @@ section[hidden], [hidden] { display: none !important; }
   display: grid;
   justify-items: center;
   gap: 12px;
+}
+
+#join-panel {
+  margin-inline: auto;
 }
 
 .dialog { width: min(1000px, 100%); }
@@ -407,6 +439,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 @media (max-width: 480px) {
   header { padding-top: 48px; }
+  .editor { grid-template-columns: minmax(0, 1fr); justify-items: center; }
+  .pickers { min-width: 0; width: 100%; justify-items: center; }
   .controls-panel { left: 12px; right: 12px; width: auto; padding: 16px; }
   .control-binding { grid-template-columns: minmax(76px, 0.8fr) minmax(0, 1.2fr); }
   .controls-panel .buttons button { font-size: 0.95rem; }

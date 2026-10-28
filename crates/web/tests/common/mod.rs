@@ -2,10 +2,10 @@
 
 use std::io::{Read, Write};
 use std::net::{SocketAddr, TcpStream};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use eksplode_re_core::Config;
-use eksplode_re_net::protocol::{ClientMsg, ServerMsg, PROTOCOL_VERSION};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use eksplode_re_web::{Server, ServerOptions};
 use tungstenite::client::IntoClientRequest;
 use tungstenite::{Message, WebSocket};
@@ -124,33 +124,46 @@ impl Ws {
         self.socket.send(Message::text(text)).unwrap();
     }
 
-    pub fn join(&mut self, name: &str) {
-        self.send(&ClientMsg::Join {
-            version: PROTOCOL_VERSION,
-            name: name.into(),
-            look: None,
-            room: None,
-        });
+    pub fn send_value(&mut self, value: &serde_json::Value) {
+        self.send_text(&serde_json::to_string(value).unwrap());
     }
 
-    /// Joins with room settings given as loose JSON (used only when the join creates the room).
-    pub fn join_with_room(&mut self, name: &str, room: serde_json::Value) {
-        self.send(&ClientMsg::Join {
-            version: PROTOCOL_VERSION,
-            name: name.into(),
-            look: None,
-            room: Some(room),
-        });
+    pub fn recv_value(&mut self) -> Option<serde_json::Value> {
+        let deadline = Instant::now() + WAIT;
+        while let Some(remaining) = deadline.checked_duration_since(Instant::now()) {
+            self.socket
+                .get_mut()
+                .set_read_timeout(Some(remaining))
+                .ok()?;
+            match self.socket.read() {
+                Ok(Message::Text(text)) if text.len() <= eksplode_re_net::protocol::MAX_LINE => {
+                    return serde_json::from_str(text.as_str()).ok();
+                }
+                Ok(Message::Ping(_)) | Ok(Message::Pong(_)) => {}
+                _ => return None,
+            }
+        }
+        None
     }
 
-    /// Joins with a look given as loose JSON.
-    pub fn join_with_look(&mut self, name: &str, look: serde_json::Value) {
-        self.send(&ClientMsg::Join {
-            version: PROTOCOL_VERSION,
-            name: name.into(),
-            look: Some(look),
-            room: None,
-        });
+    pub fn hello_v2(&mut self) -> Option<serde_json::Value> {
+        self.send_value(&serde_json::json!({"type": "Hello", "version": 2}));
+        self.recv_value()
+    }
+
+    pub fn create_room_v2(&mut self, request_id: &str, name: &str) {
+        self.send_value(&serde_json::json!({
+            "type": "CreateRoom", "request_id": request_id, "name": name,
+            "settings": {"name": name, "mode": "normal", "size": "small",
+                "minutes": 3, "friendly_fire": true}, "capacity": 4
+        }));
+    }
+
+    pub fn join_room_v2(&mut self, request_id: &str, room: &serde_json::Value, name: &str) {
+        self.send_value(&serde_json::json!({
+            "type": "JoinRoom", "request_id": request_id, "name": name,
+            "room_id": room["room_id"], "server_epoch": room["server_epoch"]
+        }));
     }
 
     /// Next server message; `None` when the socket closed or timed out.
@@ -193,14 +206,138 @@ impl Ws {
     }
 }
 
+pub struct RoomWs {
+    transport: Ws,
+    pub reference: eksplode_re_net::protocol::v2::RoomRef,
+    initial: Option<ServerMsg>,
+    request_sequence: u64,
+}
+
+impl RoomWs {
+    pub fn create(addr: SocketAddr, name: &str) -> Self {
+        Self::create_with_look(addr, name, None)
+    }
+
+    pub fn create_with_look(addr: SocketAddr, name: &str, look: Option<serde_json::Value>) -> Self {
+        let mut transport = Ws::open(addr);
+        let hello = transport.hello_v2().expect("Hello reply");
+        assert_eq!(hello["type"], "Hello");
+        transport.send_value(&serde_json::json!({
+            "type":"CreateRoom", "request_id":"fixture-create", "name":name,
+            "settings":hello["defaults"], "capacity":4, "look":look
+        }));
+        Self::admitted(transport)
+    }
+
+    pub fn join(
+        addr: SocketAddr,
+        reference: &eksplode_re_net::protocol::v2::RoomRef,
+        name: &str,
+    ) -> Self {
+        Self::join_with_look(addr, reference, name, None)
+    }
+
+    pub fn join_with_look(
+        addr: SocketAddr,
+        reference: &eksplode_re_net::protocol::v2::RoomRef,
+        name: &str,
+        look: Option<serde_json::Value>,
+    ) -> Self {
+        let mut transport = Ws::open(addr);
+        assert_eq!(transport.hello_v2().expect("Hello reply")["type"], "Hello");
+        transport.send_value(&serde_json::json!({"type":"JoinRoom", "request_id":"fixture-join",
+            "name":name, "room_id":reference.room_id, "server_epoch":reference.server_epoch, "look":look}));
+        let joined = Self::admitted(transport);
+        assert_eq!(&joined.reference, reference);
+        joined
+    }
+
+    fn admitted(mut transport: Ws) -> Self {
+        use eksplode_re_net::protocol::v2::Reply;
+        let reply: Reply =
+            serde_json::from_value(transport.recv_value().expect("admission reply")).unwrap();
+        let reference = match &reply {
+            Reply::Welcome { admission, .. } => admission.reference.clone(),
+            _ => panic!("expected Welcome"),
+        };
+        Self {
+            transport,
+            reference,
+            initial: Some(ServerMsg::RoomV2(Box::new(reply))),
+            request_sequence: 0,
+        }
+    }
+
+    pub fn send(&mut self, message: &ClientMsg) {
+        assert!(!matches!(
+            message,
+            ClientMsg::Join { .. }
+                | ClientMsg::RoomQuery
+                | ClientMsg::SetRoom { .. }
+                | ClientMsg::RoomV2(_)
+        ));
+        let mut value = serde_json::to_value(message).unwrap();
+        value["room_id"] = serde_json::json!(self.reference.room_id);
+        if matches!(message, ClientMsg::Leave) {
+            value["type"] = serde_json::json!("LeaveRoom");
+        }
+        if !matches!(message, ClientMsg::Input { .. } | ClientMsg::Ping { .. }) {
+            self.request_sequence = self.request_sequence.checked_add(1).unwrap();
+            value["request_id"] = serde_json::json!(format!("fixture-{}", self.request_sequence));
+        }
+        self.transport.send_value(&value);
+    }
+
+    pub fn recv(&mut self) -> Option<ServerMsg> {
+        self.initial
+            .take()
+            .or_else(|| self.transport.recv())
+            .map(ServerMsg::into_game_message)
+    }
+
+    pub fn recv_until(&mut self, mut pred: impl FnMut(&ServerMsg) -> bool) -> Option<ServerMsg> {
+        while let Some(message) = self.recv() {
+            if pred(&message) {
+                return Some(message);
+            }
+        }
+        None
+    }
+
+    pub fn welcome_slot(&mut self) -> u8 {
+        match self.recv_until(|message| matches!(message, ServerMsg::Welcome { .. })) {
+            Some(ServerMsg::Welcome { slot, .. }) => slot,
+            _ => panic!("expected Welcome"),
+        }
+    }
+}
+
+impl std::ops::Deref for RoomWs {
+    type Target = Ws;
+
+    fn deref(&self) -> &Ws {
+        &self.transport
+    }
+}
+
+impl std::ops::DerefMut for RoomWs {
+    fn deref_mut(&mut self) -> &mut Ws {
+        &mut self.transport
+    }
+}
+
 /// Joins `n` clients one after another so slots follow the order.
-pub fn join_ws(addr: SocketAddr, n: usize) -> Vec<Ws> {
-    (0..n)
-        .map(|i| {
-            let mut ws = Ws::open(addr);
-            ws.join(&format!("w{i}"));
-            assert_eq!(usize::from(ws.welcome_slot()), i);
-            ws
-        })
-        .collect()
+pub fn join_room_ws(addr: SocketAddr, participants: usize) -> Vec<RoomWs> {
+    assert!((1..=4).contains(&participants));
+    let mut clients: Vec<RoomWs> = Vec::new();
+    for index in 0..participants {
+        let name = format!("w{index}");
+        let mut client = match clients.first() {
+            Some(owner) => RoomWs::join(addr, &owner.reference, &name),
+            None => RoomWs::create(addr, &name),
+        };
+        assert_eq!(usize::from(client.welcome_slot()), index);
+        clients.push(client);
+    }
+    clients
 }

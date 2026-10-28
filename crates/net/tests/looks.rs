@@ -4,19 +4,51 @@ mod common;
 
 use common::*;
 use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
+use eksplode_re_net::protocol::v2::{Reply, Request, RequestId, RoomRef};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
+use eksplode_re_net::Client;
 use serde_json::{json, Value};
 
-fn join(host: &eksplode_re_net::Host, name: &str, look: Option<Value>) -> (Raw, u8, Vec<Look>) {
-    let mut raw = Raw::connect(host.addr());
-    let mut msg = json!({"type": "Join", "version": 1, "name": name});
-    if let Some(look) = look {
-        msg["look"] = look;
-    }
-    raw.send_line(&msg.to_string());
-    match raw.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
-        Some(ServerMsg::Welcome { slot, looks, .. }) => (raw, slot, looks),
-        other => panic!("expected Welcome, got {other:?}"),
+fn admit(
+    host: &eksplode_re_net::Host,
+    reference: Option<&RoomRef>,
+    name: &str,
+    look: Option<Value>,
+) -> (Client, u8, RoomRef, Vec<Look>) {
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let request_id = RequestId::new("appearance-admission").unwrap();
+    let request = match reference {
+        Some(reference) => Request::JoinRoom {
+            request_id,
+            room_id: reference.room_id.clone(),
+            server_epoch: reference.server_epoch.clone(),
+            name: name.into(),
+            password: None,
+            look,
+        },
+        None => Request::CreateRoom {
+            request_id,
+            name: name.into(),
+            settings: serde_json::to_value(eksplode_re_core::RoomSettings::default()).unwrap(),
+            capacity: 4,
+            password: None,
+            look,
+        },
+    };
+    client.send_v2(request).unwrap();
+    let welcome = wait_for(&client, |message| {
+        matches!(message, ServerMsg::RoomV2(reply)
+        if matches!(reply.as_ref(), Reply::Welcome { .. }))
+    })
+    .unwrap();
+    match welcome {
+        ServerMsg::RoomV2(reply) => match *reply {
+            Reply::Welcome { admission, .. } => {
+                (client, admission.slot, admission.reference, admission.looks)
+            }
+            _ => panic!("expected Welcome"),
+        },
+        _ => panic!("expected v2 reply"),
     }
 }
 
@@ -24,8 +56,11 @@ fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
     move |m| matches!(m, ServerMsg::Error { code: c, .. } if c == code)
 }
 
-fn lobby_looks(raw: &mut Raw, pred: impl Fn(&[Look]) -> bool) -> Vec<Look> {
-    match raw.recv_until(|m| matches!(m, ServerMsg::Lobby { looks, .. } if pred(looks))) {
+fn lobby_looks(client: &Client, pred: impl Fn(&[Look]) -> bool) -> Vec<Look> {
+    match wait_for_game(
+        client,
+        |m| matches!(m, ServerMsg::Lobby { looks, .. } if pred(looks)),
+    ) {
         Some(ServerMsg::Lobby { looks, .. }) => looks,
         other => panic!("no matching lobby: {other:?}"),
     }
@@ -35,7 +70,7 @@ fn lobby_looks(raw: &mut Raw, pred: impl Fn(&[Look]) -> bool) -> Vec<Look> {
 fn a_chosen_look_is_in_the_welcome_and_in_every_lobby_broadcast() {
     let host = host();
     let chosen = json!({"colour":"Green","gender":"Female","head":"Cap","face":"Glasses"});
-    let (mut a, slot, looks) = join(&host, "Ann", Some(chosen));
+    let (a, slot, room, looks) = admit(&host, None, "Ann", Some(chosen));
     assert_eq!(slot, 0);
     let expected = Look {
         colour: Colour::Green,
@@ -46,9 +81,9 @@ fn a_chosen_look_is_in_the_welcome_and_in_every_lobby_broadcast() {
     assert_eq!(looks[0], expected);
     assert_eq!(looks.len(), 4);
 
-    let (_b, slot, _) = join(&host, "Bob", None);
+    let (_b, slot, _, _) = admit(&host, Some(&room), "Bob", None);
     assert_eq!(slot, 1);
-    let seen = lobby_looks(&mut a, |l| l[1] != Look::default_for(1) || l[0] == expected);
+    let seen = lobby_looks(&a, |l| l[1] != Look::default_for(1) || l[0] == expected);
     assert_eq!(seen[0], expected, "Ann still has her look");
     assert_eq!(seen[1], Look::default_for(1), "Bob got his slot default");
 }
@@ -56,22 +91,24 @@ fn a_chosen_look_is_in_the_welcome_and_in_every_lobby_broadcast() {
 #[test]
 fn f3_us1_as7_a_join_without_a_look_gets_the_slot_default() {
     let host = host();
-    let mut raw = Raw::connect(host.addr());
-    raw.send_line(r#"{"type":"Join","version":1,"name":"Old"}"#);
-    match raw.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
-        Some(ServerMsg::Welcome { looks, .. }) => assert_eq!(looks[0], Look::default_for(0)),
-        other => panic!("{other:?}"),
-    }
+    let (_owner, _, room, looks) = admit(&host, None, "Ann", None);
+    assert_eq!(looks[0], Look::default_for(0));
     // the in-process client of the library sends no look either
-    let c = connect(host.addr(), "Lib");
+    let c = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    c.join_room(&room, "Lib").unwrap();
     assert_eq!(welcome_slot(&c), 1);
 }
 
 #[test]
 fn f3_us1_as4_a_taken_colour_moves_to_the_next_free_one_and_the_sender_is_told() {
     let host = host();
-    let (_a, _, _) = join(&host, "Ann", Some(json!({"colour":"Green"})));
-    let (mut b, slot, looks) = join(&host, "Bob", Some(json!({"colour":"Green","head":"Crown"})));
+    let (_a, _, room, _) = admit(&host, None, "Ann", Some(json!({"colour":"Green"})));
+    let (b, slot, _, looks) = admit(
+        &host,
+        Some(&room),
+        "Bob",
+        Some(json!({"colour":"Green","head":"Crown"})),
+    );
     assert_eq!(slot, 1);
     assert_eq!(
         looks[1].colour,
@@ -79,7 +116,7 @@ fn f3_us1_as4_a_taken_colour_moves_to_the_next_free_one_and_the_sender_is_told()
         "the next colour after Green"
     );
     assert_eq!(looks[1].head, Head::Crown, "the rest of the look is kept");
-    match b.recv_until(is_error("LookAdjusted")) {
+    match wait_for_game(&b, is_error("LookAdjusted")) {
         Some(ServerMsg::Error { message, .. }) => assert!(message.contains("Orange"), "{message}"),
         other => panic!("{other:?}"),
     }
@@ -88,13 +125,25 @@ fn f3_us1_as4_a_taken_colour_moves_to_the_next_free_one_and_the_sender_is_told()
 #[test]
 fn colours_stay_distinct_among_four_participants_including_bots() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", Some(json!({"colour":"Black"})));
+    let a = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let request_id = eksplode_re_net::protocol::v2::RequestId::new("create").unwrap();
+    a.send_v2(eksplode_re_net::protocol::v2::Request::CreateRoom {
+        request_id,
+        name: "Ann".into(),
+        settings: serde_json::to_value(eksplode_re_core::RoomSettings::default()).unwrap(),
+        capacity: 4,
+        password: None,
+        look: Some(json!({"colour":"Black"})),
+    })
+    .unwrap();
+    welcome_slot(&a);
     for _ in 0..3 {
-        a.send(&ClientMsg::AddBot);
+        a.send(ClientMsg::AddBot).unwrap();
     }
-    let looks = match a
-        .recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4))
-    {
+    let looks = match wait_for_game(
+        &a,
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4),
+    ) {
         Some(ServerMsg::Lobby { looks, .. }) => looks,
         other => panic!("{other:?}"),
     };
@@ -112,44 +161,56 @@ fn colours_stay_distinct_among_four_participants_including_bots() {
 #[test]
 fn f3_us1_as6_set_look_changes_everybody_s_lobby_and_is_refused_during_a_match() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", None);
-    let (mut b, _, _) = join(&host, "Bob", None);
-    a.send_line(r#"{"type":"SetLook","look":{"colour":"Teal","gender":"Male","head":"TopHat","face":"Mask"}}"#);
-    for raw in [&mut a, &mut b] {
-        let looks = lobby_looks(raw, |l| l[0].head == Head::TopHat);
+    let (a, _, room, _) = admit(&host, None, "Ann", None);
+    let (b, _, _, _) = admit(&host, Some(&room), "Bob", None);
+    a.send(ClientMsg::SetLook {
+        look: json!({"colour":"Teal","gender":"Male","head":"TopHat","face":"Mask"}),
+    })
+    .unwrap();
+    for client in [&a, &b] {
+        let looks = lobby_looks(client, |l| l[0].head == Head::TopHat);
         assert_eq!(looks[0].colour, Colour::Teal);
         assert_eq!(looks[0].face, Face::Mask);
     }
-    a.send(&ClientMsg::AddBot);
-    a.send(&ClientMsg::Start);
-    assert!(a
-        .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
-        .is_some());
-    a.send_line(r#"{"type":"SetLook","look":{"colour":"Pink"}}"#);
-    assert!(a.recv_until(is_error("WrongPhase")).is_some());
+    a.send(ClientMsg::AddBot).unwrap();
+    a.send(ClientMsg::Start).unwrap();
+    assert!(wait_for_game(&a, |m| matches!(m, ServerMsg::Start { .. })).is_some());
+    a.send(ClientMsg::SetLook {
+        look: json!({"colour":"Pink"}),
+    })
+    .unwrap();
+    assert!(wait_for_game(&a, is_error("InMatch")).is_some());
 }
 
 #[test]
 fn a_look_that_changes_to_a_taken_colour_is_adjusted_too() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", Some(json!({"colour":"Green"})));
-    let (mut b, _, _) = join(&host, "Bob", Some(json!({"colour":"Pink"})));
-    b.send_line(r#"{"type":"SetLook","look":{"colour":"Green"}}"#);
-    assert!(b.recv_until(is_error("LookAdjusted")).is_some());
-    let looks = lobby_looks(&mut a, |l| l[1].colour == Colour::Orange);
+    let (a, _, room, _) = admit(&host, None, "Ann", Some(json!({"colour":"Green"})));
+    let (b, _, _, _) = admit(&host, Some(&room), "Bob", Some(json!({"colour":"Pink"})));
+    b.send(ClientMsg::SetLook {
+        look: json!({"colour":"Green"}),
+    })
+    .unwrap();
+    assert!(wait_for_game(&b, is_error("LookAdjusted")).is_some());
+    let looks = lobby_looks(&a, |l| l[1].colour == Colour::Orange);
     assert_eq!(looks[0].colour, Colour::Green);
 }
 
 #[test]
 fn a_freed_slot_frees_its_colour() {
     let host = host();
-    let (_a, _, _) = join(&host, "Ann", Some(json!({"colour":"Green"})));
-    let (mut b, _, looks) = join(&host, "Bob", Some(json!({"colour":"Pink"})));
+    let (a, _, room, _) = admit(&host, None, "Ann", Some(json!({"colour":"Green"})));
+    let (b, _, _, looks) = admit(&host, Some(&room), "Bob", Some(json!({"colour":"Pink"})));
     assert_eq!(looks[1].colour, Colour::Pink);
-    b.send(&ClientMsg::Leave);
+    b.send(ClientMsg::Leave).unwrap();
     drop(b);
+    wait_for_game(&a, |message| {
+        matches!(message, ServerMsg::Lobby { lobby, .. }
+        if lobby.slots[1].controller == eksplode_re_core::Controller::Empty)
+    })
+    .unwrap();
     // Bob's colour is free again for the next joiner
-    let (_c, slot, looks) = join(&host, "Cy", Some(json!({"colour":"Pink"})));
+    let (_c, slot, _, looks) = admit(&host, Some(&room), "Cy", Some(json!({"colour":"Pink"})));
     assert_eq!(slot, 1);
     assert_eq!(looks[1].colour, Colour::Pink);
 }
@@ -164,8 +225,11 @@ fn hostile_looks_never_break_the_join() {
         json!(null),
     ];
     let mut raws = Vec::new();
+    let mut room = None;
     for (i, look) in hostile.into_iter().enumerate() {
-        let (raw, slot, looks) = join(&host, &format!("H{i}"), Some(look));
+        let (raw, slot, reference, looks) =
+            admit(&host, room.as_ref(), &format!("H{i}"), Some(look));
+        room = Some(reference);
         assert_eq!(usize::from(slot), i);
         assert_eq!(
             looks[i],

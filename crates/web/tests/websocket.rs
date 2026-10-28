@@ -4,69 +4,84 @@ use std::time::Duration;
 
 use common::*;
 use eksplode_re_core::{Config, Dir, Event};
-use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg};
+use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 
 fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
     move |m| matches!(m, ServerMsg::Error { code: c, .. } if c == code)
 }
 
 #[test]
+fn v2_websocket_negotiates_and_preserves_scoped_command_identity() {
+    let server = server(|options| {
+        options.server_id = Some("alpha".into());
+        options.room.minutes = 5;
+    });
+    let mut socket = Ws::open(server.http_addr());
+    let hello = socket.hello_v2().unwrap();
+    assert_eq!(hello["type"], "Hello");
+    assert_eq!(hello["version"], 2);
+    assert_eq!(hello["server_id"], "alpha");
+    assert_eq!(hello["defaults"]["minutes"], 5);
+    socket.send_value(&serde_json::json!({
+        "type": "Start", "request_id": "start", "room_id": "missing-room"
+    }));
+    let reply = socket.recv_value().unwrap();
+    assert_eq!(reply["type"], "Error");
+    assert_eq!(reply["request_id"], "start");
+    assert_eq!(reply["code"], "NotInRoom");
+}
+
+#[test]
 fn us1_as2_join_assigns_a_slot_and_a_fifth_join_is_refused() {
     let s = server(|_| {});
-    let _four = join_ws(s.http_addr(), 4);
+    let four = join_room_ws(s.http_addr(), 4);
     let mut late = Ws::open(s.http_addr());
-    late.join("late");
-    assert_eq!(
-        late.recv(),
-        Some(ServerMsg::Rejected {
-            reason: RejectReason::Full
-        })
+    late.hello_v2().unwrap();
+    late.join_room_v2(
+        "late",
+        &serde_json::to_value(&four[0].reference).unwrap(),
+        "late",
     );
+    assert_eq!(late.recv_value().unwrap()["code"], "Full");
 }
 
 #[test]
 fn invalid_names_and_versions_are_rejected() {
     let s = server(|_| {});
+    let owner = RoomWs::create(s.http_addr(), "Owner");
     for name in ["", "   ", "this name is far too long", "bad\u{7}name"] {
         let mut ws = Ws::open(s.http_addr());
-        ws.join(name);
-        assert_eq!(
-            ws.recv(),
-            Some(ServerMsg::Rejected {
-                reason: RejectReason::BadName
-            }),
-            "{name:?}"
+        ws.hello_v2().unwrap();
+        ws.join_room_v2(
+            "invalid-name",
+            &serde_json::to_value(&owner.reference).unwrap(),
+            name,
         );
+        assert_eq!(ws.recv_value().unwrap()["code"], "BadName", "{name:?}");
     }
     let mut ws = Ws::open(s.http_addr());
-    ws.send(&ClientMsg::Join {
-        version: 99,
-        name: "Ann".into(),
-        look: None,
-        room: None,
-    });
+    ws.send_value(&serde_json::json!({"type":"Hello", "version":99}));
     assert_eq!(
-        ws.recv(),
-        Some(ServerMsg::Rejected {
-            reason: RejectReason::BadVersion
-        })
+        ws.recv_value().unwrap(),
+        serde_json::json!({"type":"Rejected", "reason":"BadVersion"})
     );
 }
 
 #[test]
-fn the_first_message_must_be_join() {
+fn room_commands_must_follow_hello() {
     let s = server(|_| {});
     let mut ws = Ws::open(s.http_addr());
-    ws.send(&ClientMsg::Start);
-    let m = ws.recv_until(is_error("NotJoined"));
+    ws.send_value(
+        &serde_json::json!({"type":"Start", "request_id":"before-hello", "room_id":"unknown"}),
+    );
+    let m = ws.recv_until(is_error("BadVersion"));
     assert!(m.is_some());
 }
 
 #[test]
 fn owner_start_over_websocket() {
     let s = server(|_| {});
-    let mut owner = Ws::open(s.http_addr());
-    owner.join("Ann");
+    let mut owner = RoomWs::create(s.http_addr(), "Ann");
     assert_eq!(owner.welcome_slot(), 0);
     owner.send(&ClientMsg::AddBot);
     owner.send(&ClientMsg::Start);
@@ -80,7 +95,7 @@ fn owner_start_over_websocket() {
 #[test]
 fn a_non_owner_gets_notowner() {
     let s = server(|_| {});
-    let mut ws = join_ws(s.http_addr(), 2);
+    let mut ws = join_room_ws(s.http_addr(), 2);
     ws[1].send(&ClientMsg::Start);
     let e = ws[1].recv_until(is_error("NotOwner"));
     match e {
@@ -92,8 +107,7 @@ fn a_non_owner_gets_notowner() {
 #[test]
 fn us1_as4_input_moves_the_player() {
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     ws.welcome_slot();
     ws.send(&ClientMsg::AddBot);
     ws.send(&ClientMsg::Start);
@@ -134,8 +148,7 @@ fn us1_as5_the_result_is_announced_and_the_lobby_returns() {
             ..Config::default()
         };
     });
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     ws.welcome_slot();
     ws.send(&ClientMsg::AddBot);
     ws.send(&ClientMsg::Start);
@@ -155,8 +168,7 @@ fn us1_as5_the_result_is_announced_and_the_lobby_returns() {
 #[test]
 fn binary_frames_are_malformed() {
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     ws.welcome_slot();
     ws.socket
         .send(tungstenite::Message::binary(vec![1u8, 2, 3]))
@@ -172,8 +184,7 @@ fn binary_frames_are_malformed() {
 #[test]
 fn malformed_text_is_answered_and_counted_ten_closes_the_socket() {
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     ws.welcome_slot();
     for text in [
         "garbage",
@@ -192,8 +203,7 @@ fn malformed_text_is_answered_and_counted_ten_closes_the_socket() {
 #[test]
 fn a_message_over_64_kib_closes_the_socket() {
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
     ws.welcome_slot();
     ws.send_text(&"a".repeat(70_000));
     let code = ws.close_code();
@@ -203,11 +213,9 @@ fn a_message_over_64_kib_closes_the_socket() {
 #[test]
 fn other_players_are_not_disturbed_by_a_misbehaving_one() {
     let s = server(|_| {});
-    let mut good = Ws::open(s.http_addr());
-    good.join("Ann");
+    let mut good = RoomWs::create(s.http_addr(), "Ann");
     good.welcome_slot();
-    let mut bad = Ws::open(s.http_addr());
-    bad.join("Mal");
+    let mut bad = RoomWs::join(s.http_addr(), &good.reference, "Mal");
     bad.welcome_slot();
     for _ in 0..12 {
         bad.send_text("garbage");
@@ -226,7 +234,13 @@ fn websocket_pings_are_answered() {
     ws.socket
         .send(tungstenite::Message::Ping(vec![9u8].into()))
         .unwrap();
-    ws.join("Ann");
-    ws.welcome_slot();
-    std::thread::sleep(Duration::from_millis(50));
+    ws.hello_v2().unwrap();
+    ws.socket
+        .get_mut()
+        .set_read_timeout(Some(Duration::from_secs(1)))
+        .unwrap();
+    ws.send_value(&serde_json::json!({"type":"Ping", "nonce":9, "request_id":"keepalive"}));
+    assert!(ws
+        .recv_until(|message| matches!(message, ServerMsg::Pong { nonce: 9 }))
+        .is_some());
 }

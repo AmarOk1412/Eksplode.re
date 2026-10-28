@@ -10,77 +10,513 @@ use serde_json::{json, Value};
 use std::io::Write;
 use std::time::{Duration, Instant};
 
-fn join(host: &Host, name: &str, room: Option<Value>) -> (Raw, u8, Lobby) {
-    let mut raw = Raw::connect(host.addr());
-    let mut msg = json!({"type": "Join", "version": 1, "name": name});
-    if let Some(room) = room {
-        msg["room"] = room;
-    }
-    raw.send_line(&msg.to_string());
-    match raw.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
-        Some(ServerMsg::Welcome { slot, lobby, .. }) => (raw, slot, lobby),
-        other => panic!("expected Welcome, got {other:?}"),
-    }
-}
-
-fn room_info(raw: &mut Raw) -> (bool, RoomSettings, u8) {
-    raw.send_line(r#"{"type":"RoomQuery"}"#);
-    match raw.recv_until(|m| matches!(m, ServerMsg::RoomInfo { .. })) {
-        Some(ServerMsg::RoomInfo {
-            open,
-            settings,
-            humans,
-        }) => (open, settings, humans),
-        other => panic!("expected RoomInfo, got {other:?}"),
-    }
-}
-
 fn is_error(code: &'static str) -> impl FnMut(&ServerMsg) -> bool {
     move |m| matches!(m, ServerMsg::Error { code: c, .. } if c == code)
 }
 
-fn lobby_settings(raw: &mut Raw, pred: impl Fn(&RoomSettings) -> bool) -> RoomSettings {
-    match raw.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if pred(&lobby.settings))) {
-        Some(ServerMsg::Lobby { lobby, .. }) => lobby.settings,
-        other => panic!("no matching lobby: {other:?}"),
+fn v2_reply(raw: &mut Raw, kind: &str) -> Value {
+    let deadline = Instant::now() + WAIT;
+    while Instant::now() < deadline {
+        let value = raw.recv_value().expect("v2 reply before timeout");
+        if value["type"] == kind {
+            return value;
+        }
+    }
+    panic!("expected {kind}");
+}
+
+fn v2_create(host: &Host, name: &str, capacity: u8) -> (Raw, Value) {
+    let mut raw = Raw::connect(host.addr());
+    assert_eq!(raw.hello_v2().unwrap()["type"], "Hello");
+    raw.send_value(&json!({"type":"CreateRoom","request_id":"create","name":name,
+        "settings":{"name":"Same name","mode":"normal","size":"small","minutes":3,"friendly_fire":true},
+        "capacity":capacity}));
+    let welcome = v2_reply(&mut raw, "Welcome");
+    (raw, welcome)
+}
+
+#[test]
+fn v2_players_choose_independent_rooms_without_implicit_admission() {
+    let host = host();
+    let mut browser = Raw::connect(host.addr());
+    browser.hello_v2().unwrap();
+    browser.send_value(&json!({"type":"ListRooms","request_id":"empty","scope":"local"}));
+    assert!(v2_reply(&mut browser, "Rooms")["rooms"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    let (mut owner, first) = v2_create(&host, "Ann", 4);
+    let (_other_owner, second) = v2_create(&host, "Bob", 4);
+    assert_ne!(first["room_id"], second["room_id"]);
+    assert_eq!(first["owner_membership_id"], first["membership_id"]);
+    browser.send_value(&json!({"type":"ListRooms","request_id":"list","scope":"local"}));
+    let listed = v2_reply(&mut browser, "Rooms");
+    let rooms = listed["rooms"].as_array().unwrap();
+    assert_eq!(rooms.len(), 2);
+    assert!(rooms
+        .iter()
+        .all(|room| room["occupied"] == 1 && room.get("resume_proof").is_none()));
+    browser.join_room_v2("join", &first, "Cara");
+    let joined = v2_reply(&mut browser, "Welcome");
+    assert_eq!(joined["room_id"], first["room_id"]);
+    assert_eq!(joined["slot"], 1);
+    owner.send_value(&json!({"type":"Start","request_id":"wrong","room_id":second["room_id"]}));
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "NotInRoom");
+}
+
+fn v2_create_settings(host: &Host, name: &str, settings: Value) -> (Raw, Value) {
+    let mut raw = Raw::connect(host.addr());
+    assert_eq!(raw.hello_v2().unwrap()["type"], "Hello");
+    raw.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":name,
+        "settings":settings, "capacity":4}),
+    );
+    let welcome = v2_reply(&mut raw, "Welcome");
+    v2_reply(&mut raw, "RoomUpdated");
+    (raw, welcome)
+}
+
+#[test]
+fn v2_only_one_of_a_hundred_connections_takes_the_last_seat() {
+    let host = host();
+    let (_owner, room) = v2_create(&host, "Owner", 2);
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(100));
+    let attempts: Vec<_> = (0..100)
+        .map(|index| {
+            let room = room.clone();
+            let barrier = barrier.clone();
+            let address = host.addr();
+            std::thread::spawn(move || {
+                let mut raw = Raw::connect(address);
+                raw.hello_v2().unwrap();
+                barrier.wait();
+                raw.join_room_v2("join", &room, &format!("p{index}"));
+                let reply = raw.recv_value().unwrap();
+                (raw, reply)
+            })
+        })
+        .collect();
+    let outcomes: Vec<_> = attempts
+        .into_iter()
+        .map(|attempt| attempt.join().unwrap())
+        .collect();
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|(_, reply)| reply["type"] == "Welcome")
+            .count(),
+        1
+    );
+    assert!(outcomes
+        .iter()
+        .all(|(_, reply)| reply["type"] == "Welcome" || reply["code"] == "Full"));
+}
+
+#[test]
+fn expired_room_creation_never_publishes_a_room_or_membership() {
+    use eksplode_re_net::host::HostServices;
+    use eksplode_re_net::room::{RandomSource, RoomError, ServiceClock};
+    use eksplode_re_net::HostConfig;
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    };
+    struct Clock(common::FakeClock);
+    impl ServiceClock for Clock {
+        fn now(&self) -> Duration {
+            self.0.now()
+        }
+    }
+    struct Random {
+        clock: common::FakeClock,
+        calls: AtomicUsize,
+        bytes: common::FakeCredentials,
+    }
+    impl RandomSource for Random {
+        fn fill(&self, output: &mut [u8]) -> Result<(), RoomError> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 3 {
+                self.clock.advance(6_000);
+            }
+            self.bytes
+                .fill(output)
+                .map_err(|_| RoomError::RandomUnavailable)
+        }
+    }
+    let clock = common::FakeClock::default();
+    let host = Host::start_with_services(
+        HostConfig {
+            bind: "127.0.0.1:0".into(),
+            ..Default::default()
+        },
+        HostServices::new(
+            Arc::new(Clock(clock.clone())),
+            Arc::new(Random {
+                clock,
+                calls: AtomicUsize::new(0),
+                bytes: common::FakeCredentials::default(),
+            }),
+        ),
+    )
+    .unwrap();
+    let mut raw = Raw::connect(host.addr());
+    raw.hello_v2().unwrap();
+    raw.create_room_v2("create", "Ann");
+    assert_eq!(v2_reply(&mut raw, "Error")["code"], "RequestExpired");
+    raw.send_value(&json!({"type":"ListRooms","request_id":"after","scope":"local"}));
+    assert!(v2_reply(&mut raw, "Rooms")["rooms"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn v2_directory_pages_are_bounded_and_mutation_invalidates_the_cursor() {
+    let host = host_with(|config| config.limits.max_rooms = 40);
+    let _owners: Vec<_> = (0..33)
+        .map(|index| v2_create(&host, &format!("p{index}"), 4).0)
+        .collect();
+    let mut browser = Raw::connect(host.addr());
+    browser.hello_v2().unwrap();
+    browser.send_value(&json!({"type":"ListRooms","request_id":"first","scope":"local"}));
+    let first = v2_reply(&mut browser, "Rooms");
+    assert_eq!(first["rooms"].as_array().unwrap().len(), 32);
+    let cursor = first["next_cursor"].as_str().unwrap();
+    browser.send_value(
+        &json!({"type":"ListRooms","request_id":"second","scope":"local","cursor":cursor}),
+    );
+    let second = v2_reply(&mut browser, "Rooms");
+    assert_eq!(second["rooms"].as_array().unwrap().len(), 1);
+    assert!(second.get("next_cursor").is_none());
+    browser.send_value(&json!({"type":"ListRooms","request_id":"refresh","scope":"local"}));
+    let before_change = v2_reply(&mut browser, "Rooms");
+    let (_extra, _) = v2_create(&host, "extra", 4);
+    browser.send_value(&json!({"type":"ListRooms","request_id":"stale","scope":"local","cursor":before_change["next_cursor"]}));
+    assert_eq!(v2_reply(&mut browser, "Error")["code"], "StaleRevision");
+}
+
+#[test]
+fn v2_running_rooms_use_independent_modes_and_reject_fresh_match_admission() {
+    let host = host_with(|config| {
+        config.game.block_density = 0.0;
+        config.tick = Duration::from_millis(20);
+    });
+    let mut players = Vec::new();
+    for mode in ["normal", "team", "chaser"] {
+        let mut raw = Raw::connect(host.addr());
+        raw.hello_v2().unwrap();
+        raw.send_value(&json!({"type":"CreateRoom","request_id":"create","name":mode,
+            "settings":{"name":mode,"mode":mode,"size":"small","minutes":3,"friendly_fire":true},"capacity":4}));
+        let welcome = v2_reply(&mut raw, "Welcome");
+        for index in 0..3 {
+            raw.send_value(&json!({"type":"AddBot","request_id":format!("bot-{index}"),"room_id":welcome["room_id"]}));
+        }
+        raw.send_value(&json!({"type":"Start","request_id":"start","room_id":welcome["room_id"]}));
+        let start = v2_reply(&mut raw, "Start");
+        assert_eq!(start["room_id"], welcome["room_id"]);
+        assert_eq!(start["config"]["mode"], mode);
+        let snapshot = v2_reply(&mut raw, "Snapshot");
+        assert_eq!(snapshot["room_id"], welcome["room_id"]);
+        players.push((raw, welcome));
+    }
+    let mut late = Raw::connect(host.addr());
+    late.hello_v2().unwrap();
+    late.join_room_v2("late", &players[0].1, "late");
+    assert_eq!(v2_reply(&mut late, "Error")["code"], "InMatch");
+    for (raw, welcome) in &mut players {
+        for _ in 0..3 {
+            let snapshot = v2_reply(raw, "Snapshot");
+            assert_eq!(snapshot["room_id"], welcome["room_id"]);
+        }
     }
 }
 
 #[test]
-fn f4_us1_as1_a_closed_room_answers_room_info_and_the_first_join_creates_it() {
+fn v2_explicit_leave_closes_only_its_room_and_reuses_the_unjoined_transport() {
     let host = host();
-    let mut raw = Raw::connect(host.addr());
-    let (open, settings, humans) = room_info(&mut raw);
-    assert!(!open);
-    assert_eq!(settings, RoomSettings::default());
-    assert_eq!(humans, 0);
-    // asking again changes nothing and takes no slot
-    assert!(!room_info(&mut raw).0);
-
-    let room = json!({"name": "Friday", "size": "medium", "minutes": 5});
-    raw.send_line(&json!({"type":"Join","version":1,"name":"Ann","room":room}).to_string());
-    let lobby = match raw.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
-        Some(ServerMsg::Welcome { slot, lobby, .. }) => {
-            assert_eq!(slot, 0, "the query took no slot");
-            lobby
-        }
-        other => panic!("{other:?}"),
-    };
-    assert_eq!(lobby.settings.name, "Friday");
-    assert_eq!(lobby.settings.size, BoardSize::Medium);
-    assert_eq!(lobby.settings.minutes, 5);
-    assert_eq!(lobby.owner(), Some(0));
-
-    let (open, settings, humans) = room_info(&mut raw);
-    assert!(open);
-    assert_eq!(settings.name, "Friday");
-    assert_eq!(humans, 1);
+    let (mut owner, first) = v2_create(&host, "First", 4);
+    let (_other, second) = v2_create(&host, "Second", 4);
+    owner.join_room_v2("already", &second, "First");
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "AlreadyInRoom");
+    owner.send_value(&json!({"type":"LeaveRoom","request_id":"leave","room_id":first["room_id"]}));
+    assert_eq!(
+        v2_reply(&mut owner, "LeftRoom")["room_id"],
+        first["room_id"]
+    );
+    owner.send_value(&json!({"type":"ListRooms","request_id":"after","scope":"local"}));
+    let directory = v2_reply(&mut owner, "Rooms");
+    assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
+    assert_eq!(directory["rooms"][0]["room_id"], second["room_id"]);
+    owner.join_room_v2("new-join", &second, "First");
+    assert_eq!(
+        v2_reply(&mut owner, "Welcome")["room_id"],
+        second["room_id"]
+    );
 }
 
 #[test]
-fn the_first_join_without_a_room_gets_the_defaults_and_a_name_from_the_owner() {
+fn v2_startup_bots_fill_each_created_room_without_displacing_the_owner() {
+    let host = host_with(|config| config.default_bots = 3);
+    let (_first, first) = v2_create(&host, "First", 2);
+    let (_second, second) = v2_create(&host, "Second", 4);
+    assert_eq!(first["slot"], 0);
+    assert_eq!(second["slot"], 0);
+    let count = |welcome: &Value| {
+        welcome["lobby"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|slot| slot["controller"] == "Bot")
+            .count()
+    };
+    assert_eq!(count(&first), 1);
+    assert_eq!(count(&second), 3);
+}
+
+#[test]
+fn v2_developer_state_is_private_to_the_selected_room() {
+    let host = host_with(|config| config.dev = true);
+    let (mut first, first_room) = v2_create(&host, "First", 4);
+    let (mut second, second_room) = v2_create(&host, "Second", 4);
+    let first_state = v2_reply(&mut first, "DevState");
+    let second_state = v2_reply(&mut second, "DevState");
+    assert_eq!(first_state["room_id"], first_room["room_id"]);
+    assert_eq!(second_state["room_id"], second_room["room_id"]);
+    first.send_value(&json!({"type":"DevPauseBots","request_id":"pause","room_id":first_room["room_id"],"paused":true}));
+    assert_eq!(v2_reply(&mut first, "DevState")["paused"], true);
+    second.send_value(&json!({"type":"DevPauseBots","request_id":"check","room_id":second_room["room_id"],"paused":false}));
+    let unchanged = v2_reply(&mut second, "DevState");
+    assert_eq!(unchanged["room_id"], second_room["room_id"]);
+    assert_eq!(unchanged["paused"], false);
+}
+
+#[test]
+fn v2_invalid_admissions_and_room_limits_do_not_mutate_existing_rooms() {
+    let host = host_with(|config| config.limits.max_rooms = 1);
+    let (_owner, room) = v2_create(&host, "Owner", 4);
+    let mut outsider = Raw::connect(host.addr());
+    outsider.hello_v2().unwrap();
+    outsider.create_room_v2("full-server", "Other");
+    assert_eq!(v2_reply(&mut outsider, "Error")["code"], "ServerFull");
+    outsider.join_room_v2("bad-name", &room, "a name that is too long");
+    assert_eq!(v2_reply(&mut outsider, "Error")["code"], "BadName");
+    let mut wrong_epoch = room.clone();
+    wrong_epoch["server_epoch"] = json!("old-epoch");
+    outsider.join_room_v2("wrong-epoch", &wrong_epoch, "Other");
+    assert_eq!(v2_reply(&mut outsider, "Error")["code"], "RoomNotFound");
+    outsider.send_value(&json!({"type":"ListRooms","request_id":"after","scope":"local"}));
+    let directory = v2_reply(&mut outsider, "Rooms");
+    assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
+    assert_eq!(directory["rooms"][0]["occupied"], 1);
+}
+
+#[test]
+fn a_negotiated_room_connection_cannot_join_the_legacy_lobby_too() {
     let host = host();
-    let (_a, _, lobby) = join(&host, "Ann", None);
+    let (mut owner, _) = v2_create(&host, "Owner", 4);
+    owner.send_value(&json!({"type":"Join","version":1,"name":"Duplicate"}));
+    let deadline = Instant::now() + WAIT;
+    loop {
+        assert!(Instant::now() < deadline);
+        let reply = owner.recv_value().unwrap();
+        if reply["type"] == "RoomUpdated" {
+            continue;
+        }
+        assert_eq!(reply["type"], "Error");
+        assert_eq!(reply["code"], "BadVersion");
+        break;
+    }
+}
+
+#[test]
+fn invalid_creation_settings_never_publish_an_unplayable_room() {
+    let host = host();
+    let mut raw = Raw::connect(host.addr());
+    raw.hello_v2().unwrap();
+    for (index, (minutes, capacity, mode)) in [
+        (0, 4, "normal"),
+        (4, 4, "normal"),
+        (255, 4, "normal"),
+        (3, 0, "normal"),
+        (3, 5, "normal"),
+        (3, 3, "team"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        raw.send_value(&json!({"type":"CreateRoom","request_id":format!("invalid-{index}"),"name":"Owner",
+            "settings":{"name":"Invalid","mode":mode,"size":"small","minutes":minutes,"friendly_fire":true},"capacity":capacity}));
+        let error = v2_reply(&mut raw, "Error");
+        assert!(error["code"] == "BadRoom" || error["code"] == "ModeNeedsPlayers");
+    }
+    raw.send_value(&json!({"type":"ListRooms","request_id":"after","scope":"local"}));
+    assert!(v2_reply(&mut raw, "Rooms")["rooms"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn three_four_participant_modes_complete_twenty_isolated_rounds_each() {
+    let host = host_with(|config| {
+        config.game.round_limit_ticks = 12;
+        config.game.block_density = 0.0;
+        config.default_bots = 3;
+    });
+    let mut rooms = Vec::new();
+    for mode in ["normal", "team", "chaser"] {
+        let mut raw = Raw::connect(host.addr());
+        raw.hello_v2().unwrap();
+        raw.send_value(&json!({"type":"CreateRoom","request_id":"create","name":mode,
+            "settings":{"name":mode,"mode":mode,"size":"small","minutes":3,"friendly_fire":true},"capacity":4}));
+        let welcome = v2_reply(&mut raw, "Welcome");
+        assert_eq!(
+            welcome["lobby"]["slots"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|slot| slot["controller"] != "Empty")
+                .count(),
+            4
+        );
+        rooms.push((raw, welcome));
+    }
+    let workers: Vec<_> = rooms.into_iter().map(|(mut raw, welcome)| std::thread::spawn(move || {
+        for round in 0..20 {
+            raw.send_value(&json!({"type":"Start","request_id":format!("round-{round}"),"room_id":welcome["room_id"]}));
+            let deadline = Instant::now() + WAIT;
+            loop {
+                assert!(Instant::now() < deadline, "round {round} did not finish");
+                let message = raw.recv_value().expect("room remains connected");
+                if message.get("room_id").is_some() { assert_eq!(message["room_id"], welcome["room_id"]); }
+                assert_ne!(message["type"], "Error", "{message}");
+                if message["type"] == "Ended" { break; }
+            }
+        }
+        raw
+    })).collect();
+    let _connected: Vec<_> = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect();
+}
+
+#[test]
+fn v2_existing_owner_settings_are_atomic_scoped_and_kept_for_the_match() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 4);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("join", &room, "Member");
+    let joined = v2_reply(&mut member, "Welcome");
+    let settings =
+        json!({"name":"Changed","mode":"normal","size":"medium","minutes":5,"friendly_fire":false});
+    member.send_value(
+        &json!({"type":"SetRoom","request_id":"denied","room_id":room["room_id"],
+        "expected_revision":joined["revision"],"settings":settings,"capacity":4}),
+    );
+    let denied = v2_reply(&mut member, "Error");
+    assert_eq!(denied["code"], "NotOwner");
+    assert!(denied["message"].as_str().unwrap().contains("Only Owner"));
+    owner.send_value(
+        &json!({"type":"SetRoom","request_id":"change","room_id":room["room_id"],
+        "expected_revision":joined["revision"],"settings":settings,"capacity":4}),
+    );
+    loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["settings"]["name"] == "Changed" {
+            break;
+        }
+    }
+    owner.send_value(&json!({"type":"Start","request_id":"start","room_id":room["room_id"]}));
+    assert_eq!(v2_reply(&mut owner, "Start")["config"]["width"], 19);
+    owner.send_value(
+        &json!({"type":"SetRoom","request_id":"during","room_id":room["room_id"],
+        "expected_revision":3,"settings":settings,"capacity":4}),
+    );
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "InMatch");
+}
+
+#[test]
+fn in_process_host_controls_require_the_selected_room_reference() {
+    let host = host();
+    let (mut owner, welcome) = v2_create(&host, "Owner", 4);
+    let reference = eksplode_re_net::protocol::v2::RoomRef {
+        server_id: welcome["server_id"].as_str().unwrap().into(),
+        server_epoch: welcome["server_epoch"].as_str().unwrap().into(),
+        room_id: welcome["room_id"].as_str().unwrap().into(),
+    };
+    host.handle().add_room_bot(&reference).unwrap();
+    loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|slot| slot["controller"] == "Bot")
+        {
+            break;
+        }
+    }
+    host.handle().start_room(&reference).unwrap();
+    assert_eq!(v2_reply(&mut owner, "Start")["room_id"], welcome["room_id"]);
+}
+
+fn lobby_settings(raw: &mut Raw, pred: impl Fn(&RoomSettings) -> bool) -> RoomSettings {
+    while let Some(message) = raw.recv() {
+        if let ServerMsg::Lobby { lobby, .. } = message.into_game_message() {
+            if pred(&lobby.settings) {
+                return lobby.settings;
+            }
+        }
+    }
+    panic!("no matching lobby");
+}
+
+#[test]
+fn f4_us1_as1_directory_is_unjoined_and_creation_is_explicit() {
+    let host = host();
+    let mut raw = Raw::connect(host.addr());
+    let hello = raw.hello_v2().unwrap();
+    assert_eq!(
+        hello["defaults"],
+        serde_json::to_value(RoomSettings::default()).unwrap()
+    );
+    for request in ["directory-1", "directory-2"] {
+        raw.send_value(&json!({"type":"ListRooms", "request_id":request, "scope":"local"}));
+        assert!(v2_reply(&mut raw, "Rooms")["rooms"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+    }
+    let mut settings = hello["defaults"].clone();
+    settings["name"] = json!("Friday");
+    settings["size"] = json!("medium");
+    settings["minutes"] = json!(5);
+    raw.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Ann",
+        "settings":settings, "capacity":4}),
+    );
+    let welcome = v2_reply(&mut raw, "Welcome");
+    assert_eq!(welcome["slot"], 0, "directory queries took no seat");
+    assert_eq!(welcome["owner_slot"], 0);
+    assert_eq!(welcome["lobby"]["settings"], settings);
+    raw.send_value(&json!({"type":"ListRooms", "request_id":"after", "scope":"local"}));
+    let directory = v2_reply(&mut raw, "Rooms");
+    assert_eq!(directory["rooms"][0]["room_id"], welcome["room_id"]);
+    assert_eq!(directory["rooms"][0]["connected_humans"], 1);
+}
+
+#[test]
+fn creation_with_server_defaults_gets_a_name_from_the_owner() {
+    let host = host();
+    let mut raw = Raw::connect(host.addr());
+    let hello = raw.hello_v2().unwrap();
+    raw.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Ann",
+        "settings":hello["defaults"], "capacity":4}),
+    );
+    let lobby: Lobby =
+        serde_json::from_value(v2_reply(&mut raw, "Welcome")["lobby"].clone()).unwrap();
     assert_eq!(lobby.settings.name, "Ann's room");
     assert_eq!(lobby.settings.mode, Mode::Normal);
     assert_eq!(lobby.settings.size, BoardSize::Small);
@@ -98,10 +534,15 @@ fn the_server_defaults_are_what_a_closed_room_offers() {
         }
     });
     let mut raw = Raw::connect(host.addr());
-    let (open, settings, _) = room_info(&mut raw);
-    assert!(!open);
+    let hello = raw.hello_v2().unwrap();
+    let settings: RoomSettings = serde_json::from_value(hello["defaults"].clone()).unwrap();
     assert_eq!(settings.size, BoardSize::Large);
-    let (_a, _, lobby) = join(&host, "Ann", None);
+    raw.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Ann",
+        "settings":settings, "capacity":4}),
+    );
+    let lobby: Lobby =
+        serde_json::from_value(v2_reply(&mut raw, "Welcome")["lobby"].clone()).unwrap();
     assert_eq!(lobby.settings.name, "Lab");
     assert_eq!(lobby.settings.minutes, 10);
 }
@@ -109,42 +550,80 @@ fn the_server_defaults_are_what_a_closed_room_offers() {
 #[test]
 fn f4_us1_as2_a_second_player_joins_the_open_room_and_cannot_change_it() {
     let host = host();
-    let room = json!({"name": "Friday", "minutes": 5});
-    let (_a, _, _) = join(&host, "Ann", Some(room));
+    let settings = RoomSettings {
+        name: "Friday".into(),
+        minutes: 5,
+        ..RoomSettings::default()
+    };
+    let (_a, room) = v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
     let other = json!({"name": "Mine", "size": "large", "minutes": 10});
-    let (mut b, slot, lobby) = join(&host, "Bob", Some(other));
-    assert_eq!(slot, 1);
+    let mut b = Raw::connect(host.addr());
+    b.hello_v2().unwrap();
+    b.send_value(
+        &json!({"type":"JoinRoom", "request_id":"join", "room_id":room["room_id"],
+        "server_epoch":room["server_epoch"], "name":"Bob", "settings":other}),
+    );
+    let welcome = v2_reply(&mut b, "Welcome");
+    assert_eq!(welcome["slot"], 1);
+    let lobby: Lobby = serde_json::from_value(welcome["lobby"].clone()).unwrap();
     assert_eq!(
         lobby.settings.name, "Friday",
-        "Join.room is ignored in an open room"
+        "joining cannot replace the selected room's settings"
     );
     assert_eq!(lobby.settings.minutes, 5);
     assert_eq!(lobby.settings.size, BoardSize::Small);
 
-    b.send_line(r#"{"type":"SetRoom","settings":{"minutes":2}}"#);
+    b.send_value(
+        &json!({"type":"SetRoom", "request_id":"denied", "room_id":room["room_id"],
+        "expected_revision":welcome["revision"], "settings":{"minutes":2}, "capacity":4}),
+    );
     assert!(b.recv_until(is_error("NotOwner")).is_some());
-    let (_, settings, humans) = room_info(&mut b);
-    assert_eq!(settings.minutes, 5);
-    assert_eq!(humans, 2);
+    b.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    let directory = v2_reply(&mut b, "Rooms");
+    assert_eq!(directory["rooms"][0]["minutes"], 5);
+    assert_eq!(directory["rooms"][0]["connected_humans"], 2);
 }
 
 #[test]
 fn f4_us1_as3_the_owner_changes_the_settings_and_everybody_sees_them() {
     let host = host_with(|c| c.game = quick_game(30));
-    let (mut a, _, _) = join(&host, "Ann", None);
-    let (mut b, _, _) = join(&host, "Bob", None);
-    a.send_line(
-        r#"{"type":"SetRoom","settings":{"name":"New name","size":"large","minutes":10,"mode":"battle"}}"#,
+    let (mut a, room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    let mut b = Raw::connect(host.addr());
+    b.hello_v2().unwrap();
+    b.join_room_v2("join", &room, "Bob");
+    let joined = v2_reply(&mut b, "Welcome");
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["name"] = json!("New name");
+    settings["size"] = json!("large");
+    settings["minutes"] = json!(10);
+    settings["mode"] = json!("battle");
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"invalid", "room_id":room["room_id"],
+        "expected_revision":joined["revision"], "settings":settings, "capacity":4}),
+    );
+    assert_eq!(v2_reply(&mut a, "Error")["code"], "BadRoom");
+    settings["mode"] = json!("normal");
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"change", "room_id":room["room_id"],
+        "expected_revision":joined["revision"], "settings":settings, "capacity":4}),
     );
     let want = |s: &RoomSettings| s.name == "New name";
     for raw in [&mut a, &mut b] {
         let s = lobby_settings(raw, want);
         assert_eq!(s.size, BoardSize::Large);
         assert_eq!(s.minutes, 10);
-        assert_eq!(s.mode, Mode::Normal, "an unknown mode becomes the default");
+        assert_eq!(
+            s.mode,
+            Mode::Normal,
+            "a valid update follows atomic rejection of an unknown mode"
+        );
     }
     // the next match uses them
-    a.send(&ClientMsg::Start);
+    a.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
     match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
         Some(ServerMsg::Start { config, .. }) => {
             assert_eq!((config.width, config.height), (25, 19));
@@ -157,26 +636,42 @@ fn f4_us1_as3_the_owner_changes_the_settings_and_everybody_sees_them() {
 #[test]
 fn a_set_room_that_is_not_an_object_is_refused_with_bad_room() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", None);
-    a.send_line(r#"{"type":"SetRoom","settings":5}"#);
-    assert!(a.recv_until(is_error("BadRoom")).is_some());
-    a.send_line(r#"{"type":"SetRoom","settings":"team"}"#);
-    assert!(a.recv_until(is_error("BadRoom")).is_some());
-    let (_, settings, _) = room_info(&mut a);
-    assert_eq!(settings.name, "Ann's room");
+    let (mut a, room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    for (index, settings) in [json!(5), json!("team")].into_iter().enumerate() {
+        a.send_value(&json!({"type":"SetRoom", "request_id":format!("bad-{index}"), "room_id":room["room_id"],
+            "expected_revision":room["revision"], "settings":settings, "capacity":4}));
+        assert_eq!(v2_reply(&mut a, "Error")["code"], "BadRoom");
+    }
+    a.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    let directory = v2_reply(&mut a, "Rooms");
+    assert_eq!(directory["rooms"][0]["name"], "Ann's room");
+    assert_eq!(directory["rooms"][0]["revision"], room["revision"]);
 }
 
 #[test]
 fn f4_us1_as4_settings_are_refused_during_a_match_and_kept_for_the_rematch() {
     let host = host_with(|c| c.game = quick_game(400));
-    let room = json!({"name": "Keep me", "size": "medium"});
-    let (mut a, _, _) = join(&host, "Ann", Some(room));
-    a.send(&ClientMsg::Start);
+    let settings = RoomSettings {
+        name: "Keep me".into(),
+        size: BoardSize::Medium,
+        ..RoomSettings::default()
+    };
+    let (mut a, room) = v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
+    a.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
     assert!(a
         .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
         .is_some());
-    a.send_line(r#"{"type":"SetRoom","settings":{"name":"Too late"}}"#);
-    assert!(a.recv_until(is_error("WrongPhase")).is_some());
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["name"] = json!("Too late");
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"too-late", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4}),
+    );
+    assert!(a.recv_until(is_error("InMatch")).is_some());
 
     // the practice round of one participant ends by time; the lobby comes back
     assert!(a
@@ -190,47 +685,76 @@ fn f4_us1_as4_settings_are_refused_during_a_match_and_kept_for_the_rematch() {
 #[test]
 fn f4_us1_as8_the_room_closes_when_the_last_person_leaves() {
     let host = host();
-    let room = json!({"name": "Gone soon", "size": "large"});
-    let (a, _, _) = join(&host, "Ann", Some(room));
-    drop(a);
-
-    let mut probe = Raw::connect(host.addr());
-    let end = Instant::now() + WAIT;
-    loop {
-        let (open, settings, humans) = room_info(&mut probe);
-        if !open {
-            assert_eq!(settings, RoomSettings::default());
-            assert_eq!(humans, 0);
-            break;
-        }
-        assert!(Instant::now() < end, "the room never closed");
-        std::thread::sleep(Duration::from_millis(20));
-    }
-    let (_b, slot, lobby) = join(&host, "Bob", None);
-    assert_eq!(slot, 0);
+    let settings = RoomSettings {
+        name: "Gone soon".into(),
+        size: BoardSize::Large,
+        ..RoomSettings::default()
+    };
+    let (mut peer, room) =
+        v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
+    peer.send_value(&json!({"type":"LeaveRoom", "request_id":"leave", "room_id":room["room_id"]}));
+    assert_eq!(v2_reply(&mut peer, "LeftRoom")["room_id"], room["room_id"]);
+    peer.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    assert!(v2_reply(&mut peer, "Rooms")["rooms"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    peer.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create-again", "name":"Bob",
+        "settings":RoomSettings::default(), "capacity":4}),
+    );
+    let welcome = v2_reply(&mut peer, "Welcome");
+    assert_ne!(welcome["room_id"], room["room_id"]);
+    assert_eq!(welcome["slot"], 0);
+    let lobby: Lobby = serde_json::from_value(welcome["lobby"].clone()).unwrap();
     assert_eq!(lobby.settings.size, BoardSize::Small);
     assert_eq!(lobby.settings.name, "Bob's room");
 }
 
 #[test]
-fn an_old_client_sees_the_same_message_sequence() {
+fn a_legacy_join_is_rejected_without_implicit_admission() {
     let host = host();
     let mut raw = Raw::connect(host.addr());
     raw.send_line(r#"{"type":"Join","version":1,"name":"Old"}"#);
-    assert!(matches!(raw.recv(), Some(ServerMsg::Welcome { .. })));
-    assert!(matches!(raw.recv(), Some(ServerMsg::Lobby { .. })));
+    assert_eq!(
+        raw.recv_value().unwrap(),
+        json!({"type":"Rejected", "reason":"BadVersion"})
+    );
+    assert!(raw.recv_value().is_none());
+    let directory = host.handle().directory(None).unwrap();
+    match directory {
+        eksplode_re_net::protocol::v2::Reply::Rooms { rooms, .. } => assert!(rooms.is_empty()),
+        _ => panic!("expected directory"),
+    }
 }
 
 #[test]
-fn a_hostile_room_never_breaks_the_join() {
+fn a_hostile_creation_is_rejected_and_the_unjoined_transport_remains_usable() {
     let host = host();
     let hostile = json!({
         "name": "A".repeat(50_000), "mode": {"x": 1}, "size": [[]], "minutes": 1e30,
         "friendly_fire": null, "junk": {"a": {"b": {"c": [1, 2, 3]}}}
     });
-    let (_a, slot, lobby) = join(&host, "Ann", Some(hostile));
-    assert_eq!(slot, 0);
-    assert_eq!(lobby.settings.name.chars().count(), 24);
+    let mut peer = Raw::connect(host.addr());
+    peer.hello_v2().unwrap();
+    peer.send_value(
+        &json!({"type":"CreateRoom", "request_id":"hostile", "name":"Ann",
+        "settings":hostile, "capacity":4}),
+    );
+    assert_eq!(v2_reply(&mut peer, "Error")["code"], "BadRoom");
+    peer.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    assert!(v2_reply(&mut peer, "Rooms")["rooms"]
+        .as_array()
+        .unwrap()
+        .is_empty());
+    peer.send_value(
+        &json!({"type":"CreateRoom", "request_id":"valid", "name":"Ann",
+        "settings":RoomSettings::default(), "capacity":4}),
+    );
+    let welcome = v2_reply(&mut peer, "Welcome");
+    assert_eq!(welcome["slot"], 0);
+    let lobby: Lobby = serde_json::from_value(welcome["lobby"].clone()).unwrap();
+    assert_eq!(lobby.settings.name, "Ann's room");
     assert_eq!(lobby.settings.minutes, 3);
     assert_eq!(lobby.settings.size, BoardSize::Small);
 }
@@ -241,9 +765,10 @@ fn f4_us1_as6_the_match_uses_the_room_size_and_time() {
     for (size, w, h) in sizes {
         for minutes in [2u32, 3, 5, 10] {
             let host = host();
-            let room = json!({"size": size, "minutes": minutes});
-            let (mut a, _, _) = join(&host, "Ann", Some(room));
-            a.send(&ClientMsg::Start);
+            let settings = json!({"name":"Matrix", "mode":"normal", "size":size,
+                "minutes":minutes, "friendly_fire":true});
+            let (mut a, room) = v2_create_settings(&host, "Ann", settings);
+            a.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
             let config = match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
                 Some(ServerMsg::Start { config, .. }) => config,
                 other => panic!("{other:?}"),
@@ -274,12 +799,21 @@ fn f4_us1_as6_the_match_uses_the_room_size_and_time() {
 #[test]
 fn a_change_by_the_owner_before_the_start_is_used() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", None);
-    a.send_line(r#"{"type":"SetRoom","settings":{"size":"medium","minutes":5}}"#);
-    lobby_settings(&mut a, |s| s.minutes == 5);
-    a.send_line(r#"{"type":"SetRoom","settings":{"size":"large","minutes":2}}"#);
-    lobby_settings(&mut a, |s| s.minutes == 2);
-    a.send(&ClientMsg::Start);
+    let (mut a, mut room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    for (index, size, minutes) in [(0, "medium", 5), (1, "large", 2)] {
+        let mut settings = room["lobby"]["settings"].clone();
+        settings["size"] = json!(size);
+        settings["minutes"] = json!(minutes);
+        a.send_value(&json!({"type":"SetRoom", "request_id":format!("change-{index}"), "room_id":room["room_id"],
+            "expected_revision":room["revision"], "settings":settings, "capacity":4}));
+        room = v2_reply(&mut a, "RoomUpdated");
+        assert_eq!(room["lobby"]["settings"]["minutes"], minutes);
+    }
+    a.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
     match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
         Some(ServerMsg::Start { config, .. }) => {
             assert_eq!(
@@ -294,10 +828,24 @@ fn a_change_by_the_owner_before_the_start_is_used() {
 #[test]
 fn a_team_room_is_accepted_and_the_other_modes_follow_their_rules() {
     let host = host();
-    let (mut a, _, lobby) = join(&host, "Ann", Some(json!({"mode": "team"})));
+    let settings = RoomSettings {
+        mode: Mode::Team,
+        ..RoomSettings::default()
+    };
+    let (mut a, room) = v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
+    let lobby: Lobby = serde_json::from_value(room["lobby"].clone()).unwrap();
     assert_eq!(lobby.settings.mode, Mode::Team);
-    a.send_line(r#"{"type":"SetRoom","settings":{"mode":"team","friendly_fire":false}}"#);
-    let s = lobby_settings(&mut a, |s| !s.friendly_fire);
+    let settings = RoomSettings {
+        friendly_fire: false,
+        ..lobby.settings
+    };
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"change", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4}),
+    );
+    let s: RoomSettings =
+        serde_json::from_value(v2_reply(&mut a, "RoomUpdated")["lobby"]["settings"].clone())
+            .unwrap();
     assert_eq!(s.mode, Mode::Team);
     assert!(!s.friendly_fire);
 }
@@ -305,14 +853,22 @@ fn a_team_room_is_accepted_and_the_other_modes_follow_their_rules() {
 #[test]
 fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_count() {
     let host = host();
-    let (mut a, _, _) = join(
-        &host,
-        "Ann",
-        Some(json!({"mode": "team", "friendly_fire": false})),
-    );
+    let a = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let room = a
+        .create_room(
+            "Ann",
+            &RoomSettings {
+                mode: Mode::Team,
+                friendly_fire: false,
+                ..RoomSettings::default()
+            },
+            4,
+        )
+        .unwrap();
+    welcome_slot(&a);
     for (missing, add_bot) in [(3, true), (2, true), (1, false)] {
-        a.send(&ClientMsg::Start);
-        let message = match a.recv_until(is_error("CannotStart")) {
+        a.send(ClientMsg::Start).unwrap();
+        let message = match wait_for_game(&a, is_error("ModeNeedsPlayers")) {
             Some(ServerMsg::Error { message, .. }) => message,
             other => panic!("{other:?}"),
         };
@@ -322,19 +878,23 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
             "the message says bots can fill the slots: {message}"
         );
         if add_bot {
-            a.send(&ClientMsg::AddBot);
-            a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() > 4 - missing as usize))
+            a.send(ClientMsg::AddBot).unwrap();
+            wait_for_game(&a, |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() > 4 - missing as usize))
                 .unwrap();
         }
     }
     // a second human and two bots make four
-    let (_b, _, _) = join(&host, "Bob", None);
-    a.send(&ClientMsg::AddBot);
-    a.send(&ClientMsg::AddBot);
-    a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4))
-        .unwrap();
-    a.send(&ClientMsg::Start);
-    match a.recv_until(|m| matches!(m, ServerMsg::Start { .. })) {
+    let b = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    b.join_room(&room, "Bob").unwrap();
+    a.send(ClientMsg::AddBot).unwrap();
+    a.send(ClientMsg::AddBot).unwrap();
+    wait_for_game(
+        &a,
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4),
+    )
+    .unwrap();
+    a.send(ClientMsg::Start).unwrap();
+    match wait_for_game(&a, |m| matches!(m, ServerMsg::Start { .. })) {
         Some(ServerMsg::Start { config, .. }) => {
             assert_eq!(config.mode, Mode::Team);
             assert!(!config.friendly_fire);
@@ -342,7 +902,7 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
         other => panic!("{other:?}"),
     }
     // teams reach the observation
-    match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
+    match wait_for_game(&a, |m| matches!(m, ServerMsg::Snapshot { .. })) {
         Some(ServerMsg::Snapshot { state, .. }) => {
             let teams: Vec<_> = state.players.iter().map(|p| p.team).collect();
             assert_eq!(teams, vec![Some(0), Some(0), Some(1), Some(1)]);
@@ -354,10 +914,18 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
 #[test]
 fn f4_us4_dev_commands_still_work_in_a_chaser_room() {
     let host = host_with(|c| c.dev = true);
-    let (mut a, _, lobby) = join(&host, "Ann", Some(json!({"mode": "chaser"})));
+    let settings = RoomSettings {
+        mode: Mode::Chaser,
+        ..RoomSettings::default()
+    };
+    let (mut a, room) = v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
+    let lobby: Lobby = serde_json::from_value(room["lobby"].clone()).unwrap();
     assert_eq!(lobby.settings.mode, Mode::Chaser);
-    a.send_line(r#"{"type":"DevPauseBots","paused":true}"#);
-    a.send_line(r#"{"type":"DevSetDrops","chances":[0.5,0,0,0,0,0,0,0]}"#);
+    a.send_value(&json!({"type":"DevPauseBots", "request_id":"pause", "room_id":room["room_id"], "paused":true}));
+    a.send_value(
+        &json!({"type":"DevSetDrops", "request_id":"drops", "room_id":room["room_id"],
+        "chances":[0.5,0,0,0,0,0,0,0]}),
+    );
     let state = a.recv_until(|m| matches!(m, ServerMsg::DevState { drops, .. } if drops[0] == 0.5));
     match state {
         Some(ServerMsg::DevState { paused, drops }) => {
@@ -371,9 +939,19 @@ fn f4_us4_dev_commands_still_work_in_a_chaser_room() {
 #[test]
 fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
     let host = host();
-    let (mut a, _, _) = join(&host, "Ann", Some(json!({"mode": "chaser"})));
-    a.send(&ClientMsg::Start);
-    match a.recv_until(is_error("CannotStart")) {
+    let a = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    a.create_room(
+        "Ann",
+        &RoomSettings {
+            mode: Mode::Chaser,
+            ..RoomSettings::default()
+        },
+        4,
+    )
+    .unwrap();
+    welcome_slot(&a);
+    a.send(ClientMsg::Start).unwrap();
+    match wait_for_game(&a, is_error("ModeNeedsPlayers")) {
         Some(ServerMsg::Error { message, .. }) => assert!(
             message.contains("Chaser") && message.contains("3 missing"),
             "{message}"
@@ -381,12 +959,15 @@ fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
         other => panic!("{other:?}"),
     }
     for _ in 0..3 {
-        a.send(&ClientMsg::AddBot);
+        a.send(ClientMsg::AddBot).unwrap();
     }
-    a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4))
-        .unwrap();
-    a.send(&ClientMsg::Start);
-    match a.recv_until(|m| matches!(m, ServerMsg::Snapshot { .. })) {
+    wait_for_game(
+        &a,
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4),
+    )
+    .unwrap();
+    a.send(ClientMsg::Start).unwrap();
+    match wait_for_game(&a, |m| matches!(m, ServerMsg::Snapshot { .. })) {
         Some(ServerMsg::Snapshot { state, .. }) => {
             use eksplode_re_core::Role;
             assert_eq!(
@@ -413,11 +994,13 @@ fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
 #[test]
 fn f4_random_and_truncated_room_frames_never_break_the_room() {
     let host = host();
-    let (mut owner, _, before) = join(
-        &host,
-        "Ann",
-        Some(json!({"name": "Steady", "size": "medium"})),
-    );
+    let settings = RoomSettings {
+        name: "Steady".into(),
+        size: BoardSize::Medium,
+        ..RoomSettings::default()
+    };
+    let (mut owner, before) =
+        v2_create_settings(&host, "Ann", serde_json::to_value(settings).unwrap());
     let mut seed = 0x9e37_79b9_7f4a_7c15u64;
     let mut next = move || {
         seed ^= seed << 13;
@@ -427,17 +1010,18 @@ fn f4_random_and_truncated_room_frames_never_break_the_room() {
     };
     for round in 0..4 {
         let mut bad = Raw::connect(host.addr());
+        bad.hello_v2().unwrap();
         for _ in 0..30 {
             let text = match next() % 7 {
-                0 => r#"{"type":"RoomQuery"}"#.to_string(),
-                1 => r#"{"type":"SetRoom","settings":{"mode":7,"size":[],"minutes":"x"}}"#
-                    .to_string(),
+                0 => json!({"type":"ListRooms", "request_id":"list", "scope":"local"}).to_string(),
+                1 => json!({"type":"SetRoom", "request_id":"bad-settings", "room_id":before["room_id"],
+                    "expected_revision":before["revision"], "capacity":4,
+                    "settings":{"mode":7,"size":[],"minutes":"x"}}).to_string(),
                 2 => r#"{"type":"SetRoom"}"#.to_string(),
                 3 => r#"{"type":"SetRoom","settings":{"name":"#.to_string(),
-                4 => format!(
-                    r#"{{"type":"Join","version":1,"name":"M{round}","room":{{"minutes":{}}}}}"#,
-                    next()
-                ),
+                4 => json!({"type":"JoinRoom", "request_id":"fuzz-join", "room_id":before["room_id"],
+                    "server_epoch":before["server_epoch"], "name":format!("M{round}"),
+                    "settings":{"minutes":next()}}).to_string(),
                 5 => String::from_utf8_lossy(&(0..40).map(|_| next() as u8).collect::<Vec<_>>())
                     .to_string(),
                 _ => r#"{"type":"SetRoom","settings":{"name":"Hijack"}}"#.to_string(),
@@ -450,20 +1034,29 @@ fn f4_random_and_truncated_room_frames_never_break_the_room() {
         }
     }
     // the owner and the room are untouched and the room still works
-    owner.send_line(r#"{"type":"RoomQuery"}"#);
-    match owner.recv_until(|m| matches!(m, ServerMsg::RoomInfo { .. })) {
-        Some(ServerMsg::RoomInfo { open, settings, .. }) => {
-            assert!(open);
-            assert_eq!(settings, before.settings);
-        }
-        other => panic!("{other:?}"),
-    }
+    owner.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    let directory = v2_reply(&mut owner, "Rooms");
+    assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
+    assert_eq!(directory["rooms"][0]["room_id"], before["room_id"]);
+    assert_eq!(
+        directory["rooms"][0]["name"],
+        before["lobby"]["settings"]["name"]
+    );
+    assert_eq!(directory["rooms"][0]["size"], "medium");
 }
 
 #[test]
 fn f4_a_set_room_line_over_the_limit_closes_the_connection_and_changes_nothing() {
     let host = host();
-    let (mut a, _, before) = join(&host, "Ann", None);
+    let (mut a, before) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    let mut observer = Raw::connect(host.addr());
+    observer.hello_v2().unwrap();
+    observer.join_room_v2("observe", &before, "Observer");
+    v2_reply(&mut observer, "Welcome");
     let big = format!(
         r#"{{"type":"SetRoom","settings":{{"name":"{}"}}}}"#,
         "x".repeat(70 * 1024)
@@ -477,18 +1070,11 @@ fn f4_a_set_room_line_over_the_limit_closes_the_connection_and_changes_nothing()
         }
     }
     assert!(!saw_oversize_name);
-    let mut probe = Raw::connect(host.addr());
-    probe.send_line(r#"{"type":"RoomQuery"}"#);
-    match probe.recv_until(|m| matches!(m, ServerMsg::RoomInfo { .. })) {
-        Some(ServerMsg::RoomInfo { settings, .. }) => {
-            // the owner was disconnected, so the room may have closed: either way the name is not
-            // the oversized one
-            assert!(
-                settings.name == before.settings.name
-                    || settings.name.is_empty()
-                    || settings.name.is_empty()
-            );
-        }
-        other => panic!("{other:?}"),
-    }
+    observer.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    let directory = v2_reply(&mut observer, "Rooms");
+    assert_eq!(directory["rooms"][0]["room_id"], before["room_id"]);
+    assert_eq!(
+        directory["rooms"][0]["name"],
+        before["lobby"]["settings"]["name"]
+    );
 }

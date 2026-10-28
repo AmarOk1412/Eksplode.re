@@ -34,6 +34,7 @@ pub struct Request {
     pub method: String,
     /// The path without query string or fragment.
     pub path: String,
+    pub query: Option<String>,
     pub headers: Vec<(String, String)>,
 }
 
@@ -102,6 +103,11 @@ pub fn parse_head(raw: &[u8]) -> Option<Request> {
         return None;
     }
     let path = target.split(['?', '#']).next().unwrap_or("/").to_string();
+    let query = target
+        .split('#')
+        .next()
+        .and_then(|target| target.split_once('?'))
+        .map(|(_, query)| query.to_string());
     let mut headers = Vec::new();
     for line in lines {
         let (name, value) = line.split_once(':')?;
@@ -113,6 +119,7 @@ pub fn parse_head(raw: &[u8]) -> Option<Request> {
     Some(Request {
         method: method.to_string(),
         path,
+        query,
         headers,
     })
 }
@@ -223,6 +230,9 @@ fn handle(mut stream: TcpStream, peer: IpAddr, ctx: &Ctx) {
             return plain(&mut stream, 405, "method not allowed", &extra);
         }
     };
+    if req.path == "/rooms" {
+        return directory(&mut stream, &req, ctx, head_only);
+    }
     let Some(asset) = assets::lookup(&req.path) else {
         return plain(&mut stream, 404, "not found", &[]);
     };
@@ -241,6 +251,82 @@ fn handle(mut stream: TcpStream, peer: IpAddr, ctx: &Ctx) {
         }
     }
     respond(&mut stream, 200, &headers, asset.body, head_only);
+}
+
+fn directory(stream: &mut TcpStream, request: &Request, ctx: &Ctx, head_only: bool) {
+    use eksplode_re_net::protocol::v2::{ErrorCode, Reply};
+    let mut cursor = None;
+    let mut scope_seen = false;
+    let mut valid = true;
+    for pair in request
+        .query
+        .as_deref()
+        .filter(|query| !query.is_empty())
+        .into_iter()
+        .flat_map(|query| query.split('&'))
+    {
+        match pair.split_once('=') {
+            Some(("scope", "local" | "known")) if !scope_seen => scope_seen = true,
+            Some(("cursor", value))
+                if cursor.is_none()
+                    && !value.is_empty()
+                    && value.len() <= 64
+                    && value.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+            {
+                cursor = Some(value.to_string())
+            }
+            _ => {
+                valid = false;
+                break;
+            }
+        }
+    }
+    let headers = [
+        ("Content-Type", "application/json".into()),
+        ("Cache-Control", "no-store".into()),
+        ("X-Content-Type-Options", "nosniff".into()),
+        ("Referrer-Policy", "no-referrer".into()),
+    ];
+    if !valid {
+        return respond(
+            stream,
+            400,
+            &headers,
+            br#"{"type":"Error","code":"BadRoom","message":"invalid directory query"}"#,
+            head_only,
+        );
+    }
+    match ctx.host.directory(cursor) {
+        Ok(reply) => {
+            let status = match &reply {
+                Reply::Error {
+                    code: ErrorCode::StaleRevision | ErrorCode::BadRoom,
+                    ..
+                } => 400,
+                Reply::Error { .. } => 503,
+                _ => 200,
+            };
+            match serde_json::to_vec(&reply) {
+                Ok(body) if body.len() <= eksplode_re_net::protocol::MAX_LINE => {
+                    respond(stream, status, &headers, &body, head_only)
+                }
+                _ => respond(
+                    stream,
+                    503,
+                    &headers,
+                    br#"{"type":"Error","code":"Unavailable","message":"directory unavailable"}"#,
+                    head_only,
+                ),
+            }
+        }
+        Err(_) => respond(
+            stream,
+            503,
+            &headers,
+            br#"{"type":"Error","code":"Unavailable","message":"directory unavailable"}"#,
+            head_only,
+        ),
+    }
 }
 
 fn value_varies(policy: &AllowedOrigins) -> bool {

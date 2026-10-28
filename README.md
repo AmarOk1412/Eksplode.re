@@ -31,13 +31,14 @@ required.
 
 ```sh
 cargo build --workspace                                   # 1. build everything
-cargo run -p eksplode-re-web -- --bots 1                    # 2. start the server with one bot
-# 3. open http://0.0.0.0:8080/ in a browser, type a name, press Join, then Start
-cargo run -p eksplode-re-cli -- join 0.0.0.0              # 4. optional: a terminal player in the same match
+cargo run -p eksplode-re-web -- --bind 127.0.0.1 --bots 1  # 2. start a local server
+# 3. open http://127.0.0.1:8080/, create a room, enter your name, then Start
+cargo run -p eksplode-re-cli -- join 127.0.0.1              # 4. select the room in the terminal directory
 cargo test --workspace                                    # 5. run the tests
 ```
 
-The first person to join is the lobby owner and starts the match (Enter or the Start button).
+The creator owns their room and starts its match (Enter or the Start button). Other players
+select that room from the directory; each room manages its own four participants and settings.
 Prefer to host from the terminal? `cargo run -p eksplode-re-cli -- host --bots 1 --web-port 8080`
 does the same and lets browsers join too.
 
@@ -78,6 +79,9 @@ capture PNGs).
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
   name (1 to 16 printable characters), `--seed <N>` fixed seed;
 - `--web-port <N>` also serve the web page on this port;
+- `--server-id <ID>` stable ASCII host identifier, 1 to 64 characters; `--max-rooms <N>` limits
+  simultaneous rooms to 1-128 (default 32), and `--max-connections <N>` sets the shared host
+  connection cap to 4-1024 (default 256);
 - `--room-name <TEXT>` names the room (at most 24 characters), and `--mode`, `--size`, `--time` and
   `--friendly-fire` set it as above; without any of them the host first shows a room setup screen
   (Up/Down select, Left/Right change, type the name, Enter on "Create room"), which `--no-setup`
@@ -89,7 +93,9 @@ capture PNGs).
   page only on `0.0.0.0`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
 
-`eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS]` joins a host. `--keys` uses the
+`eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS] [--room-id ID]` opens a host's
+directory without joining a room. Select a room or press `c` to create one; `--room-id` explicitly
+selects a known 32-character lowercase hexadecimal room ID on that host. `--keys` uses the
 same six-key order for the joining player only. `host`, `host:port` and web addresses such as
 `http://host:8080/` work; for a web address only the host is kept. A refused or full match ends
 with a one-line explanation and exit status 1.
@@ -100,7 +106,7 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 
 `eksplode-re-server` (`cargo run -p eksplode-re-web --`) takes `--bind`, `--http-port`,
 `--game-port`, `--bots`, `--seed`, `--allow-origin`, `--allow-any-origin`,
-`--max-connections`, `--dev` and the room defaults of the creation menu (`--room-name`, `--mode`,
+`--max-connections`, `--max-rooms`, `--server-id`, `--dev` and the room defaults of the creation menu (`--room-name`, `--mode`,
 `--size`, `--time`, `--friendly-fire`); the table and examples are in [docs/WEB.md](docs/WEB.md).
 
 ## Controls

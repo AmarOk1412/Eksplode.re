@@ -59,6 +59,7 @@ import {
   loadRoom,
   roomControls,
   roomPayload,
+  roomProtocolMessage,
   roomReducer,
   sanitizeRoom,
   saveRoom,
@@ -67,7 +68,7 @@ import {
 
 const DIRECTION_ACTIONS = { up: "Up", down: "Down", left: "Left", right: "Right" };
 const TICK_MS = 50;
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 
 /** Keeps the held keys and turns them into one input per tick. */
 export class KeyTracker {
@@ -138,6 +139,16 @@ export function initialState() {
     looks: defaultLooks(),
     dev: false,
     devState: null,
+    protocol: null,
+    server_id: null,
+    server_epoch: null,
+    room_id: null,
+    membership_id: null,
+    revision: 0,
+    capacity: 4,
+    rooms: [],
+    sources: [],
+    selectedRoom: null,
   };
 }
 
@@ -199,7 +210,30 @@ function outcomeText(outcome, slot, lobby, observation) {
 
 /** Pure state machine of the page: `event` is a server message or a local event (lower case). */
 export function reduce(state, event) {
+  if (state.room_id && event.room_id && (state.room_id !== event.room_id ||
+      (state.server_epoch && event.server_epoch && state.server_epoch !== event.server_epoch))) return state;
   switch (event.type) {
+    case "Hello":
+      if (event.version !== 2 || !event.capabilities?.includes("rooms")) {
+        return { ...state, stage: "closed", notice: "This server needs a compatible room protocol version." };
+      }
+      return { ...state, protocol: 2, server_id: event.server_id, server_epoch: event.server_epoch,
+        stage: "directory", menu: "directory", notice: "" };
+    case "Rooms":
+      return { ...state, rooms: Array.isArray(event.rooms) ? event.rooms : [], sources: event.sources ?? [],
+        stage: state.room_id ? state.stage : "directory" };
+    case "select-room":
+      return { ...state, selectedRoom: event.room, menu: "join",
+        room: { open: true, settings: sanitizeRoom(event.room), humans: event.room.connected_humans ?? 0 } };
+    case "new-room":
+      return { ...state, menu: "room", selectedRoom: null, room: { open: false, settings: sanitizeRoom(null), humans: 0 } };
+    case "show-directory":
+      return { ...state, stage: "directory", menu: "directory", selectedRoom: null, room: null, notice: "" };
+    case "LeftRoom":
+    case "Removed":
+    case "RoomClosed":
+      return { ...initialState(), protocol: state.protocol, server_id: state.server_id,
+        server_epoch: state.server_epoch, rooms: state.rooms, sources: state.sources, stage: "directory", menu: "directory" };
     case "connecting":
       return { ...state, stage: "connecting", notice: "" };
     case "socket-open":
@@ -222,15 +256,23 @@ export function reduce(state, event) {
     }
     case "room-confirm":
       return { ...state, menu: "join" };
-    case "Welcome":
-      return { ...state, stage: "lobby", slot: event.slot, lobby: event.lobby, notice: "", looks: looksOf(event, null), dev: event.dev === true, devState: null };
+    case "Welcome": {
+      const lobby = Object.hasOwn(event, "owner_slot") ? { ...event.lobby, owner_slot: event.owner_slot } : event.lobby;
+      return { ...state, stage: "lobby", slot: event.slot, lobby, notice: "", looks: looksOf(event, null), dev: event.dev === true, devState: null,
+        room_id: event.room_id ?? state.room_id, server_epoch: event.server_epoch ?? state.server_epoch,
+        membership_id: event.membership_id ?? state.membership_id, revision: event.revision ?? state.revision,
+        capacity: event.capacity ?? state.capacity };
+    }
     case "DevState":
       return { ...state, devState: { paused: event.paused === true, drops: event.drops } };
     case "Rejected":
       return { ...state, stage: "closed", notice: rejectText(event.reason) };
+    case "RoomUpdated":
     case "Lobby": {
       const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
-      return { ...state, stage, lobby: event.lobby, looks: looksOf(event, state.looks) };
+      const lobby = Object.hasOwn(event, "owner_slot") ? { ...event.lobby, owner_slot: event.owner_slot } : event.lobby;
+      return { ...state, stage, lobby, looks: looksOf(event, state.looks),
+        revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity };
     }
     case "Start":
       return { ...state, stage: "playing", notice: "" };
@@ -249,7 +291,8 @@ export function reduce(state, event) {
       if (event.code === "HostLeft") {
         return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
       }
-      return { ...state, notice: event.message };
+      return { ...state, stage: state.protocol === 2 && state.stage === "joining" && !state.room_id ? "directory" : state.stage,
+        notice: event.message };
     default:
       return state;
   }
@@ -257,6 +300,7 @@ export function reduce(state, event) {
 
 /** Lowest slot held by a human: the only one that may start the match. */
 export function lobbyOwner(lobby) {
+  if (lobby && Object.hasOwn(lobby, "owner_slot")) return lobby.owner_slot;
   const i = lobby?.slots.findIndex((s) => s.controller === "Local" || s.controller === "Remote");
   return i === undefined || i < 0 ? null : i;
 }
@@ -573,6 +617,18 @@ function start() {
   const $ = (id) => document.getElementById(id);
   const el = {
     notice: $("notice"),
+    directoryPanel: $("directory-panel"),
+    directoryRooms: $("directory-rooms"),
+    directoryStatus: $("directory-status"),
+    directoryRefresh: $("directory-refresh"),
+    directoryCreate: $("directory-create"),
+    roomBack: $("room-back"),
+    roomCapacity: $("room-capacity"),
+    leaveRoom: $("leave-room"),
+    leavePanel: $("leave-panel"),
+    leaveConfirm: $("leave-confirm"),
+    leaveCancel: $("leave-cancel"),
+    hubLeave: $("hub-leave"),
     joinPanel: $("join-panel"),
     roomPanel: $("room-panel"),
     roomName: $("room-name"),
@@ -838,12 +894,31 @@ function start() {
 
   el.name.value = `Player${1 + Math.floor(Math.random() * 99)}`;
 
+  let requestSequence = 0;
+  let directoryRequest = null;
+  let directoryPages = [];
+  let directoryRestarted = false;
+  let directoryRenderKey = "";
+
   function send(msg) {
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg));
+    if (!socket || socket.readyState !== WebSocket.OPEN) return null;
+    const requestId = msg.request_id ?? `request-${++requestSequence}`;
+    const message = roomProtocolMessage(state, msg, requestId);
+    if (!message) return null;
+    socket.send(JSON.stringify(message));
+    return message.request_id ?? null;
   }
 
   function dispatch(event) {
+    const previousState = state;
     state = reduce(state, event);
+    if (state === previousState) return;
+    if (["LeftRoom", "Removed", "RoomClosed"].includes(event.type)) {
+      keys.clear();
+      gamepads.clear();
+      clearTouchInput();
+      while (navigationLayers.top) closeNavigationLayer();
+    }
     if (event.type === "Snapshot") {
       audio.handleEvents(event.events);
       const text = patternBanner(event.events);
@@ -857,7 +932,7 @@ function start() {
       }
     }
     audio.setTune(tuneForStage(state.stage));
-    if ((event.type === "Welcome" || event.type === "Lobby") && renderer) renderer.setLooks(state.looks);
+    if (["Welcome", "Lobby", "RoomUpdated"].includes(event.type) && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
       const code = renderer.load(JSON.stringify(event.state));
       if (code !== 0) state = { ...state, notice: `Graphics error: ${renderer.describe(code)}` };
@@ -914,7 +989,7 @@ function start() {
     if (navigationLayers.top) return navigationLayers.top.root;
     if (!el.controlsPanel.hidden) return el.controlsPanel;
     if (!el.soundPanel.hidden) return el.soundPanel;
-    for (const root of [el.roomPanel, el.joinPanel, el.editor, el.lobbyPanel, el.resultsPanel, el.gamePanel, el.devPanel]) {
+    for (const root of [el.roomPanel, el.directoryPanel, el.joinPanel, el.editor, el.lobbyPanel, el.resultsPanel, el.gamePanel, el.devPanel]) {
       if (root && !root.hidden) return root;
     }
     return null;
@@ -1091,8 +1166,9 @@ function start() {
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
     const resultsVisible = state.stage === "results";
-    const roomMenu = state.stage === "idle" && state.menu === "room";
+    const roomMenu = ["idle", "directory", "joining"].includes(state.stage) && state.menu === "room" && !state.room_id;
     el.roomPanel.hidden = !roomMenu;
+    el.directoryPanel.hidden = inLobby || playing || resultsVisible || roomMenu;
     el.joinPanel.hidden = inLobby || playing || resultsVisible || roomMenu;
     el.lobbyPanel.hidden = !inLobby;
     el.gamePanel.hidden = !playing;
@@ -1123,8 +1199,12 @@ function start() {
     if (!el.editor.hidden) renderEditor();
     el.join.hidden = state.stage === "closed";
     el.retry.hidden = state.stage !== "closed";
-    el.join.disabled = state.stage === "connecting" || state.stage === "joining";
-    el.name.disabled = el.join.disabled;
+    el.join.disabled = state.protocol !== 2 || !state.selectedRoom || state.stage === "joining";
+    el.name.disabled = state.stage === "connecting" || state.stage === "joining";
+    el.roomCreate.disabled = state.protocol !== 2 || state.stage === "joining";
+    el.roomBack.disabled = state.stage === "joining";
+    el.hubLeave.hidden = !state.room_id;
+    renderDirectory();
 
     const owner = lobbyOwner(state.lobby);
     const isOwner = owner !== null && owner === state.slot;
@@ -1210,32 +1290,127 @@ function start() {
   }
 
   function connect() {
-    const name = el.name.value.trim();
-    if (name.length < 1 || [...name].length > 16) {
-      dispatch({ type: "Rejected", reason: "BadName" });
-      state = { ...state, stage: "idle" };
-      updateUi();
-      return;
-    }
-    // the settings of the creation menu are used only when this join creates the room
-    const creating = state.room !== null && state.room.open === false;
-    if (creating) saveRoom(storage, roomDraft);
+    if (socket && [WebSocket.OPEN, WebSocket.CONNECTING].includes(socket.readyState)) return;
     dispatch({ type: "connecting" });
     const scheme = location.protocol === "https:" ? "wss" : "ws";
-    socket = new WebSocket(`${scheme}://${location.host}/ws`);
-    socket.onopen = () => {
+    const current = new WebSocket(`${scheme}://${location.host}/ws`);
+    socket = current;
+    const helloTimer = setTimeout(() => {
+      if (socket === current && state.protocol !== 2) {
+        dispatch({ type: "Rejected", reason: "BadVersion" });
+        current.close();
+      }
+    }, 2500);
+    current.onopen = () => {
+      if (socket !== current) return;
       dispatch({ type: "socket-open" });
-      const join = lookMessage("Join", draft, { version: PROTOCOL_VERSION, name });
-      send(creating ? { ...join, room: roomPayload(roomDraft) } : join);
+      send({ type: "Hello", version: PROTOCOL_VERSION });
     };
-    socket.onmessage = (ev) => {
+    current.onmessage = (ev) => {
+      if (socket !== current) return;
       try {
-        dispatch(JSON.parse(ev.data));
+        const message = JSON.parse(ev.data);
+        if (message.type === "Hello") {
+          clearTimeout(helloTimer);
+          roomDraft = loadRoom(storage, sanitizeRoom(message.defaults));
+          dispatch(message);
+          if (state.stage === "directory") refreshDirectory();
+          else current.close();
+          return;
+        }
+        if (message.type === "Rooms") {
+          if (message.request_id !== directoryRequest) return;
+          directoryPages.push(...message.rooms);
+          dispatch({ ...message, rooms: directoryPages });
+          if (message.next_cursor && directoryPages.length < 128) {
+            directoryRequest = send({ type: "ListRooms", scope: "local", cursor: message.next_cursor });
+          } else directoryRequest = null;
+          updateUi();
+          return;
+        }
+        if (message.type === "Error" && message.request_id === directoryRequest) {
+          directoryRequest = null;
+          if (message.code === "StaleRevision" && !directoryRestarted) {
+            directoryRestarted = true;
+            directoryPages = [];
+            directoryRequest = send({ type: "ListRooms", scope: "local" });
+            return;
+          }
+        }
+        dispatch(message);
+        if (["LeftRoom", "Removed", "RoomClosed"].includes(message.type)) refreshDirectory();
       } catch {
         // ignore anything that is not a protocol message
       }
     };
-    socket.onclose = () => dispatch({ type: "socket-closed" });
+    current.onclose = () => {
+      clearTimeout(helloTimer);
+      if (socket === current) dispatch({ type: "socket-closed" });
+    };
+  }
+
+  function refreshDirectory() {
+    if (state.protocol !== 2 || state.room_id || state.stage === "closed") return;
+    directoryPages = [];
+    directoryRestarted = false;
+    directoryRequest = send({ type: "ListRooms", scope: "local" });
+    updateUi();
+  }
+
+  function renderDirectory() {
+    if (el.directoryPanel.hidden) return;
+    el.directoryRefresh.disabled = state.protocol !== 2 || directoryRequest !== null || state.stage === "closed";
+    el.directoryCreate.disabled = state.protocol !== 2 || state.stage === "joining" || state.stage === "closed";
+    el.directoryStatus.textContent = state.protocol !== 2 ? "Connecting..." : directoryRequest ? "Refreshing..." :
+      state.rooms.length === 0 ? "No rooms available" : `${state.rooms.length} room${state.rooms.length === 1 ? "" : "s"}`;
+    const key = JSON.stringify([state.rooms, state.selectedRoom?.room_id]);
+    if (key === directoryRenderKey) return;
+    directoryRenderKey = key;
+    el.directoryRooms.replaceChildren(...state.rooms.map((room) => {
+      const item = document.createElement("li");
+      const select = document.createElement("button");
+      select.type = "button";
+      select.dataset.navKey = `room-${room.server_epoch}-${room.room_id}`;
+      select.title = `${room.server_id} / ${room.room_id}`;
+      select.setAttribute("aria-pressed", String(state.selectedRoom?.room_id === room.room_id));
+      select.disabled = room.phase !== "lobby" || room.occupied >= room.capacity;
+      const name = document.createElement("strong");
+      name.textContent = room.name;
+      const detail = document.createElement("span");
+      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${room.occupied}/${room.capacity} - ${room.phase} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
+      select.append(name, detail);
+      select.addEventListener("click", () => dispatch({ type: "select-room", room }));
+      item.append(select);
+      return item;
+    }));
+  }
+
+  function validPlayerName() {
+    const name = el.name.value.trim();
+    if ([...name].length < 1 || [...name].length > 16 || /\p{Cc}/u.test(name)) {
+      state = { ...state, notice: rejectText("BadName") };
+      updateUi();
+      return null;
+    }
+    return name;
+  }
+
+  function joinSelectedRoom() {
+    const name = validPlayerName();
+    if (!name || !state.selectedRoom || state.stage === "joining") return;
+    const room = state.selectedRoom;
+    state = { ...state, stage: "joining", notice: "" };
+    send({ type: "JoinRoom", name, room_id: room.room_id, server_epoch: room.server_epoch, look: draft });
+    updateUi();
+  }
+
+  function createSelectedRoom() {
+    const name = validPlayerName();
+    if (!name || state.stage === "joining") return;
+    saveRoom(storage, roomDraft);
+    state = { ...state, stage: "joining", notice: "" };
+    send({ type: "CreateRoom", name, settings: roomPayload(roomDraft), capacity: Number(el.roomCapacity.value), look: draft });
+    updateUi();
   }
 
   // ---- the room: the creation menu before joining and the settings in the lobby ----
@@ -1306,8 +1481,8 @@ function start() {
     }
     const room = state.room;
     el.joinRoom.hidden = !(room && room.open);
-    el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}` : "";
-    if (state.stage === "idle" && state.menu === "room") renderRoomMenu();
+    el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}${state.selectedRoom ? ` / ${state.selectedRoom.room_id}` : ""}` : "";
+    if (["idle", "directory"].includes(state.stage) && state.menu === "room") renderRoomMenu();
   }
 
   const roomControlsSummary = (settings) => roomControls({ stage: "lobby", slot: null, lobby: { slots: [], settings } }).summary;
@@ -1321,53 +1496,35 @@ function start() {
     roomDraft = roomReducer(roomDraft, { type: "name", value: el.roomName.value });
   });
   el.roomName.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") dispatch({ type: "room-confirm" });
+    if (e.key === "Enter") createSelectedRoom();
   });
   el.roomSize.addEventListener("change", () => editRoom({ type: "size", value: el.roomSize.value }));
   el.roomMinutes.addEventListener("change", () => editRoom({ type: "minutes", value: el.roomMinutes.value }));
   el.roomFf.addEventListener("change", () => editRoom({ type: "friendly_fire", value: el.roomFf.checked }));
-  el.roomCreate.addEventListener("click", () => dispatch({ type: "room-confirm" }));
+  el.roomCreate.addEventListener("click", createSelectedRoom);
+  el.roomBack.addEventListener("click", () => { dispatch({ type: "show-directory" }); refreshDirectory(); });
+  el.directoryCreate.addEventListener("click", () => dispatch({ type: "new-room" }));
+  el.directoryRefresh.addEventListener("click", refreshDirectory);
+  for (const opener of [el.leaveRoom, el.hubLeave]) {
+    opener.addEventListener("click", () => openNavigationLayer("leave", el.leavePanel, opener));
+  }
+  el.leaveCancel.addEventListener("click", closeNavigationLayer);
+  el.leaveConfirm.addEventListener("click", () => { closeNavigationLayer(); send({ type: "LeaveRoom" }); });
   el.lobbyName.addEventListener("change", () => changeRoom("name", el.lobbyName.value));
   el.lobbyMode.addEventListener("change", () => changeRoom("mode", el.lobbyMode.value));
   el.lobbySize.addEventListener("change", () => changeRoom("size", el.lobbySize.value));
   el.lobbyMinutes.addEventListener("change", () => changeRoom("minutes", Number(el.lobbyMinutes.value)));
   el.lobbyFf.addEventListener("change", () => changeRoom("friendly_fire", el.lobbyFf.checked));
 
-  /** Asks the server whether a room is open on a short-lived socket; no answer means an old server. */
-  function queryRoom() {
-    if (typeof WebSocket === "undefined") return;
-    const scheme = location.protocol === "https:" ? "wss" : "ws";
-    let probe;
-    try {
-      probe = new WebSocket(`${scheme}://${location.host}/ws`);
-    } catch {
-      return;
-    }
-    const timer = setTimeout(() => probe.close(), 1000);
-    probe.onopen = () => probe.send(JSON.stringify({ type: "RoomQuery" }));
-    probe.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg.type !== "RoomInfo") return;
-        clearTimeout(timer);
-        roomDraft = loadRoom(storage, sanitizeRoom(msg.settings));
-        dispatch(msg);
-      } catch {
-        // not a protocol message
-      }
-      probe.close();
-    };
-    probe.onerror = () => clearTimeout(timer);
-  }
-
-  el.join.addEventListener("click", connect);
+  el.join.addEventListener("click", joinSelectedRoom);
   el.name.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") connect();
+    if (e.key === "Enter") joinSelectedRoom();
   });
   el.retry.addEventListener("click", () => {
-    if (socket) socket.close();
+    if (socket) { socket.close(); socket = null; }
+    directoryRequest = null;
     dispatch({ type: "retry" });
-    queryRoom();
+    connect();
   });
     el.start.addEventListener("click", () => {
       send({ type: "Start" });
@@ -1811,7 +1968,10 @@ function start() {
 
   updateUi();
   loadGraphics();
-  queryRoom();
+  connect();
+  setInterval(() => {
+    if (state.stage === "directory" && state.menu !== "room" && directoryRequest === null) refreshDirectory();
+  }, 5000);
   requestAnimationFrame(draw);
 }
 

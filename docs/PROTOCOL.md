@@ -1,4 +1,4 @@
-# Wire protocol (version 1)
+# Wire Protocol
 
 Eksplode.re has one protocol and two transports. A terminal client and a browser tab exchange
 exactly the same messages with the match host; only the framing differs.
@@ -12,6 +12,50 @@ Every message is an object `{"type": "<Variant>", ...fields}`. The Rust definiti
 [`crates/net/src/protocol.rs`](../crates/net/src/protocol.rs); the codec (line reader and size
 limit) in [`crates/net/src/codec.rs`](../crates/net/src/codec.rs). The host is authoritative: it
 runs the simulation and validates every message, whatever the transport.
+
+## Explicit Rooms (Version 2)
+
+First-party browser and terminal clients send `Hello` with `version: 2` before admission. The
+reply includes server identity, its launch epoch, capabilities and default room settings. A
+directory connection owns no slot. `ListRooms` returns at most 32 public summaries per page;
+opaque cursors expire after five seconds and room mutations invalidate the current generation.
+HTTP `GET /rooms?scope=local` exposes the same read-only directory without creating a player.
+
+`RoomV2` is the Rust `ClientMsg`/`ServerMsg` wrapper for v2 requests/replies, not an extra wire
+tag: JSON still uses the request or reply's own `type`. Requests carry a printable ASCII
+`request_id` (1-64 characters); admitted operations also identify the bound `room_id`. Room
+references include `server_id` and `server_epoch`, so a room on another host or launch cannot
+accidentally be selected. Summaries contain occupancy, settings, capacity, phase, revision and
+trusted endpoint metadata, never credentials.
+
+- `CreateRoom` explicitly creates a room and admits its creator as owner; `JoinRoom` selects
+  an existing lobby. `Welcome` privately returns membership and room state. Capacity is 1-4;
+  Team and Chaser require four. Full rooms and running matches reject fresh admission.
+- `LeaveRoom` revokes the sender's membership; `LeftRoom` returns that connection to selection.
+  Each room independently publishes `RoomUpdated`, `Start`, `Snapshot`, `Ended` and developer
+  state. Explicit owner identity, not lowest occupied slot, controls administration.
+- Scoped ready/look/input, bot/start/developer commands and revision-checked `SetRoom` retain
+  the gameplay payloads described below. An error keeps its typed `code`; owner permission
+  errors name the current owner. Out-of-room operations do not mutate either room.
+- `RequestStatus` and `CancelRequest` reconcile the original admission ID. The five-second
+  deadline includes queue time; timeout means outcome unknown, not permission to retry under
+  a new ID. Up to eight private outcomes per connection are retained for 60 seconds.
+
+Password protection, `RemovePlayer` and `ResumeRoom`/`AckResume` are reserved in the v2 schema
+but not implemented yet; they are not advertised as available. Known-server aggregation also
+remains future work. Version-1 `Join` is rejected with `Rejected { reason: "BadVersion" }`
+followed by closure, without creating a room or taking a seat. There is no implicit-room fallback.
+
+The Rust SDK's `Client::connect(&str)` and `connect_unjoined(&str)` both negotiate v2 without
+admission; explicitly call `create_room` or `join_room` with the selected reference. The old
+two-argument connect-and-join API and unscoped host local-client/bot/start helpers are removed.
+In-process clients use `Host::connect(local)`, send Hello and explicitly admit; operator controls
+use `HostHandle::add_room_bot`, `remove_room_bot` or `start_room` with a complete room reference.
+
+## Legacy Version 1 (Reference Only)
+
+The remaining sections describe historical payloads retained for decoding and gameplay DTO
+projection, not an accepted single-room admission path. First-party clients use v2 exclusively.
 
 ## Limits
 

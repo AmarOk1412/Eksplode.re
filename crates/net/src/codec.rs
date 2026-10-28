@@ -19,6 +19,9 @@ pub enum NetError {
     Closed,
     /// The peer sent something that is not allowed in the current state.
     Protocol(String),
+    PendingAdmission {
+        request_id: String,
+    },
 }
 
 impl fmt::Display for NetError {
@@ -29,6 +32,10 @@ impl fmt::Display for NetError {
             NetError::Malformed(m) => write!(f, "malformed message: {m}"),
             NetError::Closed => write!(f, "connection closed"),
             NetError::Protocol(m) => write!(f, "protocol error: {m}"),
+            NetError::PendingAdmission { request_id } => write!(
+                f,
+                "admission outcome unknown; reconcile request {request_id}"
+            ),
         }
     }
 }
@@ -58,6 +65,21 @@ pub fn decode<T: DeserializeOwned>(line: &[u8]) -> Result<T, NetError> {
     }
     let text = std::str::from_utf8(line).map_err(|_| NetError::Malformed("not UTF-8".into()))?;
     serde_json::from_str(text).map_err(|e| NetError::Malformed(e.to_string()))
+}
+
+pub fn decode_client(line: &[u8]) -> Result<crate::protocol::ClientMsg, NetError> {
+    let value: serde_json::Value = decode(line)?;
+    if value.get("type").and_then(serde_json::Value::as_str) == Some("Hello")
+        || value.get("request_id").is_some()
+        || value.get("room_id").is_some()
+    {
+        let request = serde_json::from_value(value)
+            .map_err(|_| NetError::Malformed("invalid room protocol message".into()))?;
+        Ok(crate::protocol::ClientMsg::RoomV2(Box::new(request)))
+    } else {
+        serde_json::from_value(value)
+            .map_err(|_| NetError::Malformed("invalid client message".into()))
+    }
 }
 
 /// Reads lines without ever buffering more than [`MAX_LINE`] bytes of one line.

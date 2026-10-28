@@ -31,7 +31,7 @@ bufs = {}
 
 def free_port():
     with socket.socket() as s:
-        s.bind(("0.0.0.0", 0))
+        s.bind(("127.0.0.1", 0))
         return s.getsockname()[1]
 
 
@@ -60,9 +60,10 @@ def text(fd):
 
 def wait_for(fds, fd, needle, seconds=3.0):
     end = time.time() + seconds
+    compact_needle = re.sub(r"\s+", "", needle)
     while time.time() < end:
         pump(fds, 0.1)
-        if needle in text(fd):
+        if compact_needle in re.sub(r"\s+", "", text(fd)):
             return True
     return False
 
@@ -88,7 +89,7 @@ def stop(*procs):
 
 def check_host_enter(label, seq):
     host = spawn(["host", "--no-setup", "--port", str(free_port()), "--name", "Host"])
-    ok = wait_for([host[1]], host[1], "Slot 1")
+    ok = wait_for([host[1]], host[1], "(you)")
     if ok:
         os.write(host[1], seq)
         ok = wait_for([host[1]], host[1], "bombs")
@@ -107,7 +108,7 @@ def start_server():
     end = time.time() + 5
     while time.time() < end:
         try:
-            socket.create_connection(("0.0.0.0", game), timeout=0.2).close()
+            socket.create_connection(("127.0.0.1", game), timeout=0.2).close()
             return proc, game, http
         except OSError:
             time.sleep(0.05)
@@ -116,11 +117,17 @@ def start_server():
 
 
 def check_owner_through_server(seq):
-    """The first terminal player of a headless server is the owner and can start."""
+    """A terminal player explicitly creates a room, becomes owner and can start."""
     proc, game, _ = start_server()
     try:
-        client = spawn(["join", f"0.0.0.0:{game}", "--name", "Own"])
-        ok = wait_for([client[1]], client[1], "Slot 1")
+        client = spawn(["join", f"127.0.0.1:{game}", "--name", "Own"])
+        ok = wait_for([client[1]], client[1], "Rooms")
+        if ok:
+            os.write(client[1], b"c")
+            ok = wait_for([client[1]], client[1], "Create room")
+        if ok:
+            os.write(client[1], b"\r" * 5)
+            ok = wait_for([client[1]], client[1], "(you)")
         if ok:
             os.write(client[1], seq)
             ok = wait_for([client[1]], client[1], "bombs")
@@ -135,7 +142,7 @@ def check_host_serves_the_page():
     """host --web-port shows the page address and really serves the page."""
     web = free_port()
     host = spawn(["host", "--no-setup", "--port", str(free_port()), "--web-port", str(web), "--bind", "0.0.0.0"])
-    url = f"http://0.0.0.0:{web}/"
+    url = f"http://127.0.0.1:{web}/"
     ok = wait_for([host[1]], host[1], url)
     if ok:
         try:
@@ -150,10 +157,13 @@ def check_host_serves_the_page():
 def check_joined_non_owner():
     port = free_port()
     host = spawn(["host", "--no-setup", "--port", str(port), "--name", "Host"])
-    wait_for([host[1]], host[1], "Slot 1")
-    client = spawn(["join", f"0.0.0.0:{port}", "--name", "Cli"])
+    wait_for([host[1]], host[1], "(you)")
+    client = spawn(["join", f"127.0.0.1:{port}", "--name", "Cli"])
     fds = [host[1], client[1]]
-    ok = wait_for(fds, client[1], "Slot 2")
+    ok = wait_for(fds, client[1], "Rooms")
+    if ok:
+        os.write(client[1], b"\r")
+        ok = wait_for(fds, client[1], "(you)")
     if ok:
         os.write(client[1], b"\r")
         ok = wait_for(fds, client[1], "Only Host")

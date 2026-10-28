@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   MAX_NAME,
   MINUTES,
@@ -12,6 +13,7 @@ import {
   roomControls,
   roomLabel,
   roomPayload,
+  roomProtocolMessage,
   roomReducer,
   sanitizeRoom,
   saveRoom,
@@ -27,6 +29,27 @@ const memory = () => {
     setItem: (k, v) => data.set(k, v),
   };
 };
+
+test("v2 presentation messages scope actions without falling back to legacy Join", () => {
+  const state = { room_id: "room", revision: 3, capacity: 4 };
+  assert.deepEqual(roomProtocolMessage(state, { type: "Start" }, "start"), { type: "Start", room_id: "room", request_id: "start" });
+  assert.deepEqual(roomProtocolMessage(state, { type: "Input", tick: 2, mv: null, bomb: false, punch: false }, "ignored"),
+    { type: "Input", room_id: "room", tick: 2, mv: null, bomb: false, punch: false });
+  assert.deepEqual(roomProtocolMessage({}, { type: "Hello", version: 2 }, "ignored"), { type: "Hello", version: 2 });
+  assert.equal(roomProtocolMessage({}, { type: "Start" }, "start"), null);
+  assert.equal(roomProtocolMessage(state, { type: "Join", name: "Ann" }, "join"), null);
+  const update = roomProtocolMessage(state, setRoomMessage(defaultRoom()), "settings");
+  assert.equal(update.expected_revision, 3);
+  assert.equal(update.capacity, 4);
+});
+
+test("the nested join panel retains horizontal centering independently of the app grid", () => {
+  const css = readFileSync(new URL("../assets/style.css", import.meta.url), "utf8");
+  const rule = /^#join-panel\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+  assert.match(rule, /margin-inline:\s*auto\s*;/);
+  const app = /^#app\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+  assert.match(app, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*;/);
+});
 
 test("the defaults are the game as it was: Normal, small board, 3 minutes, friendly fire on", () => {
   assert.deepEqual(defaultRoom(), { name: "", mode: "normal", size: "small", minutes: 3, friendly_fire: true });

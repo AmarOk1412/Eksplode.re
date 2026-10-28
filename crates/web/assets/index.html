@@ -21,6 +21,7 @@
       <button id="hub-controls" type="button">Controls</button>
       <button id="hub-dev" type="button" hidden>Developer</button>
       <button id="hub-resume" type="button">Resume</button>
+      <button id="hub-leave" type="button" hidden>Leave room</button>
     </section>
 
     <section id="sound-panel" class="dialog sound" role="dialog" aria-modal="true" aria-label="Sound settings" hidden>
@@ -70,17 +71,34 @@
       <select id="room-size"></select>
       <label for="room-minutes">Round time</label>
       <select id="room-minutes"></select>
+      <label for="room-capacity">Maximum players</label>
+      <select id="room-capacity"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select>
       <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
       <button id="room-create" type="button">Create room</button>
+      <button id="room-back" type="button">Back</button>
     </section>
 
+    <section id="directory-panel" class="directory" aria-label="Rooms" hidden>
+      <h2>Rooms</h2>
+      <div class="buttons">
+        <button id="directory-refresh" type="button">Refresh</button>
+        <button id="directory-create" type="button">New room</button>
+      </div>
+      <p id="directory-status" role="status" aria-live="polite"></p>
+      <ul id="directory-rooms" class="directory-rooms" aria-label="Available rooms"></ul>
     <section id="join-panel" class="menu">
       <canvas id="logo" aria-hidden="true"></canvas>
       <p id="join-room" class="hint" hidden></p>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
-      <button id="join" type="button">Join Game</button>
+      <button id="join" type="button">Join room</button>
       <button id="retry" type="button" hidden>Retry</button>
+    </section>
+    </section>
+
+    <section id="leave-panel" class="dialog" role="dialog" aria-modal="true" aria-labelledby="leave-title" hidden>
+      <h2 id="leave-title">Leave this room?</h2>
+      <div class="buttons"><button id="leave-cancel" type="button">Cancel</button><button id="leave-confirm" type="button">Leave room</button></div>
     </section>
 
     <section id="editor" class="dialog editor" aria-label="Character editor" hidden>
@@ -123,6 +141,7 @@
         <button id="remove-bot" type="button">Remove bot</button>
         <button id="ready" type="button">Ready</button>
         <button id="change-look" type="button">Change look</button>
+        <button id="leave-room" type="button">Leave room</button>
       </div>
       <p class="hint">The first human player is the owner: only the owner changes the room settings and starts the match.
 Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>

@@ -1,18 +1,19 @@
 # The web server and the page
 
-`eksplode-re-server` (crate `eksplode-re-web`) runs one match host and a small web server in a single
+`eksplode-re-server` (crate `eksplode-re-web`) runs a multi-room host and a small web server in a single
 process. The page it serves draws the game in a canvas with a WebAssembly module and talks to the
 host over a WebSocket.
 
 ```sh
-cargo run -p eksplode-re-web -- --bots 1
-# Web page:        http://0.0.0.0:8080/
-# Terminal client: eksplode-re-cli join 0.0.0.0:7878
+cargo run -p eksplode-re-web -- --bind 127.0.0.1 --bots 1
+# Web page:        http://127.0.0.1:8080/
+# Terminal client: eksplode-re-cli join 127.0.0.1:7878
 ```
 
-Open the address in a browser, type a name and press Join. The first person to join is the lobby
-owner and can press Enter (or the Start button) to begin; the Add bot and Remove bot buttons fill
-the other slots.
+Open the address in a browser and choose Create room or select an existing room before joining.
+Creating a room makes you its owner; Enter (or the Start button) begins that room's match, and
+the Add bot and Remove bot buttons fill its other slots. Each room has independent settings,
+players, bots and simulation. Opening the directory alone never takes a player slot.
 
 The lobby shows one tall card per slot: a cubic isometric character that bobs and turns every
 few seconds (`eksplode_re_portrait3d` in the WebAssembly module), a coloured `PLAYER n` banner, the
@@ -47,7 +48,9 @@ network, see [SECURITY.md](SECURITY.md).
 | `--seed <U64>` | fixed RNG seed for every match (default: random) |
 | `--allow-origin <ORIGIN>` | accept WebSocket connections from this web origin (repeatable) |
 | `--allow-any-origin` | accept WebSocket connections from any web origin (unsafe) |
-| `--max-connections <N>` | open HTTP/WebSocket connections (default 64, minimum 4) |
+| `--max-connections <N>` | maximum open HTTP/WebSocket connections, 4-1024 (default 256) |
+| `--max-rooms <N>` | maximum simultaneous rooms, 1-128 (default 32) |
+| `--server-id <ID>` | stable host identifier, 1-64 ASCII characters |
 | `--room-name <TEXT>` | default room name, at most 24 characters (default: the owner's name plus 's room) |
 | `--mode <MODE>` | default mode: normal, team or chaser (default normal) |
 | `--size <SIZE>` | default board size: small, medium or large (default small) |
@@ -64,8 +67,8 @@ The table above is checked against the program's `--help` text by `cargo test -p
 Examples:
 
 ```sh
-# only this machine, one bot waiting in the lobby
-eksplode-re-server --bots 1
+# only this machine, one bot added to each explicitly created room
+eksplode-re-server --bind 127.0.0.1 --bots 1
 
 # a LAN party: reachable by everybody on the network (prints a WARNING, see SECURITY.md)
 eksplode-re-server --bind 0.0.0.0 --http-port 8080 --game-port 7878
@@ -104,6 +107,7 @@ eksplode-re-cli join http://192.168.1.20:8080/     # web addresses work too; onl
 | `GET /style.css` | `200 text/css` |
 | `GET /eksplode_re_render.wasm` | `200 application/wasm` - the graphics module |
 | `GET /ws` with `Upgrade: websocket` | `101` - see [PROTOCOL.md](PROTOCOL.md) |
+| `GET /rooms`, `GET /rooms?scope=local` | `200 application/json` - paginated public local directory, `Cache-Control: no-store`; no admission |
 | `HEAD` of the routes above | the same headers, no body |
 | any other path | `404` |
 | any other method | `405` with `Allow: GET, HEAD` |
@@ -140,16 +144,15 @@ When the page and the server share an origin (the normal case) there is nothing 
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`eksplode_re_render.wasm`](../crates/web/assets/eksplode_re_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
 
-**Room creation and settings.** When the page opens it asks the server (`RoomQuery`, on a
-short-lived connection) whether a room is open. On an empty server the first screen is the room
-creation menu: room name, mode, board size, round time and, for Team mode, friendly fire; the
-defaults are Normal, small, 3 minutes (or the options the server was started with, or what this
-device used last, stored under `eksplode.re.room.v1`). "Create room" leads to the name and look
-screen, and the settings travel in the `Join` that creates the room. Everybody who joins an open
-room goes straight to the join screen, which names the room. In the lobby the settings are shown to
-everybody in one line, and the owner changes them with the controls above the cards (each change is
-a `SetRoom`); the controls are disabled for everybody else and during a match. The room closes when
-the last person leaves it; see [PROTOCOL.md](PROTOCOL.md#rooms).
+**Room creation and settings.** The page negotiates protocol v2 with `Hello`, then requests
+`ListRooms` without joining. Choose a room by its identity or create one with a name, capacity,
+mode, board size, round time and, for Team mode, friendly fire. Defaults come from the server or
+the device's saved settings (`eksplode.re.room.v1`). `CreateRoom` and `JoinRoom` explicitly admit
+the player after name/look selection. In the lobby everybody sees the settings, while only the
+authoritative owner can change them with revision-checked `SetRoom` requests. Controls are
+disabled for other members and during a match. Confirmed leave returns to the directory; the
+last human's explicit departure closes that room without affecting others. Passwords, reconnect
+and remote discovery are not available yet; see [PROTOCOL.md](PROTOCOL.md#rooms).
 
 **Character editor.** On the join screen (and from "Change look" in the lobby) the player picks a
 colour, a gender look, a head accessory and a face accessory with a live preview drawn by the

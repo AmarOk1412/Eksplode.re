@@ -16,6 +16,39 @@ function run(events, start = initialState()) {
   return events.reduce(reduce, start);
 }
 
+test("v2 directory requires room selection and uses explicit ownership", () => {
+  let state = reduce(initialState(), { type: "Hello", version: 2, server_id: "alpha", server_epoch: "epoch", capabilities: ["rooms", "directory"] });
+  assert.equal(state.stage, "directory");
+  assert.equal(state.slot, null);
+  const room = { server_id: "alpha", server_epoch: "epoch", room_id: "room", name: "Friday", mode: "normal", occupied: 1, capacity: 4, phase: "lobby" };
+  state = reduce(state, { type: "Rooms", rooms: [room], sources: [] });
+  assert.equal(state.rooms.length, 1);
+  state = reduce(state, { type: "select-room", room });
+  assert.equal(state.selectedRoom.room_id, "room");
+  assert.equal(state.stage, "directory");
+  const slots = lobby("Remote", "Empty", "Remote");
+  state = reduce(state, { type: "Welcome", slot: 2, lobby: slots, owner_slot: 2, membership_id: "member", room_id: "room", server_epoch: "epoch", revision: 1 });
+  assert.equal(lobbyOwner(state.lobby), 2);
+  assert.equal(state.room_id, "room");
+  const playing = reduce(state, { type: "Start", room_id: "room" });
+  const updated = reduce(playing, { type: "RoomUpdated", room_id: "room", lobby: slots, owner_slot: 2, revision: 2 });
+  assert.equal(updated.stage, "playing");
+  assert.equal(updated.revision, 2);
+  assert.equal(reduce(updated, { type: "Snapshot", room_id: "other", tick: 99, state: {} }), updated);
+  state = reduce(updated, { type: "LeftRoom", room_id: "room" });
+  assert.equal(state.stage, "directory");
+  assert.equal(state.room_id, null);
+  assert.equal(state.slot, null);
+});
+
+test("v2 admission refusal returns to the selected directory without closing transport", () => {
+  const state = { ...initialState(), protocol: 2, stage: "joining", selectedRoom: { room_id: "room" } };
+  const refused = reduce(state, { type: "Error", code: "Full", message: "The room is full" });
+  assert.equal(refused.stage, "directory");
+  assert.equal(refused.selectedRoom.room_id, "room");
+  assert.match(refused.notice, /full/);
+});
+
 test("the page starts idle and walks through the join flow", () => {
   let s = initialState();
   assert.equal(s.stage, "idle");

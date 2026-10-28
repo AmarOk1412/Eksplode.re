@@ -24,7 +24,89 @@ fn defaults() {
     assert_eq!(o.bots, 0);
     assert_eq!(o.seed, None);
     assert_eq!(o.origins, AllowedOrigins::SameOrigin);
-    assert_eq!(o.max_connections, 64);
+    assert_eq!(o.max_connections, 256);
+}
+
+#[test]
+fn room_server_identity_and_limits_are_validated() {
+    let options = opts(&[
+        "--server-id",
+        "alpha",
+        "--max-rooms",
+        "128",
+        "--max-connections",
+        "1024",
+    ]);
+    assert_eq!(options.server_id.as_deref(), Some("alpha"));
+    assert_eq!(options.max_rooms, 128);
+    assert_eq!(options.max_connections, 1024);
+    for (flag, value) in [
+        ("--server-id", "bad name"),
+        ("--server-id", ""),
+        ("--max-rooms", "0"),
+        ("--max-rooms", "129"),
+        ("--max-connections", "3"),
+        ("--max-connections", "1025"),
+    ] {
+        assert!(args(&[flag, value]).is_err(), "{flag} {value}");
+    }
+    let defaults = opts(&[]);
+    assert_eq!(defaults.max_rooms, 32);
+}
+
+#[test]
+fn invalid_room_configuration_is_rejected_before_binding() {
+    let busy = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let options = ServerOptions {
+        game_port: busy.local_addr().unwrap().port(),
+        server_id: Some("bad identifier".into()),
+        ..ServerOptions::default()
+    };
+    assert!(matches!(
+        eksplode_re_web::Server::start(options),
+        Err(eksplode_re_web::ServerError::Net(
+            eksplode_re_net::NetError::Protocol(_)
+        ))
+    ));
+}
+
+#[test]
+fn invalid_room_options_exit_with_usage_status_two() {
+    for (flag, value) in [
+        ("--server-id", "bad identifier"),
+        ("--max-rooms", "129"),
+        ("--max-connections", "1025"),
+    ] {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_eksplode-re-server"))
+            .args([flag, value])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2), "{flag} {value}");
+    }
+}
+
+#[test]
+fn attached_web_service_cannot_exceed_its_shared_host_connection_limit() {
+    let host = eksplode_re_net::Host::start(eksplode_re_net::HostConfig {
+        bind: "127.0.0.1:0".into(),
+        limits: eksplode_re_net::room::RoomLimits {
+            max_rooms: 32,
+            max_connections: 4,
+        },
+        ..Default::default()
+    })
+    .unwrap();
+    let options = ServerOptions {
+        http_port: 0,
+        max_connections: 5,
+        ..Default::default()
+    };
+    assert!(matches!(
+        eksplode_re_web::Server::attach(host.handle(), host.addr(), options),
+        Err(eksplode_re_web::ServerError::Net(
+            eksplode_re_net::NetError::Protocol(_)
+        ))
+    ));
 }
 
 #[test]

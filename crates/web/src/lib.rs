@@ -55,6 +55,7 @@ pub struct Server {
     game_addr: SocketAddr,
     stop: Arc<AtomicBool>,
     accept: Option<JoinHandle<()>>,
+    host_handle: HostHandle,
 }
 
 impl Server {
@@ -69,6 +70,14 @@ impl Server {
             silence_timeout: opts.silence_timeout,
             dev: opts.dev,
             defaults: opts.room.clone(),
+            default_bots: opts.bots,
+            server_id: opts.server_id.clone(),
+            limits: eksplode_re_net::room::RoomLimits {
+                max_rooms: opts.max_rooms,
+                max_connections: u16::try_from(opts.max_connections).map_err(|_| {
+                    ServerError::Net(NetError::Protocol("invalid connection limit".into()))
+                })?,
+            },
         })
         .map_err(|e| match e {
             NetError::Io(source) => ServerError::Bind {
@@ -78,9 +87,6 @@ impl Server {
             },
             other => ServerError::Net(other),
         })?;
-        for _ in 0..opts.bots {
-            host.add_bot();
-        }
         let game_addr = host.addr();
         let mut server = Self::serve(host.handle(), game_addr, opts)?;
         server.host = Some(host);
@@ -101,6 +107,13 @@ impl Server {
         game_addr: SocketAddr,
         opts: ServerOptions,
     ) -> Result<Server, ServerError> {
+        if !(4..=1024).contains(&opts.max_connections)
+            || opts.max_connections > usize::from(handle.limits().max_connections)
+        {
+            return Err(ServerError::Net(NetError::Protocol(
+                "web connection limit exceeds shared host limit".into(),
+            )));
+        }
         let bind = SocketAddr::new(opts.bind, opts.http_port);
         let listener = TcpListener::bind(bind).map_err(|source| ServerError::Bind {
             what: "web port",
@@ -112,6 +125,10 @@ impl Server {
             addr: bind,
             source,
         })?;
+        handle
+            .advertise_web(http_addr, true)
+            .map_err(ServerError::Net)?;
+        let host_handle = handle.clone();
         let stop = Arc::new(AtomicBool::new(false));
         let ctx = Arc::new(http::Ctx {
             origins: opts.origins.clone(),
@@ -129,6 +146,7 @@ impl Server {
             game_addr,
             stop,
             accept: Some(accept),
+            host_handle,
         })
     }
 
@@ -153,6 +171,7 @@ impl Server {
 
 impl Drop for Server {
     fn drop(&mut self) {
+        let _ = self.host_handle.advertise_web(self.http_addr, false);
         // The host goes first so every client receives `HostLeft` before the sockets close.
         drop(self.host.take());
         self.stop.store(true, Ordering::SeqCst);

@@ -2,6 +2,7 @@
 
 pub mod client;
 pub mod codec;
+pub mod events;
 pub mod host;
 pub mod look;
 pub mod protocol;

@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
 use std::io::Cursor;
 
 use eksplode_re_core::{Config, Controller, Dir, Event, GameState, Lobby, Outcome, PlayerId, Pos};
@@ -19,6 +21,471 @@ where
     );
     let back: T = decode(&bytes[..bytes.len() - 1]).unwrap();
     assert_eq!(back, msg);
+}
+
+#[test]
+fn room_fixtures_share_monotonic_time_credentials_and_captured_events() {
+    let clock = common::FakeClock::default();
+    let shared_clock = clock.clone();
+    assert_eq!(clock.now(), std::time::Duration::ZERO);
+    clock.advance(60_000);
+    assert_eq!(shared_clock.now(), std::time::Duration::from_secs(60));
+
+    let credentials = common::FakeCredentials::default();
+    let mut first = [0; 32];
+    let mut second = [0; 32];
+    credentials.fill(&mut first).unwrap();
+    credentials.clone().fill(&mut second).unwrap();
+    assert_ne!(first, second);
+    credentials.fail();
+    assert!(credentials.fill(&mut second).is_err());
+
+    let events = common::CapturedEvents::default();
+    events
+        .clone()
+        .push(serde_json::json!({"event": "room.created"}));
+    assert_eq!(events.snapshot()[0]["event"], "room.created");
+}
+
+#[test]
+fn v2_control_requests_round_trip_and_keep_secrets_out_of_debug() {
+    use eksplode_re_net::protocol::v2::Request;
+    use serde_json::json;
+
+    let settings = serde_json::to_value(eksplode_re_core::RoomSettings::default()).unwrap();
+    let requests = vec![
+        json!({"type":"Hello","version":2}),
+        json!({"type":"ListRooms","request_id":"list","scope":"known"}),
+        json!({"type":"CreateRoom","request_id":"create","name":"Ann","settings":settings,
+            "capacity":4,"password":"password-canary"}),
+        json!({"type":"JoinRoom","request_id":"join","server_epoch":"epoch","room_id":"room",
+            "name":"Ann","password":"password-canary"}),
+        json!({"type":"ResumeRoom","request_id":"resume","server_epoch":"epoch","room_id":"room",
+            "membership_id":"member","proof":"proof-canary"}),
+        json!({"type":"AckResume","request_id":"ack","resume_request_id":"resume",
+            "room_id":"room","proof":"proof-canary"}),
+        json!({"type":"RequestStatus","request_id":"query","target_request_id":"create"}),
+        json!({"type":"CancelRequest","request_id":"cancel","target_request_id":"create"}),
+        json!({"type":"SetRoom","request_id":"settings","room_id":"room","expected_revision":1,
+            "settings":settings,"capacity":4,"password":""}),
+        json!({"type":"RemovePlayer","request_id":"remove","room_id":"room","membership_id":"member"}),
+        json!({"type":"LeaveRoom","request_id":"leave","room_id":"room"}),
+        json!({"type":"Start","request_id":"start","room_id":"room"}),
+        json!({"type":"AddBot","request_id":"add","room_id":"room"}),
+        json!({"type":"RemoveBot","request_id":"bot","room_id":"room"}),
+        json!({"type":"SetReady","request_id":"ready","room_id":"room","ready":true}),
+        json!({"type":"SetLook","request_id":"look","room_id":"room","look":{}}),
+        json!({"type":"Input","room_id":"room","tick":7,"mv":"Left","bomb":true,"punch":false}),
+        json!({"type":"DevPauseBots","request_id":"pause","room_id":"room","paused":true}),
+        json!({"type":"DevSetDrops","request_id":"drops","room_id":"room","chances":[0.0,1.0]}),
+        json!({"type":"DevResetDrops","request_id":"reset","room_id":"room"}),
+        json!({"type":"Ping","nonce":42}),
+    ];
+    for value in requests {
+        let request: Request = serde_json::from_value(value).unwrap();
+        let debug = format!("{request:?}");
+        assert!(!debug.contains("password-canary"));
+        assert!(!debug.contains("proof-canary"));
+        roundtrip(request);
+    }
+}
+
+#[test]
+fn v2_request_ids_are_bounded_printable_ascii() {
+    use eksplode_re_net::protocol::v2::Request;
+    for request_id in [
+        "".to_string(),
+        "x".repeat(65),
+        "bad\nname".into(),
+        "nonascii-é".into(),
+    ] {
+        let value = serde_json::json!({"type":"ListRooms","request_id":request_id,"scope":"local"});
+        assert!(serde_json::from_value::<Request>(value).is_err());
+    }
+    for request_id in ["x".to_string(), "x".repeat(64)] {
+        let value = serde_json::json!({"type":"ListRooms","request_id":request_id,"scope":"local"});
+        assert!(serde_json::from_value::<Request>(value).is_ok());
+    }
+    assert!(decode::<Request>(br#"{"type":"Unknown","request_id":"test"}"#).is_err());
+    assert!(decode::<Request>(&vec![b'x'; MAX_LINE + 1]).is_err());
+}
+
+#[test]
+fn v2_hello_and_private_results_round_trip() {
+    use eksplode_re_net::protocol::v2::Reply;
+    use serde_json::json;
+    let mut replies = vec![
+        json!({"type":"Hello","version":2,"server_id":"test","server_epoch":"epoch",
+            "capabilities":["rooms"],"limits":{"max_rooms":32,"max_connections":256}}),
+        json!({"type":"Rooms","request_id":"list","sources":[],"rooms":[]}),
+        json!({"type":"Error","request_id":"join","code":"BadPassword","message":"Admission denied"}),
+        json!({"type":"RequestStatus","request_id":"status","target_request_id":"join","status":"pending"}),
+        json!({"type":"Pong","nonce":5}),
+    ];
+    let reference = json!({"server_id":"test","server_epoch":"epoch","room_id":"room"});
+    let lobby = Lobby::new();
+    let admission = json!({
+        "server_id":"test","server_epoch":"epoch","room_id":"room",
+        "membership_id":"member","slot":0,"resume_proof":"private-result-canary",
+        "reconnect_window_seconds":60,"owner_membership_id":"member","owner_slot":0,
+        "revision":1,"capacity":4,"password_required":true,
+        "config":Config::default(),"lobby":lobby,"looks":[],"dev":false
+    });
+    let mut welcome = admission.clone();
+    welcome["type"] = json!("Welcome");
+    welcome["request_id"] = json!("create");
+    replies.push(welcome.clone());
+    let mut resumed = admission;
+    resumed["type"] = json!("Resumed");
+    resumed["request_id"] = json!("resume");
+    resumed["phase"] = json!("lobby");
+    resumed["tick"] = json!(null);
+    resumed["state"] = json!(null);
+    resumed["result"] = json!(null);
+    replies.push(resumed);
+    replies.push(json!({"type":"RequestStatus","request_id":"status",
+        "target_request_id":"create","status":"committed","result":welcome}));
+    for (kind, fields) in [
+        (
+            "ResumeAcknowledged",
+            json!({"request_id":"ack","resume_request_id":"resume"}),
+        ),
+        (
+            "RoomUpdated",
+            json!({"revision":2,"owner_membership_id":"member","owner_slot":0,
+            "capacity":4,"password_required":true,"memberships":[],"lobby":lobby,"looks":[]}),
+        ),
+        ("LeftRoom", json!({"request_id":"leave"})),
+        ("Removed", json!({"reason":"owner removal"})),
+        ("RoomClosed", json!({"reason":"empty"})),
+        ("Start", json!({"seed":7,"config":Config::default()})),
+        (
+            "Snapshot",
+            json!({"tick":0,"state":GameState::new(Config::default(), 7, [true;4]).unwrap()
+            .observe(PlayerId::new(0).unwrap()),"events":[]}),
+        ),
+        ("PlayerLeft", json!({"slot":1,"replaced_by_bot":true})),
+        ("Ended", json!({"outcome":Outcome::Draw})),
+        ("DevState", json!({"paused":true,"drops":vec![0.0; 8]})),
+    ] {
+        let mut value = reference.clone();
+        value["type"] = json!(kind);
+        value
+            .as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        replies.push(value);
+    }
+    for value in replies {
+        let reply = serde_json::from_value::<Reply>(value).unwrap();
+        assert!(!format!("{reply:?}").contains("private-result-canary"));
+        roundtrip(reply);
+    }
+}
+
+#[test]
+fn v2_room_commands_are_not_decoded_as_legacy_commands() {
+    use eksplode_re_net::codec::decode_client;
+    for text in [
+        r#"{"type":"Hello","version":2}"#,
+        r#"{"type":"Start","request_id":"start","room_id":"room"}"#,
+        r#"{"type":"Input","room_id":"room","tick":7,"mv":null,"bomb":false}"#,
+    ] {
+        assert!(matches!(
+            decode_client(text.as_bytes()).unwrap(),
+            ClientMsg::RoomV2(_)
+        ));
+    }
+    assert!(matches!(
+        decode_client(br#"{"type":"Join","version":1,"name":"Ann"}"#).unwrap(),
+        ClientMsg::Join { .. }
+    ));
+}
+
+#[test]
+fn v2_host_negotiates_without_joining_and_rejects_bad_versions() {
+    let host = common::host();
+    let mut raw = common::Raw::connect(host.addr());
+    let hello = raw.hello_v2().unwrap();
+    assert_eq!(hello["type"], "Hello");
+    assert_eq!(hello["version"], 2);
+    assert_eq!(hello["server_epoch"].as_str().unwrap().len(), 32);
+    assert!(hello.get("membership_id").is_none());
+
+    let mut old = common::Raw::connect(host.addr());
+    old.send_value(&serde_json::json!({"type":"Hello","version":1}));
+    let reply = old.recv_value().unwrap();
+    assert_eq!(reply["type"], "Rejected");
+    assert_eq!(reply["reason"], "BadVersion");
+}
+
+#[test]
+fn v2_tcp_client_connects_without_joining_and_preserves_reply_request_ids() {
+    use eksplode_re_net::protocol::v2::{Reply, Request, RequestId, Scope};
+    let host = common::host();
+    let client = eksplode_re_net::Client::connect(&host.addr().to_string()).unwrap();
+    assert!(matches!(
+        client.recv_timeout(common::WAIT).unwrap(),
+        ServerMsg::RoomV2(reply) if matches!(*reply, Reply::Hello { version: 2, .. })
+    ));
+    client
+        .send_v2(Request::ListRooms {
+            request_id: RequestId::new("directory").unwrap(),
+            scope: Scope::Local,
+            cursor: None,
+        })
+        .unwrap();
+    match client.recv_timeout(common::WAIT).unwrap() {
+        ServerMsg::RoomV2(reply) => match *reply {
+            Reply::Rooms {
+                request_id, rooms, ..
+            } => {
+                assert_eq!(request_id.as_str(), "directory");
+                assert!(rooms.is_empty());
+            }
+            other => panic!("expected directory, got {other:?}"),
+        },
+        other => panic!("v2 reply lost its identity: {other:?}"),
+    }
+}
+
+#[test]
+fn a_connection_that_never_negotiates_is_closed_after_two_seconds() {
+    let host = common::host();
+    let mut raw = common::Raw::connect(host.addr());
+    let started = std::time::Instant::now();
+    assert!(raw.recv_value().is_none());
+    assert!(started.elapsed() >= std::time::Duration::from_secs(2));
+    assert!(started.elapsed() < common::WAIT);
+}
+
+#[test]
+fn v2_request_status_is_connection_scoped_and_replays_terminal_outcomes() {
+    let host = common::host();
+    let mut first = common::Raw::connect(host.addr());
+    first.hello_v2().unwrap();
+    first.create_room_v2("create", "Ann");
+    let original = first.recv_value().unwrap();
+    assert_eq!(original["request_id"], "create");
+    first.create_room_v2("create", "Ann");
+    let deadline = std::time::Instant::now() + common::WAIT;
+    let replay = loop {
+        assert!(std::time::Instant::now() < deadline);
+        let value = first.recv_value().unwrap();
+        if value["type"] != "RoomUpdated" {
+            break value;
+        }
+    };
+    assert_eq!(replay, original);
+    first.send_value(&serde_json::json!({"type":"RequestStatus", "request_id":"status", "target_request_id":"create"}));
+    let status = first.recv_value().unwrap();
+    assert_eq!(status["status"], "committed");
+    assert_eq!(status["result"], original);
+    let mut second = common::Raw::connect(host.addr());
+    second.hello_v2().unwrap();
+    second.send_value(&serde_json::json!({"type":"RequestStatus", "request_id":"status", "target_request_id":"create"}));
+    assert_eq!(second.recv_value().unwrap()["status"], "unknown");
+}
+
+#[test]
+fn client_gameplay_messages_use_only_an_explicitly_admitted_v2_room() {
+    use eksplode_re_net::protocol::v2::{Reply, Request, RequestId};
+    let host = common::host();
+    let client = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    client.recv_timeout(common::WAIT).unwrap();
+    client
+        .send_v2(Request::create_room(
+            RequestId::new("create").unwrap(),
+            "Ann".into(),
+            &eksplode_re_core::RoomSettings::default(),
+            4,
+        ))
+        .unwrap();
+    loop {
+        if matches!(client.recv_timeout(common::WAIT).unwrap(), ServerMsg::RoomV2(reply)
+            if matches!(reply.as_ref(), Reply::Welcome { .. }))
+        {
+            break;
+        }
+    }
+    client.send(ClientMsg::AddBot).unwrap();
+    let mut added = false;
+    while let Ok(message) = client.recv_timeout(common::WAIT) {
+        if let ServerMsg::RoomV2(reply) = message {
+            if let Reply::RoomUpdated { lobby, .. } = *reply {
+                if lobby
+                    .slots
+                    .iter()
+                    .any(|slot| slot.controller == Controller::Bot)
+                {
+                    added = true;
+                    break;
+                }
+            }
+        }
+    }
+    assert!(
+        added,
+        "gameplay command did not retain the explicit room binding"
+    );
+}
+
+#[test]
+fn explicit_sdk_admission_retains_welcome_for_the_gameplay_consumer() {
+    let host = common::host();
+    let creator = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let reference = creator
+        .create_room("Creator", &eksplode_re_core::RoomSettings::default(), 4)
+        .unwrap();
+    assert!(common::wait_for(
+        &creator,
+        |message| matches!(message, ServerMsg::RoomV2(reply)
+        if matches!(reply.as_ref(), eksplode_re_net::protocol::v2::Reply::Welcome { .. }))
+    )
+    .is_some());
+    let member = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    assert_eq!(member.join_room(&reference, "Member").unwrap(), reference);
+    assert!(common::wait_for(
+        &member,
+        |message| matches!(message, ServerMsg::RoomV2(reply)
+        if matches!(reply.as_ref(), eksplode_re_net::protocol::v2::Reply::Welcome { .. }))
+    )
+    .is_some());
+}
+
+#[test]
+fn unjoined_client_reports_upgrade_required_without_legacy_join_fallback() {
+    use std::io::{BufRead, BufReader, Write};
+    use std::net::TcpListener;
+
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(common::WAIT)).unwrap();
+        let mut reader = BufReader::new(stream.try_clone().unwrap());
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&line).unwrap()["type"],
+            "Hello"
+        );
+        stream
+            .write_all(
+                b"{\"type\":\"Error\",\"code\":\"Malformed\",\"message\":\"unknown Hello\"}\n",
+            )
+            .unwrap();
+        line.clear();
+        assert_eq!(
+            reader.read_line(&mut line).unwrap(),
+            0,
+            "client must not send a legacy Join"
+        );
+    });
+    let client = eksplode_re_net::Client::connect_unjoined(&address.to_string()).unwrap();
+    assert_eq!(
+        client.recv_timeout(common::WAIT).unwrap(),
+        ServerMsg::Rejected {
+            reason: RejectReason::BadVersion
+        }
+    );
+    server.join().unwrap();
+}
+
+#[test]
+fn unjoined_client_reports_upgrade_required_when_hello_times_out() {
+    use std::io::{BufRead, BufReader};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = std::thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        stream.set_read_timeout(Some(common::WAIT)).unwrap();
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&line).unwrap()["type"],
+            "Hello"
+        );
+        line.clear();
+        assert_eq!(reader.read_line(&mut line).unwrap(), 0);
+    });
+    let client = eksplode_re_net::Client::connect_unjoined(&address.to_string()).unwrap();
+    assert_eq!(
+        client.recv_timeout(common::WAIT).unwrap(),
+        ServerMsg::Rejected {
+            reason: RejectReason::BadVersion
+        }
+    );
+    server.join().unwrap();
+}
+
+#[test]
+fn v2_control_flood_is_limited_without_disturbing_another_connection() {
+    use eksplode_re_net::protocol::v2::{ErrorCode, Reply, Request};
+    let host = common::host();
+    let noisy = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    noisy.recv_timeout(common::WAIT).unwrap();
+    for nonce in 0..80 {
+        if noisy.send_v2(Request::Ping { nonce }).is_err() {
+            break;
+        }
+    }
+    let mut limited = false;
+    while let Ok(message) = noisy.recv_timeout(std::time::Duration::from_millis(300)) {
+        if matches!(message, ServerMsg::RoomV2(reply) if matches!(*reply, Reply::Error { code: ErrorCode::RateLimited, .. }))
+        {
+            limited = true;
+            break;
+        }
+    }
+    assert!(limited, "control flood was not rate limited");
+    let other = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    other.recv_timeout(common::WAIT).unwrap();
+    other.send_v2(Request::Ping { nonce: 999 }).unwrap();
+    assert!(matches!(other.recv_timeout(common::WAIT).unwrap(),
+        ServerMsg::RoomV2(reply) if matches!(*reply, Reply::Pong { nonce: 999 })));
+}
+
+#[test]
+fn a_slow_in_process_reader_is_dropped_without_blocking_match_ticks() {
+    let host = common::host();
+    let slow = host.connect(true).unwrap();
+    slow.send_v2(eksplode_re_net::protocol::v2::Request::Hello { version: 2 })
+        .unwrap();
+    let room = slow
+        .create_room("slow", &eksplode_re_core::RoomSettings::default(), 4)
+        .unwrap();
+    let observer = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    observer.join_room(&room, "observer").unwrap();
+    common::welcome_slot(&observer);
+    host.handle().start_room(&room).unwrap();
+    assert!(common::wait_for_game(&observer, |message| matches!(
+        message,
+        ServerMsg::PlayerLeft {
+            slot: 0,
+            replaced_by_bot: true
+        }
+    ))
+    .is_some());
+    assert!(common::wait_for_game(&observer, |message| matches!(message,
+        ServerMsg::Snapshot { tick, .. } if *tick >= 100))
+    .is_some());
+    let mut disconnected = false;
+    for _ in 0..140 {
+        match slow.try_recv() {
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                disconnected = true;
+                break;
+            }
+            Ok(_) => {}
+            Err(std::sync::mpsc::TryRecvError::Empty) => break,
+        }
+    }
+    assert!(
+        disconnected,
+        "slow reader retained an unbounded reply backlog"
+    );
 }
 
 #[test]

@@ -2,15 +2,26 @@
 
 mod common;
 
+use common::wait_for_game as wait_for;
 use common::*;
 use eksplode_re_core::{Config, Dir, DropTable, Event, PowerUpKind};
+use eksplode_re_net::protocol::v2::RoomRef;
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use eksplode_re_net::{Client, Host};
+
+fn create(host: &Host, name: &str) -> (Client, RoomRef) {
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let room = client
+        .create_room(name, &eksplode_re_core::RoomSettings::default(), 4)
+        .unwrap();
+    (client, room)
+}
 
 /// A developer host whose bombs burn so long that nobody dies during a movement test.
 fn plain_dev_host() -> Host {
     host_with(|c| {
         c.dev = true;
+        c.tick = std::time::Duration::from_millis(20);
         c.game = Config {
             fuse_ticks: 3000,
             ..Config::default()
@@ -21,6 +32,7 @@ fn plain_dev_host() -> Host {
 fn dev_host() -> Host {
     host_with(|c| {
         c.dev = true;
+        c.tick = std::time::Duration::from_millis(20);
         c.game = Config {
             block_density: 1.0,
             ..Config::default()
@@ -55,7 +67,7 @@ const DEFAULTS: fn() -> [f32; 8] = || DropTable::defaults(Config::default().powe
 #[test]
 fn f3_us4_as5_every_dev_message_is_refused_when_the_host_is_not_in_developer_mode() {
     let host = host();
-    let a = connect(host.addr(), "Ann");
+    let (a, _room) = create(&host, "Ann");
     match wait_for(&a, |m| matches!(m, ServerMsg::Welcome { .. })) {
         Some(ServerMsg::Welcome { dev, .. }) => assert!(!dev, "Welcome.dev is false"),
         other => panic!("{other:?}"),
@@ -68,20 +80,22 @@ fn f3_us4_as5_every_dev_message_is_refused_when_the_host_is_not_in_developer_mod
         ClientMsg::DevResetDrops,
     ] {
         a.send(msg).unwrap();
-        assert!(wait_for(&a, is_error("DevDisabled")).is_some());
+        assert!(wait_for(&a, is_error("Unsupported")).is_some());
     }
     // nothing was applied or broadcast
     assert!(a
         .recv_timeout(std::time::Duration::from_millis(200))
+        .map(ServerMsg::into_game_message)
         .map_or(true, |m| !is_dev_state(&m)));
 }
 
 #[test]
 fn f3_us4_as5_only_the_owner_may_use_the_dev_commands() {
     let host = dev_host();
-    let owner = connect(host.addr(), "Ann");
+    let (owner, room) = create(&host, "Ann");
     assert_eq!(welcome_slot(&owner), 0);
-    let guest = connect(host.addr(), "Bob");
+    let guest = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    guest.join_room(&room, "Bob").unwrap();
     assert_eq!(welcome_slot(&guest), 1);
     guest
         .send(ClientMsg::DevPauseBots { paused: true })
@@ -103,7 +117,7 @@ fn f3_us4_as5_only_the_owner_may_use_the_dev_commands() {
 #[test]
 fn f3_us4_as1_welcome_says_dev_and_a_joiner_gets_the_dev_state() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     match wait_for(&c, |m| matches!(m, ServerMsg::Welcome { .. })) {
         Some(ServerMsg::Welcome { dev, .. }) => assert!(dev),
         other => panic!("{other:?}"),
@@ -116,9 +130,10 @@ fn f3_us4_as1_welcome_says_dev_and_a_joiner_gets_the_dev_state() {
 #[test]
 fn dev_state_is_broadcast_to_everybody_when_it_changes() {
     let host = dev_host();
-    let owner = connect(host.addr(), "Ann");
+    let (owner, room) = create(&host, "Ann");
     welcome_slot(&owner);
-    let guest = connect(host.addr(), "Bob");
+    let guest = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    guest.join_room(&room, "Bob").unwrap();
     welcome_slot(&guest);
     let _ = dev_state(&owner);
     let _ = dev_state(&guest);
@@ -175,20 +190,15 @@ fn bomb_and_watch(c: &Client) -> (usize, Vec<PowerUpKind>) {
     (destroyed, spawned)
 }
 
-fn start_and_bomb(
-    host: &Host,
-    c: &Client,
-    chances: [f32; 8],
-    before_start: bool,
-) -> (usize, Vec<PowerUpKind>) {
+fn start_and_bomb(c: &Client, chances: [f32; 8], before_start: bool) -> (usize, Vec<PowerUpKind>) {
     welcome_slot(c);
     let _ = dev_state(c);
-    host.add_bot();
+    c.send(ClientMsg::AddBot).unwrap();
     if before_start {
         set_drops(c, chances);
         let _ = dev_state(c);
     }
-    host.start_match();
+    c.send(ClientMsg::Start).unwrap();
     assert!(wait_for(c, |m| matches!(m, ServerMsg::Start { .. })).is_some());
     if !before_start {
         // the table changes while the match runs
@@ -200,9 +210,8 @@ fn start_and_bomb(
 #[test]
 fn f3_us4_as3_a_table_with_punch_at_100_percent_drops_punch_from_every_block() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
-    let (destroyed, spawned) =
-        start_and_bomb(&host, &c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], true);
+    let (c, _room) = create(&host, "Ann");
+    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], true);
     assert!(destroyed >= 1, "the bomb must destroy a block");
     assert_eq!(spawned.len(), destroyed, "every block dropped something");
     assert!(
@@ -214,16 +223,15 @@ fn f3_us4_as3_a_table_with_punch_at_100_percent_drops_punch_from_every_block() {
 #[test]
 fn f3_us4_as3_a_table_of_zeroes_drops_nothing_and_punch_at_zero_never_drops_punch() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
-    let (destroyed, spawned) = start_and_bomb(&host, &c, [0.0; 8], true);
+    let (c, _room) = create(&host, "Ann");
+    let (destroyed, spawned) = start_and_bomb(&c, [0.0; 8], true);
     assert!(destroyed >= 1);
     assert!(spawned.is_empty(), "{spawned:?}");
 
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     // everything but punch at 100 %: sums above 1.0 are scaled and punch never shows up
-    let (destroyed, spawned) =
-        start_and_bomb(&host, &c, [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0], true);
+    let (destroyed, spawned) = start_and_bomb(&c, [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0], true);
     assert!(destroyed >= 1);
     assert!(spawned.len() <= destroyed, "at most one item per block");
     assert!(!spawned.is_empty());
@@ -233,9 +241,8 @@ fn f3_us4_as3_a_table_of_zeroes_drops_nothing_and_punch_at_zero_never_drops_punc
 #[test]
 fn f3_us4_as4_a_table_set_mid_match_applies_to_blocks_destroyed_afterwards() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
-    let (destroyed, spawned) =
-        start_and_bomb(&host, &c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], false);
+    let (c, _room) = create(&host, "Ann");
+    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], false);
     assert!(destroyed >= 1);
     assert_eq!(spawned.len(), destroyed);
     assert!(spawned.iter().all(|k| *k == PowerUpKind::Punch));
@@ -244,7 +251,7 @@ fn f3_us4_as4_a_table_set_mid_match_applies_to_blocks_destroyed_afterwards() {
 #[test]
 fn f3_us4_as4_reset_restores_the_default_table() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
     set_drops(&c, [0.5; 8]);
@@ -256,7 +263,7 @@ fn f3_us4_as4_reset_restores_the_default_table() {
 #[test]
 fn bad_values_are_refused_and_change_nothing() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
     for chances in [
@@ -269,7 +276,7 @@ fn bad_values_are_refused_and_change_nothing() {
             chances: chances.clone(),
         })
         .ok();
-        assert!(wait_for(&c, is_error("BadValue")).is_some(), "{chances:?}");
+        assert!(wait_for(&c, is_error("BadRoom")).is_some(), "{chances:?}");
     }
     // the table is still the default one
     c.send(ClientMsg::DevPauseBots { paused: false }).unwrap();
@@ -301,13 +308,13 @@ fn bot_positions(c: &Client, n: usize) -> Vec<eksplode_re_core::Pos> {
 #[test]
 fn f3_us4_as2_paused_bots_stand_still_and_resume_on_request() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
-    host.add_bot();
+    c.send(ClientMsg::AddBot).unwrap();
     c.send(ClientMsg::DevPauseBots { paused: true }).unwrap();
     assert!(dev_state(&c).0);
-    host.start_match();
+    c.send(ClientMsg::Start).unwrap();
     assert!(wait_for(&c, |m| matches!(m, ServerMsg::Start { .. })).is_some());
     let still = bot_positions(&c, 40);
     assert!(
@@ -325,11 +332,11 @@ fn f3_us4_as2_paused_bots_stand_still_and_resume_on_request() {
 #[test]
 fn f3_us4_as2_pausing_mid_match_stops_the_bots_within_20_ticks_but_not_the_humans() {
     let host = plain_dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
-    host.add_bot();
-    host.start_match();
+    c.send(ClientMsg::AddBot).unwrap();
+    c.send(ClientMsg::Start).unwrap();
     assert!(wait_for(&c, |m| matches!(m, ServerMsg::Start { .. })).is_some());
     let _ = bot_positions(&c, 10);
     c.send(ClientMsg::DevPauseBots { paused: true }).unwrap();
@@ -365,13 +372,13 @@ fn f3_us4_as2_pausing_mid_match_stops_the_bots_within_20_ticks_but_not_the_human
 #[test]
 fn f3_us4_as2_placed_bombs_keep_burning_while_the_bots_are_paused() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
+    let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
-    host.add_bot();
+    c.send(ClientMsg::AddBot).unwrap();
     c.send(ClientMsg::DevPauseBots { paused: true }).unwrap();
     assert!(dev_state(&c).0);
-    host.start_match();
+    c.send(ClientMsg::Start).unwrap();
     let mut sent = false;
     let mut exploded = false;
     while let Some(m) = wait_for(&c, |m| matches!(m, ServerMsg::Snapshot { .. })) {
@@ -397,9 +404,8 @@ fn f3_us4_as2_placed_bombs_keep_burning_while_the_bots_are_paused() {
 #[test]
 fn f3_us2_as10_a_table_with_kick_at_100_percent_drops_only_kicks() {
     let host = dev_host();
-    let c = connect(host.addr(), "Ann");
-    let (destroyed, spawned) =
-        start_and_bomb(&host, &c, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], true);
+    let (c, _room) = create(&host, "Ann");
+    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], true);
     assert!(destroyed >= 1);
     assert_eq!(spawned.len(), destroyed);
     assert!(

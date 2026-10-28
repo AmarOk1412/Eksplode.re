@@ -31,12 +31,15 @@ fn a_busy_game_port_is_reported_too() {
 #[test]
 fn shutdown_tells_every_client_and_closes_the_sockets() {
     let s = server(|_| {});
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Web");
+    let mut ws = RoomWs::create(s.http_addr(), "Web");
     ws.welcome_slot();
-    let tcp = eksplode_re_net::Client::connect(&s.game_addr().to_string(), "Tcp").unwrap();
+    let tcp = eksplode_re_net::Client::connect_unjoined(&s.game_addr().to_string()).unwrap();
+    tcp.join_room(&ws.reference, "Tcp").unwrap();
     // wait for the terminal client to be in the lobby
-    let welcome = tcp.recv_timeout(WAIT).unwrap();
+    let welcome = std::iter::from_fn(|| tcp.recv_timeout(WAIT).ok())
+        .map(ServerMsg::into_game_message)
+        .find(|message| matches!(message, ServerMsg::Welcome { .. }))
+        .unwrap();
     assert!(matches!(welcome, ServerMsg::Welcome { slot: 1, .. }));
 
     s.shutdown();
@@ -46,11 +49,37 @@ fn shutdown_tells_every_client_and_closes_the_sockets() {
     assert_eq!(ws.close_code().unwrap_or(1001), 1001);
     let mut told = false;
     while let Ok(m) = tcp.recv_timeout(WAIT) {
-        if matches!(m, ServerMsg::Error { code, .. } if code == "HostLeft") {
+        if matches!(m.into_game_message(), ServerMsg::Error { code, .. } if code == "HostLeft") {
             told = true;
         }
     }
     assert!(told, "the terminal client is told");
+}
+
+#[test]
+fn detached_web_service_withdraws_its_advertised_origin_without_stopping_the_host() {
+    use eksplode_re_net::{Host, HostConfig};
+    let host = Host::start(HostConfig {
+        bind: "0.0.0.0:0".into(),
+        ..HostConfig::default()
+    })
+    .unwrap();
+    let web = Server::attach(host.handle(), host.addr(), options()).unwrap();
+    let advertised: serde_json::Value =
+        serde_json::to_value(host.handle().directory(None).unwrap()).unwrap();
+    assert_eq!(
+        advertised["sources"][0]["web_origin"],
+        format!("http://{}", web.http_addr())
+    );
+    assert_eq!(
+        advertised["sources"][0]["game_addr"],
+        format!("127.0.0.1:{}", host.addr().port())
+    );
+    drop(web);
+    let remaining: serde_json::Value =
+        serde_json::to_value(host.handle().directory(None).unwrap()).unwrap();
+    assert!(remaining["sources"][0]["web_origin"].is_null());
+    assert_eq!(remaining["sources"][0]["status"], "fresh");
 }
 
 #[test]
@@ -59,22 +88,35 @@ fn the_banner_shows_the_addresses_and_how_to_stop() {
     let banner = s.banner();
     assert!(banner.contains("Eksplode.re server running"), "{banner}");
     assert!(banner.contains(&format!(
-        "Web page:        http://0.0.0.0:{}/",
+        "Web page:        http://127.0.0.1:{}/",
         s.http_addr().port()
     )));
     assert!(banner.contains(&format!(
-        "Terminal client: eksplode-re-cli join 0.0.0.0:{}",
+        "Terminal client: eksplode-re-cli join 127.0.0.1:{}",
         s.game_addr().port()
     )));
     assert!(banner.contains("Stop:            Ctrl+C"));
 }
 
 #[test]
-fn bots_are_pre_added_to_the_lobby() {
+fn startup_bots_are_added_only_after_explicit_room_creation() {
     let s = server(|o| o.bots = 2);
-    let mut ws = Ws::open(s.http_addr());
-    ws.join("Ann");
-    assert_eq!(ws.welcome_slot(), 2, "two slots are taken by bots");
+    let directory: serde_json::Value =
+        serde_json::from_slice(&get(s.http_addr(), "/rooms").body).unwrap();
+    assert!(directory["rooms"].as_array().unwrap().is_empty());
+    let mut ws = RoomWs::create(s.http_addr(), "Ann");
+    let welcome = ws
+        .recv_until(|message| matches!(message, ServerMsg::Welcome { .. }))
+        .unwrap();
+    match welcome {
+        ServerMsg::Welcome { slot, lobby, .. } => {
+            assert_eq!(slot, 0, "creation admits the owner before startup bots");
+            assert_eq!(lobby.participants(), 3);
+            assert_eq!(lobby.slots[1].controller, eksplode_re_core::Controller::Bot);
+            assert_eq!(lobby.slots[2].controller, eksplode_re_core::Controller::Bot);
+        }
+        _ => panic!("expected Welcome"),
+    }
 }
 
 #[test]
@@ -126,22 +168,26 @@ fn us3_as1_attach_shares_a_match_host_that_someone_else_owns() {
     let web = Server::attach(host.handle(), host.addr(), options()).unwrap();
     assert_eq!(web.game_addr(), host.addr());
 
-    let mut ws = Ws::open(web.http_addr());
-    ws.join("Web");
+    let mut ws = RoomWs::create(web.http_addr(), "Web");
     assert_eq!(ws.welcome_slot(), 0);
-    let tcp = eksplode_re_net::Client::connect(&host.addr().to_string(), "Term").unwrap();
-    let joined = tcp.recv_timeout(WAIT).unwrap();
+    let tcp = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    tcp.join_room(&ws.reference, "Term").unwrap();
+    let joined = std::iter::from_fn(|| tcp.recv_timeout(WAIT).ok())
+        .map(ServerMsg::into_game_message)
+        .find(|message| matches!(message, ServerMsg::Welcome { .. }))
+        .unwrap();
     assert!(
         matches!(joined, ServerMsg::Welcome { slot: 1, .. }),
         "{joined:?}"
     );
 
     // stopping the page leaves the match host running for the terminal player
+    let room = ws.reference.clone();
     drop(web);
-    host.start_match();
+    host.handle().start_room(&room).unwrap();
     let mut ticks = false;
     while let Ok(m) = tcp.recv_timeout(WAIT) {
-        if matches!(m, ServerMsg::Snapshot { .. }) {
+        if matches!(m.into_game_message(), ServerMsg::Snapshot { .. }) {
             ticks = true;
             break;
         }

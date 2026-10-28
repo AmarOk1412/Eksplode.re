@@ -19,7 +19,9 @@ Options:
   --seed <U64>             fixed RNG seed for every match (default: random)
   --allow-origin <ORIGIN>  accept WebSocket connections from this web origin (repeatable)
   --allow-any-origin       accept WebSocket connections from any web origin (unsafe)
-  --max-connections <N>    open HTTP/WebSocket connections (default 64, minimum 4)
+    --max-connections <N>    maximum open HTTP/WebSocket connections, 4-1024 (default 256)
+    --max-rooms <N>          maximum simultaneous rooms, 1-128 (default 32)
+    --server-id <ID>         stable host identifier, 1-64 ASCII characters
   --room-name <TEXT>       default room name, at most 24 characters (default: the owner's name plus 's room)
   --mode <MODE>            default mode: normal, team or chaser (default normal)
   --size <SIZE>            default board size: small, medium or large (default small)
@@ -113,6 +115,20 @@ where
                 };
             }
             "--seed" => opts.seed = Some(parse_value(&arg, it.next())?),
+            "--server-id" => {
+                let identifier = value(&arg, it.next())?;
+                if !eksplode_re_net::room::valid_server_id(&identifier) {
+                    return Err(invalid(&arg, identifier));
+                }
+                opts.server_id = Some(identifier);
+            }
+            "--max-rooms" => {
+                let input = value(&arg, it.next())?;
+                opts.max_rooms = match input.parse::<u16>() {
+                    Ok(count) if (1..=128).contains(&count) => count,
+                    _ => return Err(invalid(&arg, input)),
+                };
+            }
             "--allow-origin" => {
                 let v = value(&arg, it.next())?;
                 let has_scheme = v.split_once("://").is_some_and(|(s, rest)| {
@@ -154,7 +170,7 @@ where
             "--max-connections" => {
                 let v = value(&arg, it.next())?;
                 opts.max_connections = match v.parse::<usize>() {
-                    Ok(n) if n >= 4 => n,
+                    Ok(n) if (4..=1024).contains(&n) => n,
                     _ => return Err(invalid(&arg, v)),
                 };
             }

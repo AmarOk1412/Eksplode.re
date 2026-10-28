@@ -6,8 +6,8 @@ use std::sync::atomic::Ordering;
 use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
-use eksplode_re_net::codec::decode;
-use eksplode_re_net::protocol::{ClientMsg, ServerMsg, MAX_LINE};
+use eksplode_re_net::codec::decode_client;
+use eksplode_re_net::protocol::{ServerMsg, MAX_LINE};
 use eksplode_re_net::Client;
 use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::{CloseFrame, WebSocketConfig};
@@ -49,6 +49,7 @@ type Socket = WebSocket<Replay>;
 
 /// Runs the WebSocket session until either side ends it.
 pub fn run(stream: TcpStream, head: Vec<u8>, ctx: &Ctx) {
+    let peer = stream.peer_addr().ok();
     let _ = stream.set_read_timeout(Some(POLL));
     let _ = stream.set_nodelay(true);
     let config = WebSocketConfig::default()
@@ -66,7 +67,11 @@ pub fn run(stream: TcpStream, head: Vec<u8>, ctx: &Ctx) {
             Err(HandshakeError::Failure(_)) => return,
         }
     };
-    let Ok(client) = ctx.host.connect(false) else {
+    let connection = match peer {
+        Some(peer) => ctx.host.connect_peer(false, peer),
+        None => ctx.host.connect(false),
+    };
+    let Ok(client) = connection else {
         close(&mut socket, CloseCode::Away, "server stopping");
         return;
     };
@@ -77,7 +82,7 @@ fn bridge(socket: &mut Socket, client: &Client, ctx: &Ctx) {
     let mut errors = 0;
     loop {
         match socket.read() {
-            Ok(Message::Text(text)) => match decode::<ClientMsg>(text.as_bytes()) {
+            Ok(Message::Text(text)) => match decode_client(text.as_bytes()) {
                 Ok(msg) => {
                     if client.send(msg).is_err() {
                         return close(socket, CloseCode::Away, "server stopping");

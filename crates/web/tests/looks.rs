@@ -8,7 +8,7 @@ use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use serde_json::json;
 
-fn welcome_looks(ws: &mut Ws) -> Vec<Look> {
+fn welcome_looks(ws: &mut RoomWs) -> Vec<Look> {
     match ws.recv_until(|m| matches!(m, ServerMsg::Welcome { .. })) {
         Some(ServerMsg::Welcome { looks, .. }) => looks,
         other => panic!("expected Welcome, got {other:?}"),
@@ -18,10 +18,10 @@ fn welcome_looks(ws: &mut Ws) -> Vec<Look> {
 #[test]
 fn two_tabs_see_each_other_s_looks_in_welcome_and_lobby() {
     let s = server(|_| {});
-    let mut a = Ws::open(s.http_addr());
-    a.join_with_look(
+    let mut a = RoomWs::create_with_look(
+        s.http_addr(),
         "Ann",
-        json!({"colour":"Green","gender":"Female","head":"Crown","face":"Moustache"}),
+        Some(json!({"colour":"Green","gender":"Female","head":"Crown","face":"Moustache"})),
     );
     let looks = welcome_looks(&mut a);
     let ann = Look {
@@ -32,8 +32,12 @@ fn two_tabs_see_each_other_s_looks_in_welcome_and_lobby() {
     };
     assert_eq!(looks[0], ann);
 
-    let mut b = Ws::open(s.http_addr());
-    b.join_with_look("Bob", json!({"colour":"Pink","head":"Cap"}));
+    let mut b = RoomWs::join_with_look(
+        s.http_addr(),
+        &a.reference,
+        "Bob",
+        Some(json!({"colour":"Pink","head":"Cap"})),
+    );
     let seen_by_bob = welcome_looks(&mut b);
     assert_eq!(seen_by_bob[0], ann, "Bob sees Ann's look");
     assert_eq!(seen_by_bob[1].colour, Colour::Pink);
@@ -53,11 +57,9 @@ fn two_tabs_see_each_other_s_looks_in_welcome_and_lobby() {
 #[test]
 fn f3_us1_as6_a_look_change_over_websocket_reaches_the_other_tab() {
     let s = server(|_| {});
-    let mut a = Ws::open(s.http_addr());
-    a.join("Ann");
+    let mut a = RoomWs::create(s.http_addr(), "Ann");
     welcome_looks(&mut a);
-    let mut b = Ws::open(s.http_addr());
-    b.join("Bob");
+    let mut b = RoomWs::join(s.http_addr(), &a.reference, "Bob");
     welcome_looks(&mut b);
     a.send(&ClientMsg::SetLook {
         look: json!({"colour":"Teal","gender":"Male","head":"Headphones","face":"Glasses"}),
@@ -77,25 +79,33 @@ fn f3_us1_as6_a_look_change_over_websocket_reaches_the_other_tab() {
 #[test]
 fn hostile_looks_in_text_frames_never_break_anybody() {
     let s = server(|_| {});
-    let mut good = Ws::open(s.http_addr());
-    good.join("Ann");
+    let mut good = RoomWs::create(s.http_addr(), "Ann");
     welcome_looks(&mut good);
     let hostile = [
-        r#"{"type":"Join","version":1,"name":"M1","look":7}"#,
-        r#"{"type":"Join","version":1,"name":"M2","look":{"colour":{"x":[1,2,3]},"head":null}}"#,
-        r#"{"type":"Join","version":1,"name":"M3","look":"Blue"}"#,
+        json!(7),
+        json!({"colour":{"x":[1,2,3]},"head":null}),
+        json!("Blue"),
     ];
-    for (i, text) in hostile.into_iter().enumerate() {
+    for (i, look) in hostile.into_iter().enumerate() {
         let mut bad = Ws::open(s.http_addr());
-        bad.send_text(text);
-        let looks = welcome_looks(&mut bad);
-        assert_eq!(looks.len(), 4, "{text}");
-        assert_eq!(looks[i + 1], Look::default_for(i + 1), "{text}");
-        bad.send_text(r#"{"type":"SetLook","look":[[[]]]}"#);
-        bad.send_text(&format!(
-            r#"{{"type":"SetLook","look":"{}"}}"#,
-            "z".repeat(5000)
-        ));
+        bad.hello_v2().unwrap();
+        bad.send_value(&json!({"type":"JoinRoom", "request_id":"hostile-join", "name":format!("M{i}"),
+            "room_id":good.reference.room_id, "server_epoch":good.reference.server_epoch, "look":look}));
+        let welcome = bad.recv_value().unwrap();
+        assert_eq!(welcome["type"], "Welcome");
+        let slot = welcome["slot"].as_u64().unwrap() as usize;
+        let looks: Vec<Look> = serde_json::from_value(welcome["looks"].clone()).unwrap();
+        assert_eq!(looks.len(), 4);
+        assert_eq!(looks[slot], Look::default_for(slot));
+        for (index, look) in [json!([[[]]]), json!("z".repeat(5000))]
+            .into_iter()
+            .enumerate()
+        {
+            bad.send_value(
+                &json!({"type":"SetLook", "request_id":format!("hostile-look-{index}"),
+                "room_id":good.reference.room_id, "look":look}),
+            );
+        }
     }
     // the first player is untouched and the server still plays
     good.send(&ClientMsg::AddBot);
@@ -109,13 +119,43 @@ fn hostile_looks_in_text_frames_never_break_anybody() {
 fn a_taken_colour_over_websocket_is_adjusted_with_a_notice() {
     let s = server(|_| {});
     let mut a = Ws::open(s.http_addr());
-    a.join_with_look("Ann", json!({"colour":"Yellow"}));
-    welcome_looks(&mut a);
+    a.hello_v2().unwrap();
+    a.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Ann", "capacity":4,
+        "settings":eksplode_re_core::RoomSettings::default(), "look":{"colour":"Yellow"}}),
+    );
+    let first = a.recv_value().unwrap();
+    assert_eq!(first["type"], "Welcome");
     let mut b = Ws::open(s.http_addr());
-    b.join_with_look("Bob", json!({"colour":"Yellow"}));
-    let looks = welcome_looks(&mut b);
+    b.hello_v2().unwrap();
+    b.send_value(&json!({"type":"JoinRoom", "request_id":"join", "name":"Bob",
+        "room_id":first["room_id"], "server_epoch":first["server_epoch"], "look":{"colour":"Yellow"}}));
+    let looks: Vec<Look> =
+        serde_json::from_value(b.recv_value().unwrap()["looks"].clone()).unwrap();
     assert_eq!(looks[1].colour, Colour::Pink);
     let notice =
         b.recv_until(|m| matches!(m, ServerMsg::Error { code, .. } if code == "LookAdjusted"));
     assert!(notice.is_some());
+    b.send_value(
+        &json!({"type":"SetLook", "request_id":"change", "room_id":first["room_id"],
+        "look":{"colour":"Yellow", "head":"Crown"}}),
+    );
+    assert!(b
+        .recv_until(|message| matches!(message,
+        ServerMsg::Error { code, message } if code == "LookAdjusted" && message.contains("Pink")))
+        .is_some());
+    a.send_value(&json!({"type":"Ping", "nonce":77, "room_id":first["room_id"]}));
+    loop {
+        let value = a.recv_value().unwrap();
+        assert_ne!(
+            value["code"], "LookAdjusted",
+            "the notice belongs only to its sender"
+        );
+        if value["type"] == "Pong" {
+            break;
+        }
+    }
+    let directory: serde_json::Value =
+        serde_json::from_slice(&get(s.http_addr(), "/rooms").body).unwrap();
+    assert_eq!(directory["rooms"][0]["connected_humans"], 2);
 }

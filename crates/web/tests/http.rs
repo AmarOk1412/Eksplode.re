@@ -9,6 +9,74 @@ use common::*;
 const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:";
 
 #[test]
+fn room_directory_is_read_only_secret_free_and_works_at_the_player_connection_limit() {
+    let server = server(|options| options.max_connections = 4);
+    let mut owner = Ws::open(server.http_addr());
+    owner.hello_v2().unwrap();
+    owner.create_room_v2("create", "Owner");
+    let welcome = owner.recv_value().unwrap();
+    assert_eq!(welcome["type"], "Welcome");
+    let mut observers = Vec::new();
+    for _ in 0..3 {
+        let client =
+            eksplode_re_net::Client::connect_unjoined(&server.game_addr().to_string()).unwrap();
+        client.recv_timeout(WAIT).unwrap();
+        observers.push(client);
+    }
+    for path in ["/rooms", "/rooms?scope=local"] {
+        let response = get(server.http_addr(), path);
+        assert_eq!(response.status, 200);
+        assert_eq!(response.header("content-type"), Some("application/json"));
+        assert_eq!(response.header("cache-control"), Some("no-store"));
+        assert_eq!(response.header("access-control-allow-origin"), None);
+        let body = String::from_utf8(response.body).unwrap();
+        assert!(!body.contains(welcome["resume_proof"].as_str().unwrap()));
+        let directory: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
+        assert_eq!(directory["rooms"][0]["occupied"], 1);
+    }
+    for path in [
+        "/rooms?scope=invalid",
+        "/rooms?cursor=invalid",
+        "/rooms?scope=local&scope=known",
+        "/rooms?password=not-allowed",
+    ] {
+        assert_eq!(get(server.http_addr(), path).status, 400, "{path}");
+    }
+}
+
+#[test]
+fn room_directory_advertises_trusted_bound_addresses_without_joining() {
+    let server = server(|options| options.server_id = Some("metadata-test".into()));
+    let response = get(server.http_addr(), "/rooms?scope=local");
+    assert_eq!(response.status, 200);
+    let directory: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
+    assert!(directory["rooms"].as_array().unwrap().is_empty());
+    let source = &directory["sources"][0];
+    assert_eq!(source["server_id"], "metadata-test");
+    assert_eq!(source["status"], "fresh");
+    assert_eq!(source["protocol_version"], 2);
+    assert_eq!(source["game_addr"], server.game_addr().to_string());
+    assert_eq!(
+        source["web_origin"],
+        format!("http://{}", server.http_addr())
+    );
+    assert_eq!(source["server_epoch"].as_str().unwrap().len(), 32);
+    let mut owner = Ws::open(server.http_addr());
+    owner.hello_v2().unwrap();
+    owner.create_room_v2("create", "Owner");
+    let welcome = owner.recv_value().unwrap();
+    let directory: serde_json::Value =
+        serde_json::from_slice(&get(server.http_addr(), "/rooms").body).unwrap();
+    let room = &directory["rooms"][0];
+    assert_eq!(room["game_addr"], source["game_addr"]);
+    assert_eq!(room["web_origin"], source["web_origin"]);
+    assert!(!serde_json::to_string(&directory)
+        .unwrap()
+        .contains(welcome["resume_proof"].as_str().unwrap()));
+}
+
+#[test]
 fn us1_as1_the_page_and_its_files_are_served() {
     let s = server(|_| {});
     for (path, ctype) in [
@@ -18,11 +86,7 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/look.js", "text/javascript; charset=utf-8"),
         ("/room.js", "text/javascript; charset=utf-8"),
         ("/audio.js", "text/javascript; charset=utf-8"),
-Vorago did support a RST_STAT register, but it is not in the latest Programmer's Guide because it was not working as expected. For now, we do not know if they plan to fix it, but every reset event is considered as a Power On Reset and any system reset (POR, external reset, watchdog reset, or software reset) will fully reset the DAC’s logic,
-It depends the "fatal error":
-
-If it's a watchdog kick, or a EDAC error, it's not kept in the NVM. For EDAC errors, a APP error can be retrieven by PS-COMM. For now, we do not persist the information. FRAM is immune to radiations when it's not used, so we try to minimize the usage of this memory. The only drawback is that a multi bit error will
-         ("/style.css", "text/css; charset=utf-8"),
+        ("/style.css", "text/css; charset=utf-8"),
         ("/eksplode_re_render.wasm", "application/wasm"),
     ] {
         let r = get(s.http_addr(), path);
@@ -260,10 +324,12 @@ fn a_slow_request_that_never_finishes_is_closed() {
 
 #[test]
 fn beyond_the_connection_limit_the_answer_is_503() {
-    let s = server(|o| o.max_connections = 2);
+    let s = server(|o| o.max_connections = 4);
     let addr = s.http_addr();
     let _a = TcpStream::connect(addr).unwrap();
     let _b = TcpStream::connect(addr).unwrap();
+    let _c = TcpStream::connect(addr).unwrap();
+    let _d = TcpStream::connect(addr).unwrap();
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(get(addr, "/").status, 503);
     drop(_a);

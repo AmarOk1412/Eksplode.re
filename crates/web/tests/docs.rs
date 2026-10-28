@@ -154,7 +154,10 @@ fn options_table(usage: &str) -> String {
         "| Option | Meaning |".to_string(),
         "|--------|---------|".to_string(),
     ];
-    for line in usage.lines().filter(|l| l.starts_with("  -")) {
+    for line in usage
+        .lines()
+        .filter(|line| line.trim_start().starts_with('-'))
+    {
         let (flag, meaning) = line.trim().split_once("  ").expect("flag and meaning");
         rows.push(format!("| `{flag}` | {} |", meaning.trim()));
     }

@@ -30,16 +30,69 @@ fn open_game(limit: u32) -> Config {
 }
 
 fn hosting(host: Host) -> Online {
-    let client = host.local_client("Hosty").unwrap();
-    Online::hosting(host, client)
+    let probe = host.connect(false).unwrap();
+    probe
+        .send_v2(eksplode_re_net::protocol::v2::Request::Hello { version: 2 })
+        .unwrap();
+    let defaults = match probe.recv_timeout(Duration::from_secs(2)).unwrap() {
+        eksplode_re_net::protocol::ServerMsg::RoomV2(reply) => match *reply {
+            eksplode_re_net::protocol::v2::Reply::Hello { defaults, .. } => defaults,
+            _ => panic!("expected Hello"),
+        },
+        _ => panic!("expected room protocol"),
+    };
+    drop(probe);
+    let client = host.connect(true).unwrap();
+    Online::hosting_room(host, client, "Hosty".into(), defaults)
 }
 
 fn joined(host: &Host, name: &str) -> Online {
-    joined_at(host.addr(), name)
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    assert!(
+        matches!(client.recv_timeout(Duration::from_secs(2)).unwrap(),
+        eksplode_re_net::protocol::ServerMsg::RoomV2(reply)
+        if matches!(*reply, eksplode_re_net::protocol::v2::Reply::Hello { .. }))
+    );
+    client
+        .send_v2(eksplode_re_net::protocol::v2::Request::create_room(
+            eksplode_re_net::protocol::v2::RequestId::new("fixture-create").unwrap(),
+            name.into(),
+            &eksplode_re_core::RoomSettings::default(),
+            4,
+        ))
+        .unwrap();
+    Online::directory(client, name.into(), KeyBindings::default_for_slot(0))
 }
 
 fn joined_at(addr: std::net::SocketAddr, name: &str) -> Online {
-    Online::new(Client::connect(&addr.to_string(), name).unwrap())
+    selected_at(addr, name, KeyBindings::default_for_slot(0))
+}
+
+fn selected_at(addr: std::net::SocketAddr, name: &str, bindings: KeyBindings) -> Online {
+    let client = Client::connect_unjoined(&addr.to_string()).unwrap();
+    let mut online = Online::directory(client, name.into(), bindings);
+    assert!(pump_until(&mut online, |online| online.stage
+        == Stage::Directory
+        && !online.rooms.is_empty()));
+    assert_eq!(
+        online.rooms.len(),
+        1,
+        "this fixture must explicitly select one known test room"
+    );
+    online.handle_key(KeyCode::Enter);
+    online
+}
+
+fn filled_room(host: &Host) -> Vec<Online> {
+    let mut owner = joined(host, "p0");
+    assert!(pump_until(&mut owner, |online| online.slot == Some(0)));
+    let mut clients = vec![owner];
+    for index in 1..4 {
+        let mut client = joined_at(host.addr(), &format!("p{index}"));
+        assert!(pump_until(&mut client, |online| online.slot == Some(index)));
+        clients.push(client);
+    }
+    clients
 }
 
 fn pump_until(o: &mut Online, mut done: impl FnMut(&mut Online) -> bool) -> bool {
@@ -76,6 +129,43 @@ fn a_client_reaches_the_lobby_with_its_slot() {
     assert!(pump_until(&mut a, |o| o.stage == Stage::Lobby && o.slot == Some(0)));
     assert!(screen(&a).contains("Ann"));
     assert!(screen(&a).contains("(you)"));
+}
+
+#[test]
+fn v2_terminal_directory_creates_joins_and_leaves_explicit_rooms() {
+    let host = host_with(open_game(1000));
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let mut owner = Online::directory(client, "Owner".into(), KeyBindings::default_for_slot(0));
+    assert!(pump_until(&mut owner, |online| online.stage == Stage::Directory));
+    assert!(screen(&owner).contains("Rooms"));
+    assert_eq!(owner.slot, None);
+    owner.handle_key(KeyCode::Char('c'));
+    assert_eq!(owner.stage, Stage::Creating);
+    for _ in 0..5 {
+        owner.handle_key(KeyCode::Enter);
+    }
+    assert!(pump_until(&mut owner, |online| online.stage == Stage::Lobby));
+    assert_eq!(owner.slot, Some(0));
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let mut member = Online::directory(client, "Member".into(), KeyBindings::default_for_slot(0));
+    assert!(pump_until(&mut member, |online| online.stage
+        == Stage::Directory
+        && online.rooms.len() == 1));
+    assert!(screen(&member).contains("Owner"));
+    member.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut member, |online| online.stage == Stage::Lobby));
+    assert_eq!(member.slot, Some(1));
+    member.handle_key(KeyCode::Esc);
+    assert_eq!(member.stage, Stage::ConfirmLeave);
+    member.handle_key(KeyCode::Esc);
+    assert_eq!(member.stage, Stage::Lobby);
+    member.handle_key(KeyCode::Esc);
+    member.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut member, |online| online.stage == Stage::Directory));
+    assert_eq!(member.slot, None);
+    assert!(pump_until(&mut owner, |online| online.lobby.slots[1]
+        .controller
+        == Controller::Empty));
 }
 
 #[test]
@@ -170,10 +260,7 @@ fn a_joining_clients_custom_keys_drive_only_its_player() {
         bomb: KeyCode::Char('5'),
         punch: KeyCode::Char('6'),
     };
-    let mut a = Online::with_key_bindings(
-        Client::connect(&h.host_addr().unwrap().to_string(), "Ann").unwrap(),
-        bindings,
-    );
+    let mut a = selected_at(h.host_addr().unwrap(), "Ann", bindings);
     assert!(pump_until(&mut a, |o| o.slot == Some(1)));
     h.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut h, |o| o.stage == Stage::Playing));
@@ -229,15 +316,16 @@ fn the_host_leaving_closes_the_client() {
 }
 
 #[test]
-fn a_full_match_closes_with_a_message() {
+fn a_full_room_returns_to_the_directory_with_a_message() {
     let host = host_with(open_game(1000));
-    let mut firsts: Vec<Online> = (0..4).map(|i| joined(&host, &format!("p{i}"))).collect();
+    let mut firsts = filled_room(&host);
     for f in &mut firsts {
         assert!(pump_until(f, |o| o.slot.is_some()));
     }
-    let mut late = joined(&host, "late");
-    assert!(pump_until(&mut late, |o| o.stage == Stage::Closed));
-    assert!(late.notice.unwrap().contains("full"));
+    let mut late = joined_at(host.addr(), "late");
+    assert!(pump_until(&mut late, |o| o.stage == Stage::Directory
+        && o.notice.is_some()));
+    assert!(late.notice.unwrap().to_lowercase().contains("full"));
 }
 
 #[test]
@@ -348,12 +436,14 @@ fn host_opts(bind: Option<&str>, web_port: Option<u16>) -> HostOptions {
         room: Default::default(),
         room_given: false,
         no_setup: true,
+        server_id: None,
+        limits: Default::default(),
     }
 }
 
 #[test]
 fn f3_us4_as6_host_dev_prints_the_developer_warning_and_the_default_does_not() {
-    let mut opts = host_opts(Some("0.0.0.0"), Some(8080));
+    let mut opts = host_opts(Some("127.0.0.1"), Some(8080));
     assert!(app::host_warnings(&opts).is_empty());
     opts.dev = true;
     let w = app::host_warnings(&opts);
@@ -388,11 +478,11 @@ fn us3_as1_the_lobby_shows_the_web_page_only_when_there_is_one() {
 fn us3_as1_the_web_page_address_uses_loopback_for_wildcards() {
     assert_eq!(
         app::web_url("0.0.0.0:8080".parse().unwrap()),
-        "http://0.0.0.0:8080/"
+        "http://127.0.0.1:8080/"
     );
     assert_eq!(
         app::web_url("0.0.0.0:9000".parse().unwrap()),
-        "http://0.0.0.0:9000/"
+        "http://127.0.0.1:9000/"
     );
     assert_eq!(
         app::web_url("[::1]:80".parse().unwrap()),
@@ -413,11 +503,13 @@ fn us3_as1_non_loopback_binds_print_the_exposure_warning() {
         w[0].contains("192.168.1.10") && w[0].contains("no encryption"),
         "{w:?}"
     );
+    assert!(w[0].contains("--bind 127.0.0.1"), "{w:?}");
     // the default game port listens on every interface
     let w = app::host_warnings(&host_opts(None, None));
     assert!(w.len() == 1 && w[0].contains("0.0.0.0"), "{w:?}");
     // loopback is quiet
-    assert!(app::host_warnings(&host_opts(Some("0.0.0.0"), Some(8080))).is_empty());
+    assert!(app::host_warnings(&host_opts(Some("127.0.0.1"), Some(8080))).is_empty());
+    assert!(!app::host_warnings(&host_opts(Some("0.0.0.0"), Some(8080))).is_empty());
     assert!(app::host_warnings(&host_opts(Some("::1"), None)).is_empty());
 }
 
@@ -438,6 +530,7 @@ fn us3_as3_a_refused_connection_is_explained_in_one_line() {
         addr: format!("0.0.0.0:{port}"),
         name: "Ann".into(),
         key_bindings: eksplode_re_cli::input::KeyBindings::default_for_slot(0),
+        room_id: None,
     })
     .expect_err("nobody listens there");
     let text = one_line(&err);
@@ -468,26 +561,40 @@ fn us3_as3_every_refusal_has_its_own_explanation() {
 #[test]
 fn us3_as3_a_rejection_is_remembered_so_the_notice_can_stay_visible() {
     let host = host_with(open_game(1000));
-    let mut firsts: Vec<Online> = (0..4).map(|i| joined(&host, &format!("p{i}"))).collect();
+    let mut firsts = filled_room(&host);
     for f in &mut firsts {
         assert!(pump_until(f, |o| o.slot.is_some()));
     }
-    let mut late = joined(&host, "late");
+    let mut late = joined_at(host.addr(), "late");
     assert!(late.rejection_shown(Duration::ZERO).is_none());
-    assert!(pump_until(&mut late, |o| o.stage == Stage::Closed));
+    assert!(pump_until(&mut late, |o| o.stage == Stage::Directory
+        && o.notice.is_some()));
     assert_eq!(
         late.rejection_shown(Duration::ZERO),
         Some(RejectReason::Full)
     );
     assert_eq!(late.rejection_shown(Duration::from_secs(60)), None);
     assert!(firsts[0].rejection_shown(Duration::ZERO).is_none());
+    firsts[3].handle_key(KeyCode::Esc);
+    firsts[3].handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut firsts[3], |online| online.stage == Stage::Directory));
+    late.refresh_rooms();
+    assert!(pump_until(&mut late, |online| online.rooms.len() == 1
+        && online.rooms[0].occupied == 3));
+    late.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut late, |online| online.slot == Some(3)));
+    assert!(
+        late.rejection_shown(Duration::ZERO).is_none(),
+        "successful retry clears the previous refusal"
+    );
 }
 
 #[test]
 fn us3_as3_names_and_running_matches_are_refused_with_a_reason() {
     let host = host_with(open_game(10_000));
     let mut bad = joined(&host, "");
-    assert!(pump_until(&mut bad, |o| o.stage == Stage::Closed));
+    assert!(pump_until(&mut bad, |o| o.stage == Stage::Directory
+        && o.notice.is_some()));
     assert_eq!(
         bad.rejection_shown(Duration::ZERO),
         Some(RejectReason::BadName)
@@ -497,8 +604,9 @@ fn us3_as3_names_and_running_matches_are_refused_with_a_reason() {
     assert!(pump_until(&mut a, |o| o.slot == Some(0)));
     a.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut a, |o| o.stage == Stage::Playing));
-    let mut late = joined(&host, "Late");
-    assert!(pump_until(&mut late, |o| o.stage == Stage::Closed));
+    let mut late = joined_at(host.addr(), "Late");
+    assert!(pump_until(&mut late, |o| o.stage == Stage::Directory
+        && o.notice.is_some()));
     assert_eq!(
         late.rejection_shown(Duration::ZERO),
         Some(RejectReason::InMatch)
@@ -507,17 +615,29 @@ fn us3_as3_names_and_running_matches_are_refused_with_a_reason() {
 
 #[test]
 fn f3_us1_as7_terminal_players_get_a_default_look_and_keep_working() {
-    use std::io::Write;
     let host = host_with(open_game(1000));
     // a browser-like participant joins first and chooses a look
-    let mut raw = std::net::TcpStream::connect(host.addr()).unwrap();
-    raw.write_all(
-        br#"{"type":"Join","version":1,"name":"Web","look":{"colour":"Green","head":"Crown"}}
-"#,
-    )
-    .unwrap();
-    std::thread::sleep(Duration::from_millis(150));
-    let mut a = joined(&host, "Term");
+    let browser = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let mut request = eksplode_re_net::protocol::v2::Request::create_room(
+        eksplode_re_net::protocol::v2::RequestId::new("browser-create").unwrap(),
+        "Web".into(),
+        &eksplode_re_core::RoomSettings::default(),
+        4,
+    );
+    if let eksplode_re_net::protocol::v2::Request::CreateRoom { look, .. } = &mut request {
+        *look = Some(r#"{"colour":"Green","head":"Crown"}"#.parse().unwrap());
+    }
+    browser.send_v2(request).unwrap();
+    let welcome = std::iter::from_fn(|| browser.recv_timeout(Duration::from_secs(2)).ok())
+        .map(eksplode_re_net::protocol::ServerMsg::into_game_message)
+        .find(|message| {
+            matches!(
+                message,
+                eksplode_re_net::protocol::ServerMsg::Welcome { .. }
+            )
+        });
+    assert!(welcome.is_some());
+    let mut a = joined_at(host.addr(), "Term");
     assert!(pump_until(&mut a, |o| o.slot == Some(1) && o.stage == Stage::Lobby));
     let s = screen(&a);
     assert!(s.contains("Web") && s.contains("Term"), "{s}");
@@ -525,7 +645,7 @@ fn f3_us1_as7_terminal_players_get_a_default_look_and_keep_working() {
     a.handle_key(KeyCode::Char('r'));
     assert!(pump_until(&mut a, |o| o.lobby.slots[1].ready));
     assert_eq!(a.stage, Stage::Lobby);
-    drop(raw);
+    drop(browser);
 }
 
 fn lobby_text_has(o: &Online, needle: &str) -> bool {
