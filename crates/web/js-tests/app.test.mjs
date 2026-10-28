@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage, timerText, devPanel } from "../assets/app.js";
+import { initialState, reduce, rejectText, lobbyOwner, hudRows, inputMessage, timerText, devPanel, resultRows, punchPowerActive } from "../assets/app.js";
 
 const lobby = (...controllers) => ({
   slots: Array.from({ length: 4 }, (_, i) => ({
@@ -81,13 +81,74 @@ test("us2_as3_a_takeover_is_announced_and_play_continues", () => {
   assert.equal(s.tick, 9);
 });
 
-test("the result is announced and the lobby returns", () => {
+test("the result is announced and waits for an explicit lobby return", () => {
   let s = run([welcome(1), { type: "Start", seed: 1, config: {} }]);
   assert.equal(reduce(s, { type: "Ended", outcome: { Winner: 1 } }).notice, "You won!");
   assert.equal(reduce(s, { type: "Ended", outcome: { Winner: 3 } }).notice, "Player 4 won");
   const end = reduce(s, { type: "Ended", outcome: "Draw" });
   assert.equal(end.notice, "Draw");
-  assert.equal(end.stage, "lobby");
+  assert.equal(end.stage, "results");
+  assert.equal(reduce(end, { type: "return-to-lobby" }).stage, "lobby");
+});
+
+test("us2_as9_punch_control_is_visible_only_while_the_local_player_has_punch", () => {
+  const state = { slot: 1, observation: { players: [{ has_punch: true }, { has_punch: false }] } };
+  assert.equal(punchPowerActive(state), false);
+  state.observation.players[1].has_punch = true;
+  assert.equal(punchPowerActive(state), true);
+  state.observation = null;
+  assert.equal(punchPowerActive(state), false);
+});
+
+test("us3_as1_round_result_keeps_final_standings_until_return_to_lobby", () => {
+  const players = [0, 1].map((i) => ({
+    alive: i === 1,
+    bombs_active: 0,
+    bombs_max: 1 + i,
+    range: 2 + i,
+    move_cooldown: 4,
+    has_punch: i === 1,
+    has_kick: false,
+    malus: null,
+  }));
+  const slots = lobby("Remote", "Remote");
+  slots.slots[0].name = "Ann";
+  slots.slots[1].name = "Bea";
+  const started = run([
+    welcome(0, slots),
+    { type: "Snapshot", tick: 40, state: { tick: 40, config: { base_move_cooldown: 4, tick_hz: 20 }, players }, events: [] },
+    { type: "Ended", outcome: { Winner: 1 } },
+  ]);
+  assert.equal(started.stage, "results");
+  assert.equal(started.notice, "Player 2 won");
+  assert.deepEqual(resultRows(started).map(({ label, standing }) => [label, standing]), [
+    ["Ann", "Eliminated"],
+    ["Bea", "Winner"],
+  ]);
+  assert.equal(resultRows(started)[1].range, 3);
+  assert.deepEqual(resultRows(started)[1].effects, ["punch"]);
+
+  const updated = reduce(started, { type: "Lobby", lobby: slots });
+  assert.equal(updated.stage, "results", "the server lobby update must not hide the result");
+  assert.equal(reduce(updated, { type: "return-to-lobby" }).stage, "lobby");
+  assert.equal(reduce(updated, { type: "return-to-lobby" }).result, null);
+});
+
+test("us3_as2_results_describe_draw_team_and_chaser_outcomes", () => {
+  const slots = lobby("Remote", "Remote", "Remote", "Remote");
+  const players = [
+    { alive: true, team: 0, role: "Normal" },
+    { alive: false, team: 0, role: "Normal" },
+    { alive: true, team: 1, role: "Normal" },
+    { alive: false, team: 1, role: "Normal" },
+  ];
+  const start = { ...initialState(), stage: "playing", slot: 0, lobby: slots, observation: { players, config: {} } };
+  assert.deepEqual(resultRows(reduce(start, { type: "Ended", outcome: "Draw" })).map((row) => row.standing), ["Draw", "Draw", "Draw", "Draw"]);
+  assert.deepEqual(resultRows(reduce(start, { type: "Ended", outcome: { TeamWin: 1 } })).map((row) => row.standing), ["Survived", "Eliminated", "Winner", "Winner"]);
+  const chaserPlayers = players.map((player, index) => ({ ...player, role: index === 0 ? "Chaser" : "Runner" }));
+  const chaserStart = { ...start, observation: { players: chaserPlayers, config: {} } };
+  assert.equal(resultRows(reduce(chaserStart, { type: "Ended", outcome: "ChaserWins" }))[0].standing, "Winner");
+  assert.equal(resultRows(reduce(chaserStart, { type: "Ended", outcome: "RunnersWin" }))[2].standing, "Winner");
 });
 
 test("a lobby message during play does not leave the game", () => {
@@ -213,7 +274,7 @@ test("f4_us3_as5_the_result_names_the_winning_team_and_its_members", () => {
   };
   const base = { ...initialState(), stage: "playing", slot: 2, lobby };
   const a = reduce(base, { type: "Ended", outcome: { TeamWin: 0 } });
-  assert.equal(a.stage, "lobby");
+  assert.equal(a.stage, "results");
   assert.equal(a.notice, "Team A wins (Ann, Bot 2)");
   const b = reduce(base, { type: "Ended", outcome: { TeamWin: 1 } });
   assert.equal(b.notice, "Team B wins (Cy, Di) - your team!");

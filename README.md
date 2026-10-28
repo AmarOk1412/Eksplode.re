@@ -108,7 +108,15 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 | Where | Move | Bomb | Punch |
 |-------|------|------|-------|
 | Browser keyboard | arrows or WASD | Space or E | Z or Q |
+| Mobile browser (portrait) | bottom-left joystick | bottom-right Bomb | bottom-right Punch, when powered |
+| Mobile browser (landscape) | existing horizontal layout | existing action layout | Punch only when powered |
 | Xbox-compatible controller | left stick or D-pad | A | B |
+
+On a touch-capable phone, including Firefox for Android, portrait play uses a joystick at the bottom left and bomb/power actions at the bottom right. Punch appears only while your player has the Punch power. If you rotate to landscape, the existing horizontal control layout remains in use. The game does not force an orientation change.
+
+After a round, the result screen shows the winner or mode outcome, final standings and each participant's available stats. It remains until Return to Lobby is selected.
+
+Every browser screen is also keyboard/controller navigable: Tab and Shift+Tab move focus, arrows move between choices, Enter or Space activates, and Escape opens or backs out of the menu hub.
 | Terminal P1 | arrow keys | Space | Z |
 | Terminal P2 | W A S D | E | C |
 | Terminal P3 | I J K L | O | U |

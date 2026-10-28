@@ -261,6 +261,27 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
 }
 .menu-hub button { width: 100%; }
+
+.results {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 10;
+  display: grid;
+  gap: 12px;
+  width: min(820px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  padding: 20px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+.results h2 { text-align: center; }
+.results h3 { margin: 0; font-size: 1rem; text-align: center; }
+.results-table-wrap { max-width: 100%; overflow: auto; }
+.results-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.results-table th, .results-table td { border: 2px solid var(--ink); padding: 6px 8px; text-align: left; }
+.results-table th { background: var(--ink); color: #fff; }
+#return-to-lobby { justify-self: center; min-height: 48px; }
 .osk {
   position: fixed;
   inset: 50% auto auto 50%;
@@ -389,4 +410,182 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   .controls-panel { left: 12px; right: 12px; width: auto; padding: 16px; }
   .control-binding { grid-template-columns: minmax(76px, 0.8fr) minmax(0, 1.2fr); }
   .controls-panel .buttons button { font-size: 0.95rem; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #app { max-width: none; min-height: 100dvh; padding: 6px 12px; gap: 6px; align-content: start; }
+  header { display: flex; align-items: center; justify-content: center; gap: 12px; }
+  h1 { font-size: 1.6rem; line-height: 1; }
+  #notice { min-height: 0; margin: 0; }
+
+  .room {
+    width: min(820px, 100%);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 4px 10px;
+    padding: 8px 12px;
+    align-items: center;
+  }
+  .room > h2, .room > .mode-cards, .room > #room-mode-hint,
+  .room > #room-ff-label, .room > #room-create { grid-column: 1 / -1; }
+  .room > label { justify-self: end; font-size: 0.8rem; }
+  .room input, .room select { width: 100%; min-width: 0; font-size: 0.9rem; padding: 4px 8px; }
+  .room > #room-mode-hint { margin: 0; }
+  .mode-cards { gap: 4px; }
+  .mode-cards button { min-height: 36px; padding: 4px 10px; font-size: 0.85rem; }
+  .room > button { min-height: 44px; }
+
+  #join-panel {
+    width: min(620px, 100%);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr);
+    gap: 6px 10px;
+    padding: 8px 12px;
+  }
+  #join-panel > #logo, #join-panel > #join-room, #join-panel > button { grid-column: 1 / -1; }
+  #join-panel > #logo { width: 32px; height: 32px; }
+  #join-panel > label { justify-self: end; }
+  #join-panel > input { width: 100%; min-width: 0; }
+  #join-panel > button { min-height: 44px; }
+
+  #lobby-panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+    gap: 4px 10px;
+    max-height: calc(100dvh - 56px);
+    overflow: auto;
+    align-content: start;
+    padding: 10px;
+  }
+  #lobby-panel > h2, #lobby-panel > #room-summary, #lobby-panel > #room-note,
+  #lobby-panel > .buttons, #lobby-panel > .hint { grid-column: 1 / -1; }
+  #lobby-panel > h2 { font-size: 1.3rem; margin: 0; }
+  #room-summary, #room-note { margin: 0; }
+  #room-controls { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px; min-width: 0; }
+  #room-controls label { font-size: 0.75rem; }
+  #room-controls input, #room-controls select { width: 100%; min-width: 0; padding: 3px 4px; font-size: 0.8rem; }
+  #slots { gap: 4px; margin: 0; justify-content: space-between; }
+  #slots > li { flex: 1 1 22%; min-width: 0; }
+  #slots .card { width: 100%; height: 104px; grid-template-rows: 1fr 28px; }
+  #slots .caption { max-width: 100%; font-size: 0.7rem; }
+  #lobby-panel > .buttons { gap: 4px; margin-top: 2px; }
+  #lobby-panel > .buttons button { min-height: 40px; padding: 4px 8px; font-size: 0.85rem; }
+  #lobby-panel > .hint { display: none; }
+
+  #game-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    overflow: hidden;
+    background: var(--bg);
+  }
+  #view { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #timer { position: absolute; z-index: 2; top: max(4px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 1.3rem; }
+  #hud { position: absolute; z-index: 2; top: max(28px, calc(env(safe-area-inset-top) + 22px)); left: 50%; transform: translateX(-50%); gap: 4px 10px; margin: 0; font-size: 0.75rem; }
+  #hud li { gap: 4px; font-size: inherit; }
+  #hud .chip { width: 18px; height: 18px; }
+  .touch-controls { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+  .touch-controls button {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    min-width: 64px;
+    min-height: 64px;
+    padding: 8px;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.86);
+    color: var(--ink);
+    font-size: 0.95rem;
+    font-weight: bold;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #touch-joystick {
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: min(30vw, 128px);
+    height: min(30vw, 128px);
+    min-width: 96px;
+    min-height: 96px;
+    border-radius: 50%;
+    background: rgba(34, 34, 34, 0.18);
+  }
+  .touch-joystick-knob {
+    width: 42%;
+    height: 42%;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
+    pointer-events: none;
+  }
+  .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(30vw, 160px); height: 140px; pointer-events: none; }
+  #touch-bomb { right: 0; bottom: 0; width: 76px; height: 76px; background: rgba(232, 188, 54, 0.94); }
+  #touch-punch { right: 82px; bottom: 38px; width: 68px; height: 68px; background: rgba(218, 91, 61, 0.94); font-size: 0.78rem; }
+  .touch-controls button:active, .touch-controls button.is-active { background: var(--ink); color: #fff; }
+}
+
+@media (orientation: portrait) and (max-width: 600px) {
+  .touch-device #game-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .touch-device #view { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .touch-device #timer { position: absolute; z-index: 2; top: max(4px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 1.3rem; }
+  .touch-device #hud { position: absolute; z-index: 2; top: max(28px, calc(env(safe-area-inset-top) + 22px)); left: 50%; transform: translateX(-50%); gap: 4px 10px; margin: 0; font-size: 0.75rem; }
+  .touch-device #hud li { gap: 4px; font-size: inherit; }
+  .touch-device #hud .chip { width: 18px; height: 18px; }
+  .touch-device .touch-controls { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
+  .touch-device .touch-controls button {
+    position: absolute;
+    display: grid;
+    place-items: center;
+    min-width: 64px;
+    min-height: 64px;
+    padding: 8px;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.86);
+    color: var(--ink);
+    font-size: 0.95rem;
+    font-weight: bold;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .touch-device #touch-joystick {
+    left: max(14px, env(safe-area-inset-left));
+    bottom: max(14px, env(safe-area-inset-bottom));
+    width: min(30vw, 140px);
+    height: min(30vw, 140px);
+    min-width: 104px;
+    min-height: 104px;
+    background: rgba(34, 34, 34, 0.18);
+  }
+  .touch-device .touch-joystick-knob {
+    width: 42%;
+    height: 42%;
+    border: 3px solid var(--ink);
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.9);
+    transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
+    pointer-events: none;
+  }
+  .touch-device .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(32vw, 160px); height: 140px; pointer-events: none; }
+  .touch-device #touch-bomb { right: 0; bottom: 0; width: 76px; height: 76px; background: rgba(232, 188, 54, 0.94); }
+  .touch-device #touch-punch { right: 82px; bottom: 38px; width: 68px; height: 68px; background: rgba(218, 91, 61, 0.94); font-size: 0.78rem; }
+  .touch-device .touch-controls button:active, .touch-device .touch-controls button.is-active { background: var(--ink); color: #fff; }
 }

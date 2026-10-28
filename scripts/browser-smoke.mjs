@@ -57,9 +57,16 @@ async function main() {
   let id = 0;
   const pending = new Map();
   const consoleLines = [];
+  const sentInputs = [];
   ws.addEventListener("message", (ev) => {
     const msg = JSON.parse(ev.data);
     if (msg.id && pending.has(msg.id)) pending.get(msg.id)(msg);
+    if (msg.method === "Network.webSocketFrameSent") {
+      try {
+        const payload = JSON.parse(msg.params.response.payloadData);
+        if (payload.type === "Input") sentInputs.push(payload);
+      } catch {}
+    }
     if (msg.method === "Runtime.consoleAPICalled") {
       consoleLines.push(msg.params.args.map((a) => a.value ?? a.description).join(" "));
     }
@@ -82,6 +89,13 @@ async function main() {
     }
     throw new Error(`timed out waiting for ${what}; console: ${consoleLines.join(" | ")}`);
   };
+  const waitForSentInput = async (after, predicate, what, ms = 8000) => {
+    for (let t = 0; t < ms; t += 100) {
+      if (sentInputs.slice(after).some(predicate)) return;
+      await sleep(100);
+    }
+    throw new Error(`timed out waiting for ${what}; recent input: ${JSON.stringify(sentInputs.slice(-5))}`);
+  };
   const shot = async (name) => {
     const r = await call("Page.captureScreenshot", { format: "png" });
     writeFileSync(path.join(out, name), Buffer.from(r.result.data, "base64"));
@@ -93,6 +107,77 @@ async function main() {
       await sleep(type === "keyDown" ? 250 : 30);
     }
   };
+  const setViewport = async (width, height, mobile) => {
+    await call("Emulation.setDeviceMetricsOverride", {
+      width,
+      height,
+      deviceScaleFactor: 1,
+      mobile,
+      screenOrientation: {
+        type: width > height ? "landscapePrimary" : "portraitPrimary",
+        angle: width > height ? 90 : 0,
+      },
+    });
+    await call("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: 5 });
+  };
+  const touchElement = async (selector) => {
+    const point = await evaluate(`(() => {
+      const element = document.querySelector(${JSON.stringify(selector)});
+      if (!element || element.hidden || element.disabled) return null;
+      const rect = element.getBoundingClientRect();
+      const x = rect.x + rect.width / 2;
+      const y = rect.y + rect.height / 2;
+      const hit = document.elementFromPoint(x, y);
+      return {
+        x,
+        y,
+        hitId: hit?.id,
+        hitMatches: hit === element || element.contains(hit),
+        viewportWidth: innerWidth,
+        viewportHeight: innerHeight,
+      };
+    })()`);
+    if (!point) throw new Error(`cannot touch ${selector}`);
+    if (!point.hitId) {
+      throw new Error(`${selector} is outside the visible ${point.viewportWidth}x${point.viewportHeight} viewport`);
+    }
+    if (!point.hitMatches) throw new Error(`${selector} is covered by #${point.hitId}`);
+    const pressed = await call("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      clickCount: 1,
+      pointerType: "touch",
+    });
+    if (pressed.error) throw new Error(`touch press failed: ${pressed.error.message}`);
+    await sleep(80);
+    const released = await call("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      x: point.x,
+      y: point.y,
+      button: "left",
+      clickCount: 1,
+      pointerType: "touch",
+    });
+    if (released.error) throw new Error(`touch release failed: ${released.error.message}`);
+    await sleep(100);
+  };
+  const activeTouches = new Map();
+  const dispatchTouch = async (type, pointerId, x = 0, y = 0) => {
+    if (type === "touchEnd" || type === "touchCancel") activeTouches.delete(pointerId);
+    else activeTouches.set(pointerId, { x, y });
+    const result = await call("Input.dispatchTouchEvent", {
+      type,
+      touchPoints: [...activeTouches].map(([id, point]) => ({ ...point, id, radiusX: 4, radiusY: 4, force: 1 })),
+    });
+    if (result.error) throw new Error(`touch dispatch failed: ${result.error.message}`);
+    await sleep(70);
+  };
+  const elementCenter = async (selector) => evaluate(`(() => {
+    const rect = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  })()`);
   const shiftTab = async () => {
     await call("Input.dispatchKeyEvent", { type: "keyDown", code: "ShiftLeft", key: "Shift", windowsVirtualKeyCode: 16 });
     await call("Input.dispatchKeyEvent", { type: "keyDown", code: "Tab", key: "Tab", windowsVirtualKeyCode: 9, modifiers: 8 });
@@ -146,6 +231,22 @@ async function main() {
       let gamepads = [];
       Object.defineProperty(Navigator.prototype, "getGamepads", { configurable: true, value: () => gamepads });
       window.__smokeInputs = [];
+      const NativeWebSocket = window.WebSocket;
+      window.WebSocket = new Proxy(NativeWebSocket, {
+        construct(target, args, newTarget) {
+          const socket = Reflect.construct(target, args, newTarget);
+          if (String(args[0]).endsWith("/ws")) {
+            window.__smokeGameSocket = socket;
+            socket.addEventListener("message", (event) => {
+              try {
+                const received = JSON.parse(event.data);
+                if (received.type === "Welcome" || received.type === "Lobby") window.__smokeLobby = received.lobby;
+              } catch {}
+            });
+          }
+          return socket;
+        },
+      });
       const send = WebSocket.prototype.send;
       WebSocket.prototype.send = function (data) {
         try {
@@ -161,8 +262,159 @@ async function main() {
       };
     })();`,
   });
+  await call("Network.enable");
   await call("Page.navigate", { url });
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
+
+  if (process.env.MOBILE_FLOW === "setup") {
+    await waitFor("!document.getElementById('room-panel').hidden", "fresh room creation screen");
+    await setViewport(390, 844, true);
+    await waitFor("matchMedia('(orientation: portrait)').matches", "portrait phone viewport");
+    if (await evaluate("document.documentElement.scrollWidth > window.innerWidth")) {
+      throw new Error("room setup overflows the portrait phone viewport");
+    }
+    await setViewport(844, 390, true);
+    await waitFor("matchMedia('(orientation: landscape)').matches", "landscape phone viewport");
+    if (await evaluate("document.documentElement.scrollWidth > window.innerWidth")) {
+      throw new Error("room setup overflows the landscape phone viewport");
+    }
+    await touchElement("#room-create");
+    await waitFor("!document.getElementById('join-panel').hidden", "touch opening the join screen");
+    await touchElement("#name");
+    await waitFor("document.activeElement.id === 'name'", "touch focusing the player name");
+    await evaluate(`(() => {
+      const name = document.getElementById('name');
+      name.value = 'MobileSmoke';
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+      return 1;
+    })()`);
+    await touchElement("#join");
+    await waitFor("!document.getElementById('lobby-panel').hidden", "touch joining the lobby");
+    if (await evaluate("document.documentElement.scrollWidth > window.innerWidth")) {
+      throw new Error("lobby overflows the landscape phone viewport");
+    }
+    await setViewport(1100, 800, false);
+    await call("Page.bringToFront");
+    await evaluate("document.getElementById('start').focus(); 1");
+    await waitFor("document.activeElement.id === 'start'", "desktop keyboard focus on Start");
+    await key("Enter", "Enter", 13);
+    await waitFor("!document.getElementById('game-panel').hidden", "desktop keyboard starting the match after mobile flow");
+    console.log("mobile setup and lobby touch controls, plus desktop keyboard regression, passed");
+    return;
+  }
+
+  if (process.env.MOBILE_FLOW === "controls") {
+    await waitFor("!document.getElementById('room-panel').hidden", "fresh room creation screen");
+    await evaluate(`(() => {
+      const nativeMatchMedia = window.matchMedia.bind(window);
+      window.matchMedia = (query) => {
+        const result = nativeMatchMedia(query);
+        if (query === "(pointer: coarse)" || query === "(any-pointer: coarse)") {
+          return new Proxy(result, {
+            get(target, property) {
+              return property === "matches" ? false : Reflect.get(target, property, target);
+            },
+          });
+        }
+        return result;
+      };
+      Object.defineProperty(navigator, "maxTouchPoints", { configurable: true, value: 5 });
+      return 1;
+    })()`);
+    await evaluate(`(() => {
+      const NativeWebSocket = window.WebSocket;
+      window.__smokeLobby = null;
+      window.WebSocket = new Proxy(NativeWebSocket, {
+        construct(target, args, newTarget) {
+          const socket = Reflect.construct(target, args, newTarget);
+          if (String(args[0]).endsWith("/ws")) {
+            window.__smokeGameSocket = socket;
+            socket.addEventListener("message", (event) => {
+              try {
+                const received = JSON.parse(event.data);
+                if (received.type === "Welcome" || received.type === "Lobby") window.__smokeLobby = received.lobby;
+              } catch {}
+            });
+          }
+          return socket;
+        },
+      });
+      return 1;
+    })()`);
+    await setViewport(844, 390, true);
+    await touchElement("#room-create");
+    await waitFor("!document.getElementById('join-panel').hidden", "touch opening the join screen");
+    await evaluate(`(() => {
+      const name = document.getElementById('name');
+      name.value = 'TouchSmoke';
+      name.dispatchEvent(new Event('input', { bubbles: true }));
+      return 1;
+    })()`);
+    await touchElement("#join");
+    await waitFor("!document.getElementById('lobby-panel').hidden", "touch joining the lobby");
+    await touchElement("#start");
+    await waitFor("!document.getElementById('game-panel').hidden", "touch starting the match");
+    await waitFor("!document.getElementById('touch-controls').hidden", "mobile match controls");
+    if (await evaluate("!document.getElementById('touch-punch').hidden")) {
+      throw new Error("Punch was visible before the player acquired the power");
+    }
+
+    await setViewport(390, 844, true);
+    await waitFor("!document.getElementById('touch-controls').hidden", "portrait gameplay controls");
+    const portraitLayout = await evaluate(`(() => {
+      const stick = document.getElementById('touch-joystick').getBoundingClientRect();
+      const bomb = document.getElementById('touch-bomb').getBoundingClientRect();
+      return stick.left < innerWidth / 2 && stick.top > innerHeight / 2 &&
+        bomb.left > innerWidth / 2 && bomb.top > innerHeight / 2;
+    })()`);
+    if (!portraitLayout) throw new Error("portrait controls are not positioned in opposite bottom corners");
+    const portraitStick = await elementCenter("#touch-joystick");
+    const beforePortraitMove = sentInputs.length;
+    await dispatchTouch("touchStart", 5, portraitStick.x, portraitStick.y);
+    await dispatchTouch("touchMove", 5, portraitStick.x + 70, portraitStick.y);
+    await waitForSentInput(beforePortraitMove, (input) => input.mv === "Right", "portrait joystick movement");
+    await dispatchTouch("touchCancel", 5);
+    const beforePortraitNeutral = sentInputs.length;
+    await waitForSentInput(beforePortraitNeutral, (input) => !input.mv && !input.bomb && !input.punch, "portrait neutral input after release");
+
+    await setViewport(844, 390, true);
+    await waitFor("!document.getElementById('touch-controls').hidden", "landscape gameplay controls");
+    const stick = await elementCenter("#touch-joystick");
+    await dispatchTouch("touchStart", 1, stick.x, stick.y);
+    await dispatchTouch("touchMove", 1, stick.x + 70, stick.y);
+    await waitForSentInput(0, (input) => input.mv === "Right", "rightward joystick movement");
+
+    const bomb = await elementCenter("#touch-bomb");
+    const beforeBomb = sentInputs.length;
+    await dispatchTouch("touchStart", 2, bomb.x, bomb.y);
+    await waitForSentInput(beforeBomb, (input) => input.mv === "Right" && input.bomb, "bomb while moving");
+    await dispatchTouch("touchEnd", 2);
+    if (await evaluate("!document.getElementById('touch-punch').hidden")) {
+      throw new Error("Punch was visible without the Punch power");
+    }
+
+    await dispatchTouch("touchCancel", 1);
+    const beforeNeutral = sentInputs.length;
+    await waitForSentInput(beforeNeutral, (input) => !input.mv && !input.bomb && !input.punch, "neutral input after pointer cancellation");
+    const resultChecks = await evaluate(`(() => {
+      const socket = window.__smokeGameSocket;
+      const lobby = window.__smokeLobby;
+      if (!socket || !lobby) return "missing-game-socket-or-lobby";
+      const deliver = (message) => socket.dispatchEvent(new MessageEvent("message", { data: JSON.stringify(message) }));
+      deliver({ type: "Ended", outcome: { Winner: 0 } });
+      const shown = !document.getElementById("results-panel").hidden &&
+        document.getElementById("results-title").textContent.includes("You won") &&
+        document.querySelectorAll("#results-rows tr").length > 0;
+      deliver({ type: "Lobby", lobby });
+      const persisted = !document.getElementById("results-panel").hidden;
+      document.getElementById("return-to-lobby").click();
+      const returned = document.getElementById("results-panel").hidden && !document.getElementById("lobby-panel").hidden;
+      return [shown, persisted, returned].join(",");
+    })()`);
+    if (resultChecks !== "true,true,true") throw new Error(`round result flow failed: ${resultChecks}`);
+    console.log("mobile input, orientation, Firefox-capability and persistent results flows passed");
+    return;
+  }
 
   if (["keyboard", "controller"].includes(process.env.MAIN_FLOW)) {
     const flow = process.env.MAIN_FLOW;

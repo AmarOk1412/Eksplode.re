@@ -133,6 +133,29 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       <p id="banner" class="pattern-banner" role="alert" hidden></p>
       <canvas id="view" aria-label="Game arena" tabindex="0"></canvas>
       <ul id="hud" class="slots"></ul>
+      <div id="touch-controls" class="touch-controls" role="group" aria-label="Mobile match controls" hidden>
+        <button id="touch-joystick" class="touch-joystick" type="button" aria-label="Movement joystick">
+          <span class="touch-joystick-knob" aria-hidden="true"></span>
+        </button>
+        <div class="touch-actions" role="group" aria-label="Player actions">
+          <button id="touch-bomb" type="button" aria-label="Place bomb">Bomb</button>
+          <button id="touch-punch" type="button" aria-label="Punch bomb">Punch</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="results-panel" class="results" role="dialog" aria-modal="true" aria-labelledby="results-title" hidden>
+      <h2 id="results-title">Round complete</h2>
+      <h3>Final standings</h3>
+      <div class="results-table-wrap" role="region" aria-label="Final standings" tabindex="0">
+        <table class="results-table">
+          <thead>
+            <tr><th scope="col">Player</th><th scope="col">Result</th><th scope="col">Bombs</th><th scope="col">Range</th><th scope="col">Speed</th><th scope="col">Powers</th></tr>
+          </thead>
+          <tbody id="results-rows"></tbody>
+        </table>
+      </div>
+      <button id="return-to-lobby" type="button">Return to Lobby</button>
     </section>
 
     <section id="dev-panel" class="dialog dev" aria-label="Developer mode" hidden>

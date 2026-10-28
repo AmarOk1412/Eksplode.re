@@ -99,6 +99,8 @@ eksplode-re-cli join http://192.168.1.20:8080/     # web addresses work too; onl
 | `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
 | `GET /controls.js` | `200 text/javascript` - keyboard preferences and controller input mapping |
 | `GET /nav.js` | `200 text/javascript` - focus movement, menu layers and controller navigation |
+| `GET /nav.js` | `200 text/javascript` - focus movement, menu layers and controller navigation |
+| `GET /touch.js` | `200 text/javascript` - mobile joystick and touch-action input mapping |
 | `GET /style.css` | `200 text/css` |
 | `GET /eksplode_re_render.wasm` | `200 application/wasm` - the graphics module |
 | `GET /ws` with `Upgrade: websocket` | `101` - see [PROTOCOL.md](PROTOCOL.md) |
@@ -133,6 +135,7 @@ When the page and the server share an origin (the normal case) there is nothing 
 | [`look.js`](../crates/web/assets/look.js), [`room.js`](../crates/web/assets/room.js), [`audio.js`](../crates/web/assets/audio.js) | ES modules imported by `app.js`: the look options, editor state and storage; the room settings, menu state and storage; the generated sound and settings |
 | [`controls.js`](../crates/web/assets/controls.js) | keyboard defaults, validation and local preferences; standard gameplay gamepad mapping and device state |
 | [`nav.js`](../crates/web/assets/nav.js) | focus geometry, layer stack, navigation controller sampling and on-screen keyboard reducer |
+| [`touch.js`](../crates/web/assets/touch.js) | mobile joystick gesture tracking and one-shot Bomb/Punch input |
 | [`app.js`](../crates/web/assets/app.js) | an ES module: the WebSocket client and its state machine (`reduce`), keyboard/controller navigation and gameplay input, DOM updates, and canvas painting |
 | [`style.css`](../crates/web/assets/style.css) | layout, the grid background, the menu card and the four character colours |
 | [`eksplode_re_render.wasm`](../crates/web/assets/eksplode_re_render.wasm) | the top-down pixel-art view, built from `crates/web-render` |
@@ -174,6 +177,24 @@ panel and the in-match hub use the same focus model. While a menu or text-entry 
 movement, bomb and punch input is suppressed; gameplay mappings resume when the last panel closes.
 Controller navigation remains optional: keyboard navigation works when no compatible controller
 is available or the selected device disconnects. Mouse use remains supported.
+
+## Mobile play
+
+Room creation, joining and the lobby work in portrait or landscape. On a touch-capable phone,
+including Firefox for Android, portrait matches place the joystick at the bottom left and bomb/power
+actions at the bottom right. Punch is shown only while the local player has the Punch power. Rotating
+to landscape retains the existing horizontal control layout; the game does not force an orientation
+change.
+
+Drag the joystick to steer in one of the four existing directions; the neutral center sends no
+movement. Tap Bomb or the available power control for a one-shot action. Movement and an action can
+be used together on multi-touch devices. Releasing or cancelling a touch, changing orientation,
+hiding the page or opening a navigation panel clears held input. Keyboard and controller behavior is
+unchanged.
+
+When a round ends, the result view shows the winner, draw or mode-specific outcome and final
+standings with each participant's available stats. It remains visible after the lobby update until
+Return to Lobby is selected; the button then reveals the latest lobby state.
 
 **Control settings.** The keyboard icon in the page header opens the controls panel. Select one of
 the six actions and press a key to replace its current assignment; a conflicting or reserved key

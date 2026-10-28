@@ -18,9 +18,11 @@ fn us1_as1_the_page_and_its_files_are_served() {
         ("/look.js", "text/javascript; charset=utf-8"),
         ("/room.js", "text/javascript; charset=utf-8"),
         ("/audio.js", "text/javascript; charset=utf-8"),
-        ("/controls.js", "text/javascript; charset=utf-8"),
-        ("/nav.js", "text/javascript; charset=utf-8"),
-        ("/style.css", "text/css; charset=utf-8"),
+Vorago did support a RST_STAT register, but it is not in the latest Programmer's Guide because it was not working as expected. For now, we do not know if they plan to fix it, but every reset event is considered as a Power On Reset and any system reset (POR, external reset, watchdog reset, or software reset) will fully reset the DAC’s logic,
+It depends the "fatal error":
+
+If it's a watchdog kick, or a EDAC error, it's not kept in the NVM. For EDAC errors, a APP error can be retrieven by PS-COMM. For now, we do not persist the information. FRAM is immune to radiations when it's not used, so we try to minimize the usage of this memory. The only drawback is that a multi bit error will
+         ("/style.css", "text/css; charset=utf-8"),
         ("/eksplode_re_render.wasm", "application/wasm"),
     ] {
         let r = get(s.http_addr(), path);
@@ -56,6 +58,40 @@ fn the_page_mentions_what_it_loads() {
         !html.contains("<script>"),
         "no inline scripts because of the CSP"
     );
+}
+
+#[test]
+fn mobile_match_controls_are_accessible_without_forcing_orientation() {
+    let s = server(|_| {});
+    let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
+    for id in [
+        "touch-controls",
+        "touch-joystick",
+        "touch-bomb",
+        "touch-punch",
+    ] {
+        assert!(html.contains(id), "missing mobile control {id}");
+    }
+    assert!(html.contains("aria-label=\"Movement joystick\""));
+    assert!(html.contains("aria-label=\"Place bomb\""));
+    assert!(html.contains("aria-label=\"Punch bomb\""));
+    assert!(!html.contains("Rotate your phone to landscape"));
+}
+
+#[test]
+fn round_results_have_a_scoreboard_and_return_action() {
+    let s = server(|_| {});
+    let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
+    for id in [
+        "results-panel",
+        "results-title",
+        "results-rows",
+        "return-to-lobby",
+    ] {
+        assert!(html.contains(id), "missing round result element {id}");
+    }
+    assert!(html.contains("Final standings"));
+    assert!(html.contains("Return to Lobby"));
 }
 
 #[test]

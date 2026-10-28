@@ -4,6 +4,7 @@
 //
 // The helpers before `start()` are pure and exported for the node tests (crates/web/js-tests).
 
+import { TouchInputTracker, isTouchCapable } from "./touch.js";
 import { AudioEngine, tuneForStage } from "./audio.js";
 import {
   DEFAULT_BINDINGS,
@@ -132,6 +133,7 @@ export function initialState() {
     lobby: null,
     notice: "",
     observation: null,
+    result: null,
     tick: 0,
     looks: defaultLooks(),
     dev: false,
@@ -207,6 +209,8 @@ export function reduce(state, event) {
       return { ...state, stage: "closed", notice: "Connection lost. The server may have stopped." };
     case "retry":
       return initialState();
+    case "return-to-lobby":
+      return { ...state, stage: "lobby", result: null, notice: "" };
     case "RoomInfo": {
       const room = {
         open: event.open === true,
@@ -225,7 +229,7 @@ export function reduce(state, event) {
     case "Rejected":
       return { ...state, stage: "closed", notice: rejectText(event.reason) };
     case "Lobby": {
-      const stage = state.stage === "playing" || state.stage === "closed" ? state.stage : "lobby";
+      const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
       return { ...state, stage, lobby: event.lobby, looks: looksOf(event, state.looks) };
     }
     case "Start":
@@ -235,7 +239,12 @@ export function reduce(state, event) {
     case "PlayerLeft":
       return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
     case "Ended":
-      return { ...state, stage: "lobby", notice: outcomeText(event.outcome, state.slot, state.lobby, state.observation) };
+      return {
+        ...state,
+        stage: "results",
+        notice: outcomeText(event.outcome, state.slot, state.lobby, state.observation),
+        result: { outcome: event.outcome, observation: state.observation, lobby: state.lobby },
+      };
     case "Error":
       if (event.code === "HostLeft") {
         return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
@@ -354,6 +363,11 @@ export class Animator {
 }
 
 /** One row per participant for the status list next to the canvas. */
+export function punchPowerActive(state) {
+  return Number.isInteger(state?.slot) && state.observation?.players?.[state.slot]?.has_punch === true;
+}
+
+/** One row per participant for the status list next to the canvas. */
 export function hudRows(state) {
   const players = state.observation?.players;
   const slots = state.lobby?.slots;
@@ -384,6 +398,45 @@ export function hudRows(state) {
     });
   });
   return rows;
+}
+
+/** Final participant standings and stats retained from the last game snapshot. */
+export function resultRows(state) {
+  const result = state.result;
+  const players = result?.observation?.players;
+  const slots = result?.lobby?.slots;
+  if (!Array.isArray(players) || !Array.isArray(slots)) return [];
+  const outcome = result.outcome;
+  const winningTeam = outcome && typeof outcome === "object" && "TeamWin" in outcome ? outcome.TeamWin : null;
+  const winner = outcome && typeof outcome === "object" && "Winner" in outcome ? outcome.Winner : null;
+  const chaserWins = outcome === "ChaserWins";
+  const runnersWin = outcome === "RunnersWin";
+  const base = result.observation.config?.base_move_cooldown ?? 4;
+  const hz = result.observation.config?.tick_hz > 0 ? result.observation.config.tick_hz : 20;
+
+  return slots.flatMap((slot, i) => {
+    const player = players[i];
+    if (slot.controller === "Empty" || !player) return [];
+    let standing;
+    if (outcome === "Draw") standing = "Draw";
+    else if (winner !== null) standing = i === winner ? "Winner" : player.alive ? "Survived" : "Eliminated";
+    else if (winningTeam !== null) standing = player.team === winningTeam ? "Winner" : player.alive ? "Survived" : "Eliminated";
+    else if (chaserWins) standing = player.role === "Chaser" ? "Winner" : player.alive ? "Survived" : "Eliminated";
+    else if (runnersWin) standing = player.role === "Runner" && player.alive ? "Winner" : player.role === "Chaser" ? "Defeated" : "Eliminated";
+    else standing = player.alive ? "Survived" : "Eliminated";
+
+    return [{
+      slot: i,
+      label: slotName(result.lobby, i),
+      standing,
+      team: typeof player.team === "number" ? TEAM_LETTERS[player.team] ?? null : null,
+      role: player.role === "Chaser" ? "Chaser" : player.role === "Runner" ? "Runner" : null,
+      bombs: `${player.bombs_active}/${player.bombs_max}`,
+      range: player.range,
+      speed: base + 1 - player.move_cooldown,
+      effects: effectsOf(player, hz),
+    }];
+  });
 }
 
 /** Short names of what is active on a player: the punch and the malus with the seconds left. */
@@ -550,6 +603,14 @@ function start() {
     removeBot: $("remove-bot"),
     ready: $("ready"),
     canvas: $("view"),
+    touchControls: $("touch-controls"),
+    touchJoystick: $("touch-joystick"),
+    touchBomb: $("touch-bomb"),
+    touchPunch: $("touch-punch"),
+    resultsPanel: $("results-panel"),
+    resultsTitle: $("results-title"),
+    resultsRows: $("results-rows"),
+    returnToLobby: $("return-to-lobby"),
     hud: $("hud"),
     timer: $("timer"),
     banner: $("banner"),
@@ -605,6 +666,7 @@ function start() {
   let keyboardBindings = loadBindings(storage);
   const keys = new KeyTracker(keyboardBindings);
   const gamepads = new GamepadTracker();
+  const touchInput = new TouchInputTracker();
   const navTracker = new NavTracker();
   const navigationLayers = new NavigationLayers();
   let state = initialState();
@@ -621,6 +683,122 @@ function start() {
   let oskTarget = null;
   let oskAccepted = false;
   const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+
+  function touchDevice() {
+    return isTouchCapable({
+      primaryCoarse: window.matchMedia?.("(pointer: coarse)").matches === true,
+      anyCoarse: window.matchMedia?.("(any-pointer: coarse)").matches === true,
+      maxTouchPoints: window.navigator?.maxTouchPoints ?? 0,
+      hasTouchEvent: "ontouchstart" in window,
+    });
+  }
+
+  function resetTouchVisuals() {
+    el.touchJoystick.classList.remove("is-active");
+    el.touchJoystick.style.setProperty("--stick-x", "0px");
+    el.touchJoystick.style.setProperty("--stick-y", "0px");
+    el.touchBomb.classList.remove("is-active");
+    el.touchPunch.classList.remove("is-active");
+    activeActionPointers.bomb.clear();
+    activeActionPointers.punch.clear();
+  }
+
+  const activeActionPointers = { bomb: new Set(), punch: new Set() };
+
+  function clearTouchInput() {
+    touchInput.clear();
+    resetTouchVisuals();
+  }
+
+  function syncTouchControls() {
+    const playing = state.stage === "playing";
+    const touch = touchDevice();
+    const navigationOpen = Boolean(navigationLayers.top);
+    document.documentElement.classList.toggle("touch-device", touch);
+    const controlsVisible = touch && playing && !navigationOpen;
+    el.touchControls.hidden = !controlsVisible;
+    el.touchPunch.hidden = !punchPowerActive(state);
+    if (el.touchPunch.hidden && activeActionPointers.punch.size > 0) {
+      for (const pointerId of activeActionPointers.punch) touchInput.releaseAction(pointerId);
+      activeActionPointers.punch.clear();
+      el.touchPunch.classList.remove("is-active");
+    }
+    if (!controlsVisible) clearTouchInput();
+  }
+
+  function touchGameplayAllowed() {
+    return touchDevice() && state.stage === "playing" && !navigationLayers.top && pageFocused && !document.hidden;
+  }
+
+  const releaseJoystick = (pointerId) => {
+    if (!touchInput.endJoystick(pointerId)) return;
+    el.touchJoystick.classList.remove("is-active");
+    el.touchJoystick.style.setProperty("--stick-x", "0px");
+    el.touchJoystick.style.setProperty("--stick-y", "0px");
+  };
+
+  el.touchJoystick.addEventListener("pointerdown", (event) => {
+    if (!touchGameplayAllowed() || event.pointerType === "mouse") return;
+    event.preventDefault();
+    if (!touchInput.startJoystick(event.pointerId, event.clientX, event.clientY)) return;
+    el.touchJoystick.setPointerCapture?.(event.pointerId);
+    el.touchJoystick.classList.add("is-active");
+  });
+  el.touchJoystick.addEventListener("pointermove", (event) => {
+    if (!touchGameplayAllowed() || !touchInput.moveJoystick(event.pointerId, event.clientX, event.clientY)) return;
+    const rect = el.touchJoystick.getBoundingClientRect();
+    const radius = Math.max(12, Math.min(rect.width, rect.height) * 0.24);
+    const dx = event.clientX - touchInput.origin.x;
+    const dy = event.clientY - touchInput.origin.y;
+    const length = Math.hypot(dx, dy);
+    const scale = length > radius ? radius / length : 1;
+    el.touchJoystick.style.setProperty("--stick-x", `${dx * scale}px`);
+    el.touchJoystick.style.setProperty("--stick-y", `${dy * scale}px`);
+  });
+  el.touchJoystick.addEventListener("pointerup", (event) => releaseJoystick(event.pointerId));
+  el.touchJoystick.addEventListener("lostpointercapture", (event) => releaseJoystick(event.pointerId));
+  el.touchJoystick.addEventListener("pointercancel", () => {
+    keys.clear();
+    gamepads.clear();
+    clearTouchInput();
+  });
+
+  function bindTouchAction(button, action) {
+    button.addEventListener("pointerdown", (event) => {
+      if (!touchGameplayAllowed() || event.pointerType === "mouse") return;
+      event.preventDefault();
+      if (!touchInput.pressAction(event.pointerId, action)) return;
+      activeActionPointers[action].add(event.pointerId);
+      button.classList.add("is-active");
+      button.setPointerCapture?.(event.pointerId);
+    });
+    const release = (event) => {
+      touchInput.releaseAction(event.pointerId);
+      activeActionPointers[action].delete(event.pointerId);
+      if (activeActionPointers[action].size === 0) button.classList.remove("is-active");
+    };
+    button.addEventListener("pointerup", release);
+    button.addEventListener("lostpointercapture", release);
+    button.addEventListener("pointercancel", () => {
+      keys.clear();
+      gamepads.clear();
+      clearTouchInput();
+    });
+    button.addEventListener("click", (event) => {
+      if (event.detail === 0 && touchGameplayAllowed()) touchInput.pressAction(`keyboard-${action}`, action);
+    });
+  }
+
+  bindTouchAction(el.touchBomb, "bomb");
+  bindTouchAction(el.touchPunch, "punch");
+
+  const orientationQuery = window.matchMedia?.("(orientation: landscape)");
+  orientationQuery?.addEventListener?.("change", () => {
+    keys.clear();
+    gamepads.clear();
+    clearTouchInput();
+    syncTouchControls();
+  });
 
   /** Paints the semi-3D characters of the lobby cards `seconds` into their animation. */
   function paintLobby(seconds) {
@@ -736,7 +914,7 @@ function start() {
     if (navigationLayers.top) return navigationLayers.top.root;
     if (!el.controlsPanel.hidden) return el.controlsPanel;
     if (!el.soundPanel.hidden) return el.soundPanel;
-    for (const root of [el.roomPanel, el.joinPanel, el.editor, el.lobbyPanel, el.gamePanel, el.devPanel]) {
+    for (const root of [el.roomPanel, el.joinPanel, el.editor, el.lobbyPanel, el.resultsPanel, el.gamePanel, el.devPanel]) {
       if (root && !root.hidden) return root;
     }
     return null;
@@ -749,7 +927,7 @@ function start() {
 
   function syncLayerInert() {
     const root = navigationLayers.top?.root ??
-      (!el.controlsPanel.hidden ? el.controlsPanel : !el.soundPanel.hidden ? el.soundPanel : null);
+      (!el.controlsPanel.hidden ? el.controlsPanel : !el.soundPanel.hidden ? el.soundPanel : !el.resultsPanel.hidden ? el.resultsPanel : null);
     if (!el.app) return;
     for (const child of el.app.children) child.inert = Boolean(root && child !== root);
   }
@@ -829,6 +1007,7 @@ function start() {
     if (parent?.id === "hub") parent.root.hidden = true;
     root.hidden = false;
     syncLayerInert();
+    syncTouchControls();
     navTracker.contextChanged();
     keys.clear();
     gamepads.clear();
@@ -855,6 +1034,7 @@ function start() {
     else el.devPanel.classList.remove("navigation-layer");
     if (navigationLayers.top?.id === "hub") navigationLayers.top.root.hidden = false;
     syncLayerInert();
+    syncTouchControls();
     navTracker.contextChanged();
     keys.clear();
     gamepads.clear();
@@ -910,13 +1090,34 @@ function start() {
     el.notice.textContent = state.notice;
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
+    const resultsVisible = state.stage === "results";
     const roomMenu = state.stage === "idle" && state.menu === "room";
     el.roomPanel.hidden = !roomMenu;
-    el.joinPanel.hidden = inLobby || playing || roomMenu;
+    el.joinPanel.hidden = inLobby || playing || resultsVisible || roomMenu;
     el.lobbyPanel.hidden = !inLobby;
     el.gamePanel.hidden = !playing;
+    el.resultsPanel.hidden = !resultsVisible;
+    el.resultsTitle.textContent = state.notice || "Round complete";
+    el.resultsRows.replaceChildren(...resultRows(state).map((row) => {
+      const tr = document.createElement("tr");
+      const values = [
+        `${row.label}${row.team ? ` (Team ${row.team})` : ""}${row.role ? ` (${row.role})` : ""}`,
+        row.standing,
+        row.bombs,
+        String(row.range),
+        String(row.speed),
+        row.effects.length > 0 ? row.effects.join(", ") : "None",
+      ];
+      tr.append(...values.map((value) => {
+        const td = document.createElement("td");
+        td.textContent = value;
+        return td;
+      }));
+      return tr;
+    }));
+    syncTouchControls();
     if (!playing) el.banner.hidden = true;
-    el.editor.hidden = roomMenu || (!(!inLobby && !playing) && !(inLobby && editing));
+    el.editor.hidden = roomMenu || resultsVisible || (!(!inLobby && !playing) && !(inLobby && editing));
     renderRoom();
     el.doneLook.hidden = !inLobby;
     if (!el.editor.hidden) renderEditor();
@@ -1168,7 +1369,12 @@ function start() {
     dispatch({ type: "retry" });
     queryRoom();
   });
-  el.start.addEventListener("click", () => send({ type: "Start" }));
+    el.start.addEventListener("click", () => {
+      send({ type: "Start" });
+    });
+    el.returnToLobby.addEventListener("click", () => {
+      dispatch({ type: "return-to-lobby" });
+    });
   el.addBot.addEventListener("click", () => send({ type: "AddBot" }));
   el.removeBot.addEventListener("click", () => send({ type: "RemoveBot" }));
   el.ready.addEventListener("click", () => {
@@ -1506,17 +1712,20 @@ function start() {
     pageFocused = false;
     keys.clear();
     gamepads.clear();
+    clearTouchInput();
     navTracker.clear();
   });
   window.addEventListener("focus", () => {
     pageFocused = true;
     keys.clear();
     gamepads.clear();
+    clearTouchInput();
     navTracker.contextChanged();
   });
   document.addEventListener("visibilitychange", () => {
     keys.clear();
     gamepads.clear();
+    clearTouchInput();
     if (document.hidden) navTracker.clear();
     else navTracker.contextChanged();
   });
@@ -1525,6 +1734,7 @@ function start() {
     if (!pageFocused || document.hidden) {
       keys.clear();
       gamepads.clear();
+      clearTouchInput();
       navTracker.clear();
       if (state.stage === "playing") send(inputMessage(state, { mv: null, bomb: false, punch: false }));
       return;
@@ -1537,17 +1747,19 @@ function start() {
     if (navigationMode(state.stage, hasNavigationLayer()) === "navigation" || navInput.menu) {
       keys.clear();
       gamepads.clear();
+      clearTouchInput();
       handleNavigationInput(navInput);
       if (state.stage === "playing") send(inputMessage(state, { mv: null, bomb: false, punch: false }));
       return;
     }
     if (state.stage !== "playing") return;
     const controllerInput = gamepads.sample(readGamepads().gamepads);
+    const touchKeys = touchInput.take();
     const keyboardInput = keys.take();
     send(inputMessage(state, {
-      mv: controllerInput.mv ?? keyboardInput.mv,
-      bomb: controllerInput.bomb || keyboardInput.bomb,
-      punch: controllerInput.punch || keyboardInput.punch,
+      mv: controllerInput.mv ?? touchKeys.mv ?? keyboardInput.mv,
+      bomb: controllerInput.bomb || touchKeys.bomb || keyboardInput.bomb,
+      punch: controllerInput.punch || touchKeys.punch || keyboardInput.punch,
     }));
   }, TICK_MS);
   setInterval(() => {
@@ -1563,7 +1775,10 @@ function start() {
       el.canvas.height = h;
     }
   }
-  window.addEventListener("resize", resize);
+  window.addEventListener("resize", () => {
+    resize();
+    syncTouchControls();
+  });
 
   function draw(now) {
     requestAnimationFrame(draw);
