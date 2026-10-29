@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use argon2::{Algorithm, Argon2, Params, Version};
 use eksplode_re_bots::{Bot, DefaultBot};
 use eksplode_re_core::{
     step, BoardSize, Config, Controller, DropTable, Event, GameState, Lobby, Mode, Phase, PlayerId,
@@ -19,6 +20,55 @@ use crate::protocol::v2::{
     Admission, ErrorCode, Reply, Request, RequestId, RequestState, RoomPhase, RoomRef, RoomSummary,
     Secret,
 };
+
+#[derive(Clone)]
+pub struct PasswordVerifier {
+    salt: [u8; 16],
+    digest: [u8; 32],
+}
+
+impl PasswordVerifier {
+    pub fn create(password: &Secret, random: &dyn RandomSource) -> Result<Self, ErrorCode> {
+        Self::validate(password)?;
+        let mut salt = [0; 16];
+        random.fill(&mut salt).map_err(|_| ErrorCode::Unavailable)?;
+        let digest = Self::derive(password, &salt)?;
+        Ok(Self { salt, digest })
+    }
+
+    pub fn verify(&self, password: &Secret) -> Result<bool, ErrorCode> {
+        Self::validate(password)?;
+        let candidate = Self::derive(password, &self.salt)?;
+        Ok(bool::from(self.digest.ct_eq(&candidate)))
+    }
+
+    fn validate(password: &Secret) -> Result<(), ErrorCode> {
+        let value = password.expose();
+        if value.is_empty()
+            || value.len() > 512
+            || value.chars().count() > 128
+            || value.chars().any(char::is_control)
+        {
+            return Err(ErrorCode::BadPassword);
+        }
+        Ok(())
+    }
+
+    fn derive(password: &Secret, salt: &[u8; 16]) -> Result<[u8; 32], ErrorCode> {
+        let params = Params::new(19 * 1024, 2, 1, Some(32)).map_err(|_| ErrorCode::Unavailable)?;
+        let mut digest = [0; 32];
+        Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+            .hash_password_into(password.expose().as_bytes(), salt, &mut digest)
+            .map_err(|_| ErrorCode::Unavailable)?;
+        Ok(digest)
+    }
+}
+
+impl fmt::Debug for PasswordVerifier {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PasswordVerifier([REDACTED])")
+    }
+}
 
 #[derive(Debug)]
 struct AdmissionEntry {
@@ -1132,4 +1182,31 @@ pub fn from_wire(value: &Value) -> RoomSettings {
             .unwrap_or(defaults.friendly_fire),
     }
     .clean()
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::*;
+
+    #[test]
+    fn salts_change_digests_and_hashes_use_the_approved_argon2id_policy() {
+        struct Salt(u8);
+        impl RandomSource for Salt {
+            fn fill(&self, output: &mut [u8]) -> Result<(), RoomError> {
+                output.fill(self.0);
+                Ok(())
+            }
+        }
+        let password = Secret::new("password-policy-canary");
+        let first = PasswordVerifier::create(&password, &Salt(1)).unwrap();
+        let second = PasswordVerifier::create(&password, &Salt(2)).unwrap();
+        assert_ne!(first.salt, second.salt);
+        assert_ne!(first.digest, second.digest);
+        let mut expected = [0; 32];
+        let params = Params::new(19_456, 2, 1, Some(32)).unwrap();
+        Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+            .hash_password_into(password.expose().as_bytes(), &first.salt, &mut expected)
+            .unwrap();
+        assert_eq!(first.digest, expected);
+    }
 }

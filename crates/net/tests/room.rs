@@ -41,6 +41,55 @@ fn service_identity_and_proofs_use_injected_randomness_without_exposing_secrets(
 }
 
 #[test]
+fn password_verifiers_validate_bounds_preserve_whitespace_and_redact_secrets() {
+    use eksplode_re_net::protocol::v2::{ErrorCode, Secret};
+    use eksplode_re_net::room::{PasswordVerifier, RandomSource, RoomError};
+
+    struct Salt(bool);
+    impl RandomSource for Salt {
+        fn fill(&self, output: &mut [u8]) -> Result<(), RoomError> {
+            if self.0 {
+                return Err(RoomError::RandomUnavailable);
+            }
+            assert_eq!(output.len(), 16);
+            output.fill(0xab);
+            Ok(())
+        }
+    }
+    let password = Secret::new("  password-canary  ");
+    let verifier = PasswordVerifier::create(&password, &Salt(false)).unwrap();
+    assert!(verifier.verify(&password).unwrap());
+    assert!(!verifier.verify(&Secret::new("password-canary")).unwrap());
+    assert!(!verifier.verify(&Secret::new("wrong-password")).unwrap());
+    assert_eq!(format!("{verifier:?}"), "PasswordVerifier([REDACTED])");
+    assert!(matches!(
+        PasswordVerifier::create(&password, &Salt(true)),
+        Err(ErrorCode::Unavailable)
+    ));
+
+    for value in ["x".to_string(), "\u{1f600}".repeat(128)] {
+        let value = Secret::new(value);
+        let verifier = PasswordVerifier::create(&value, &Salt(false)).unwrap();
+        assert!(verifier.verify(&value).unwrap());
+    }
+    for value in [
+        String::new(),
+        "x".repeat(129),
+        "\u{1f600}".repeat(129),
+        "\ncanary".into(),
+        "canary\t".into(),
+        "canary\u{85}".into(),
+    ] {
+        let value = Secret::new(value);
+        assert!(matches!(
+            PasswordVerifier::create(&value, &Salt(false)),
+            Err(ErrorCode::BadPassword)
+        ));
+        assert_eq!(verifier.verify(&value), Err(ErrorCode::BadPassword));
+    }
+}
+
+#[test]
 fn service_limits_and_clock_keep_network_policy_outside_core() {
     use eksplode_re_net::room::{RoomLimits, ServiceClock};
     use std::time::Duration;
