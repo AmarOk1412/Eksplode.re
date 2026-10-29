@@ -239,6 +239,79 @@ fn protected_room_and_authoritative_owner_controls_are_visible_to_terminal_playe
 }
 
 #[test]
+fn protected_terminal_join_uses_a_masked_cancellable_password_prompt() {
+    let host = host_with(open_game(1000));
+    let owner = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    assert!(
+        matches!(owner.recv_timeout(Duration::from_secs(2)).unwrap(),
+        eksplode_re_net::protocol::ServerMsg::RoomV2(reply)
+        if matches!(*reply, eksplode_re_net::protocol::v2::Reply::Hello { .. }))
+    );
+    let mut create = eksplode_re_net::protocol::v2::Request::create_room(
+        eksplode_re_net::protocol::v2::RequestId::new("protected-create").unwrap(),
+        "Owner".into(),
+        &eksplode_re_core::RoomSettings::default(),
+        4,
+    );
+    if let eksplode_re_net::protocol::v2::Request::CreateRoom { password, .. } = &mut create {
+        *password = Some(eksplode_re_net::protocol::v2::Secret::new(
+            "join-password-canary",
+        ));
+    }
+    owner.send_v2(create).unwrap();
+    let welcome = owner.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(
+        matches!(welcome, eksplode_re_net::protocol::ServerMsg::RoomV2(reply)
+        if matches!(*reply, eksplode_re_net::protocol::v2::Reply::Welcome { .. }))
+    );
+
+    let member = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let mut member = Online::directory(member, "Member".into(), KeyBindings::default_for_slot(0));
+    assert!(pump_until(&mut member, |online| online.stage
+        == Stage::Directory
+        && online.rooms.len() == 1));
+    assert!(screen(&member).contains("password required"));
+    member.handle_key(KeyCode::Enter);
+    assert_eq!(member.stage, Stage::Password);
+    assert!(screen(&member).contains("Password"));
+    for character in "join-password-canary".chars() {
+        member.handle_key(KeyCode::Char(character));
+    }
+    let masked = screen(&member);
+    assert!(masked.contains("********************"), "{masked}");
+    assert!(!masked.contains("join-password-canary"));
+    member.handle_key(KeyCode::Esc);
+    assert_eq!(member.stage, Stage::Directory);
+    assert!(!screen(&member).contains("join-password-canary"));
+
+    member.handle_key(KeyCode::Enter);
+    assert_eq!(member.stage, Stage::Password);
+    for character in "wrong-password".chars() {
+        member.handle_key(KeyCode::Char(character));
+    }
+    member.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut member, |online| online.stage
+        == Stage::Password
+        && online.notice.is_some()));
+    let retry = screen(&member);
+    assert!(retry.contains("BadPassword"), "{retry}");
+    assert!(
+        retry.contains("Password: "),
+        "the input buffer was not cleared: {retry}"
+    );
+    assert!(!retry.contains("wrong-password"));
+    for character in "join-password-canary".chars() {
+        member.handle_key(KeyCode::Char(character));
+    }
+    member.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut member, |online| online.stage
+        == Stage::Lobby
+        && online.slot == Some(1)));
+    assert!(screen(&member).contains("Password: required"));
+    assert!(!screen(&member).contains("join-password-canary"));
+}
+
+#[test]
 fn the_host_player_sees_the_address_and_hosting_keys() {
     let host = host_with(open_game(1000));
     let port = host.addr().port();

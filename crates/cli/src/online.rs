@@ -25,6 +25,7 @@ pub enum Stage {
     Connecting,
     Directory,
     Creating,
+    Password,
     ConfirmLeave,
     Lobby,
     Playing,
@@ -58,6 +59,8 @@ pub struct Online {
     revision: u64,
     capacity: u8,
     password_required: bool,
+    password_input: String,
+    password_prompt: bool,
     setup: Option<SetupScreen>,
     initial_room: Option<RoomSettings>,
     requested_room_id: Option<String>,
@@ -97,6 +100,8 @@ impl Online {
             revision: 0,
             capacity: 4,
             password_required: false,
+            password_input: String::new(),
+            password_prompt: false,
             setup: None,
             initial_room: None,
             requested_room_id: None,
@@ -171,6 +176,25 @@ impl Online {
         self.control(|request_id| Request::create_room(request_id, name, &settings, 4));
     }
 
+    fn join_room(&mut self, password: Option<eksplode_re_net::protocol::v2::Secret>) {
+        let Some(room) = self.rooms.get(self.selected_room).cloned() else {
+            self.stage = Stage::Directory;
+            return;
+        };
+        let name = self.player_name.clone();
+        self.stage = Stage::Connecting;
+        self.notice = None;
+        self.password_prompt = password.is_some();
+        self.control(|request_id| Request::JoinRoom {
+            request_id,
+            server_epoch: room.reference.server_epoch,
+            room_id: room.reference.room_id,
+            name,
+            password,
+            look: None,
+        });
+    }
+
     fn on_room_message(&mut self, reply: Reply) {
         match reply {
             Reply::Hello {
@@ -226,6 +250,8 @@ impl Online {
             }
             Reply::Welcome { admission, .. } => {
                 self.rejection = None;
+                self.password_input.clear();
+                self.password_prompt = false;
                 self.room_ref = Some(admission.reference);
                 self.owner_slot = admission.owner_slot.map(usize::from);
                 self.revision = admission.revision;
@@ -312,6 +338,11 @@ impl Online {
                 self.notice = Some(format!("{code:?}: {message}"));
                 if self.room_ref.is_none() && self.stage == Stage::Connecting {
                     use eksplode_re_net::protocol::v2::ErrorCode;
+                    if code == ErrorCode::BadPassword && self.password_prompt {
+                        self.password_input.clear();
+                        self.stage = Stage::Password;
+                        return;
+                    }
                     self.rejection = match code {
                         ErrorCode::Full => Some((RejectReason::Full, Instant::now())),
                         ErrorCode::BadName => Some((RejectReason::BadName, Instant::now())),
@@ -319,6 +350,7 @@ impl Online {
                         ErrorCode::BadVersion => Some((RejectReason::BadVersion, Instant::now())),
                         _ => None,
                     };
+                    self.password_prompt = false;
                     self.stage = Stage::Directory;
                 }
             }
@@ -524,6 +556,32 @@ impl Online {
             }
             return;
         }
+        if self.stage == Stage::Password {
+            match code {
+                KeyCode::Esc => {
+                    self.password_input.clear();
+                    self.password_prompt = false;
+                    self.notice = None;
+                    self.stage = Stage::Directory;
+                }
+                KeyCode::Enter => {
+                    let password = std::mem::take(&mut self.password_input);
+                    self.join_room(Some(eksplode_re_net::protocol::v2::Secret::new(password)));
+                }
+                KeyCode::Backspace => {
+                    self.password_input.pop();
+                }
+                KeyCode::Char(character)
+                    if !character.is_control()
+                        && self.password_input.chars().count() < 128
+                        && self.password_input.len() + character.len_utf8() <= 512 =>
+                {
+                    self.password_input.push(character);
+                }
+                _ => {}
+            }
+            return;
+        }
         let action = map_key_for_player(code, self.key_bindings, 0);
         if action == Some(KeyAction::Quit) {
             self.send_action(ClientMsg::Leave);
@@ -557,16 +615,14 @@ impl Online {
                 }
                 KeyCode::Enter => {
                     if let Some(room) = self.rooms.get(self.selected_room).cloned() {
-                        let name = self.player_name.clone();
-                        self.stage = Stage::Connecting;
-                        self.control(|request_id| Request::JoinRoom {
-                            request_id,
-                            server_epoch: room.reference.server_epoch,
-                            room_id: room.reference.room_id,
-                            name,
-                            password: None,
-                            look: None,
-                        });
+                        if room.password_required {
+                            self.password_input.clear();
+                            self.password_prompt = true;
+                            self.notice = None;
+                            self.stage = Stage::Password;
+                        } else {
+                            self.join_room(None);
+                        }
                     }
                 }
                 _ => {}
@@ -582,7 +638,7 @@ impl Online {
                 }
             }
             Stage::Lobby => self.lobby_key(code, action),
-            Stage::Connecting | Stage::Closed | Stage::Creating => {}
+            Stage::Connecting | Stage::Closed | Stage::Creating | Stage::Password => {}
         }
     }
 
@@ -663,6 +719,10 @@ pub fn render(frame: &mut Frame, online: &Online) {
         render_directory(frame, online);
         return;
     }
+    if online.stage == Stage::Password {
+        render_password(frame, online);
+        return;
+    }
     if online.stage == Stage::ConfirmLeave {
         let area = frame.area();
         frame.render_widget(
@@ -733,6 +793,31 @@ fn render_directory(frame: &mut Frame, online: &Online) {
     ));
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title(" Rooms ")),
+        area,
+    );
+}
+
+fn render_password(frame: &mut Frame, online: &Online) {
+    let area = frame.area();
+    let room_name = online
+        .rooms
+        .get(online.selected_room)
+        .map(|room| room.settings.name.as_str())
+        .unwrap_or("selected room");
+    let mut lines = vec![
+        Line::from(format!("Room: {room_name}")),
+        Line::from(format!(
+            "Password: {}",
+            "*".repeat(online.password_input.chars().count())
+        )),
+    ];
+    if let Some(notice) = online.notice.as_ref() {
+        lines.push(Line::from(notice.as_str()));
+    }
+    lines.push(Line::default());
+    lines.push(Line::from("Type password   Enter join   Esc cancel"));
+    frame.render_widget(
+        Paragraph::new(lines).block(Block::bordered().title(" Room password ")),
         area,
     );
 }
