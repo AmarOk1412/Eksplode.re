@@ -178,6 +178,9 @@ impl PasswordWorkers {
 
     pub fn try_submit(&self, job: PasswordJob) -> Result<(), ErrorCode> {
         let jobs = self.jobs.as_ref().ok_or(ErrorCode::Unavailable)?;
+        // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+        // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+        #[allow(deprecated)]
         self.outstanding
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                 (count < 34).then_some(count + 1)

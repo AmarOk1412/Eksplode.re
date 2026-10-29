@@ -158,6 +158,9 @@ impl Client {
             .map_err(|_| NetError::Protocol("room state unavailable".into()))?
             .clone();
         if let Some(binding) = binding {
+            // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+            // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+            #[allow(deprecated)]
             let sequence = self
                 .request_sequence
                 .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |sequence| {
@@ -295,6 +298,9 @@ impl Client {
             .map_err(|_| NetError::Protocol("room state unavailable".into()))?
             .clone()
             .ok_or_else(|| NetError::Protocol("room settings require an admitted room".into()))?;
+        // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+        // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+        #[allow(deprecated)]
         let sequence = self
             .request_sequence
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |sequence| {
@@ -316,6 +322,9 @@ impl Client {
     }
 
     fn admission_id(&self) -> Result<crate::protocol::v2::RequestId, NetError> {
+        // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+        // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+        #[allow(deprecated)]
         let sequence = self
             .request_sequence
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |sequence| {

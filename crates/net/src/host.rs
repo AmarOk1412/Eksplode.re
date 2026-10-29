@@ -341,6 +341,9 @@ fn accept_loop(
     while !stop.load(Ordering::SeqCst) {
         match listener.accept() {
             Ok((mut stream, _)) => {
+                // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+                // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+                #[allow(deprecated)]
                 if active
                     .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
                         if count < connection_limit {
@@ -392,6 +395,9 @@ fn enqueue_input(
     id: u64,
     msg: ClientMsg,
 ) -> Result<(), NetError> {
+    // try_update (the non-deprecated replacement) needs Rust 1.95, newer than this
+    // workspace's declared MSRV (1.75); keep fetch_update until the MSRV moves.
+    #[allow(deprecated)]
     pending
         .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
             if count < CONNECTION_CAPACITY {
