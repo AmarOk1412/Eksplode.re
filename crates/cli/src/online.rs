@@ -61,6 +61,7 @@ pub struct Online {
     password_required: bool,
     password_input: String,
     password_prompt: bool,
+    password_update: bool,
     setup: Option<SetupScreen>,
     initial_room: Option<RoomSettings>,
     requested_room_id: Option<String>,
@@ -102,6 +103,7 @@ impl Online {
             password_required: false,
             password_input: String::new(),
             password_prompt: false,
+            password_update: false,
             setup: None,
             initial_room: None,
             requested_room_id: None,
@@ -252,6 +254,7 @@ impl Online {
                 self.rejection = None;
                 self.password_input.clear();
                 self.password_prompt = false;
+                self.password_update = false;
                 self.room_ref = Some(admission.reference);
                 self.owner_slot = admission.owner_slot.map(usize::from);
                 self.revision = admission.revision;
@@ -560,13 +563,30 @@ impl Online {
             match code {
                 KeyCode::Esc => {
                     self.password_input.clear();
+                    let updating_room = self.password_update;
                     self.password_prompt = false;
+                    self.password_update = false;
                     self.notice = None;
-                    self.stage = Stage::Directory;
+                    self.stage = if updating_room {
+                        Stage::Lobby
+                    } else {
+                        Stage::Directory
+                    };
                 }
                 KeyCode::Enter => {
                     let password = std::mem::take(&mut self.password_input);
-                    self.join_room(Some(eksplode_re_net::protocol::v2::Secret::new(password)));
+                    if self.password_update {
+                        self.password_prompt = false;
+                        self.password_update = false;
+                        self.stage = Stage::Lobby;
+                        self.update_room_options(
+                            self.lobby.settings.clone(),
+                            self.capacity,
+                            Some(eksplode_re_net::protocol::v2::Secret::new(password)),
+                        );
+                    } else {
+                        self.join_room(Some(eksplode_re_net::protocol::v2::Secret::new(password)));
+                    }
                 }
                 KeyCode::Backspace => {
                     self.password_input.pop();
@@ -652,6 +672,39 @@ impl Online {
     /// Lobby commands go to the host as messages; the host decides who may do what and
     /// answers refusals with an `Error` that ends up in the notice.
     fn lobby_key(&mut self, code: KeyCode, action: Option<KeyAction>) {
+        match code {
+            KeyCode::Char('c' | 'C') => {
+                if self.owner_slot != self.slot {
+                    self.notice = Some("Only the room owner can change capacity".into());
+                    return;
+                }
+                if self.lobby.settings.mode != eksplode_re_core::Mode::Normal {
+                    self.notice = Some("Team and Chaser rooms require four players".into());
+                    return;
+                }
+                let occupied = self.lobby.participants().min(4) as u8;
+                let capacity = if self.capacity > occupied {
+                    self.capacity - 1
+                } else {
+                    4
+                };
+                self.update_room_options(self.lobby.settings.clone(), capacity, None);
+                return;
+            }
+            KeyCode::Char('p' | 'P') => {
+                if self.owner_slot == self.slot {
+                    self.password_input.clear();
+                    self.password_prompt = true;
+                    self.password_update = true;
+                    self.notice = None;
+                    self.stage = Stage::Password;
+                } else {
+                    self.notice = Some("Only the room owner can change its password".into());
+                }
+                return;
+            }
+            _ => {}
+        }
         let msg = match code {
             KeyCode::Char(c @ ('m' | 's' | 't' | 'f' | 'M' | 'S' | 'T' | 'F')) => {
                 let mut settings = self.lobby.settings.clone();
@@ -674,6 +727,21 @@ impl Online {
         };
         self.notice = None;
         self.send_action(msg);
+    }
+
+    fn update_room_options(
+        &mut self,
+        settings: RoomSettings,
+        capacity: u8,
+        password: Option<eksplode_re_net::protocol::v2::Secret>,
+    ) {
+        if self
+            .client
+            .set_room_options(&settings, capacity, password)
+            .is_err()
+        {
+            self.notice = Some("room update could not be sent".into());
+        }
     }
 
     /// Sends this tick's input to the host while a match runs.
@@ -815,7 +883,11 @@ fn render_password(frame: &mut Frame, online: &Online) {
         lines.push(Line::from(notice.as_str()));
     }
     lines.push(Line::default());
-    lines.push(Line::from("Type password   Enter join   Esc cancel"));
+    lines.push(Line::from(if online.password_update {
+        "Type new password   Enter save (blank removes)   Esc cancel"
+    } else {
+        "Type password   Enter join   Esc cancel"
+    }));
     frame.render_widget(
         Paragraph::new(lines).block(Block::bordered().title(" Room password ")),
         area,
@@ -851,7 +923,14 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
         }
         if online.password_required {
             lines.push(Line::from("Password: required"));
+        } else {
+            lines.push(Line::from("Password: open"));
         }
+        lines.push(Line::from(format!(
+            "Capacity: {}/{}",
+            online.lobby.participants(),
+            online.capacity
+        )));
     }
     for (i, slot) in online.lobby.slots.iter().enumerate() {
         let who = match slot.controller {
@@ -896,7 +975,7 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
     if online.stage == Stage::Lobby {
         if online.owner_slot == online.slot {
             lines.push(Line::from(
-                "Owner controls: m mode   s size   t time   f friendly fire",
+                "Owner controls: c capacity   p password   m mode   s size   t time   f fire",
             ));
         } else {
             let owner_name = online

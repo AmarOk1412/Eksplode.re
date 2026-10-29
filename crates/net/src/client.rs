@@ -282,6 +282,39 @@ impl Client {
         self.await_admission(&request_id)
     }
 
+    pub fn set_room_options(
+        &self,
+        settings: &eksplode_re_core::RoomSettings,
+        capacity: u8,
+        password: Option<crate::protocol::v2::Secret>,
+    ) -> Result<(), NetError> {
+        use crate::protocol::v2::{Request, RequestId};
+        let binding = self
+            .room
+            .lock()
+            .map_err(|_| NetError::Protocol("room state unavailable".into()))?
+            .clone()
+            .ok_or_else(|| NetError::Protocol("room settings require an admitted room".into()))?;
+        let sequence = self
+            .request_sequence
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |sequence| {
+                sequence.checked_add(1)
+            })
+            .map_err(|_| NetError::Protocol("request counter exhausted".into()))?;
+        let request_id = RequestId::new(format!("sdk-{sequence}"))
+            .map_err(|error| NetError::Protocol(error.into()))?;
+        let settings = serde_json::to_value(settings)
+            .map_err(|error| NetError::Malformed(error.to_string()))?;
+        self.send_v2(Request::SetRoom {
+            request_id,
+            room_id: binding.reference.room_id,
+            expected_revision: binding.revision,
+            settings,
+            capacity,
+            password,
+        })
+    }
+
     fn admission_id(&self) -> Result<crate::protocol::v2::RequestId, NetError> {
         let sequence = self
             .request_sequence

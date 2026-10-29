@@ -312,6 +312,59 @@ fn protected_terminal_join_uses_a_masked_cancellable_password_prompt() {
 }
 
 #[test]
+fn terminal_owner_can_change_capacity_and_set_or_remove_a_room_password() {
+    let host = host_with(open_game(1000));
+    let mut owner = hosting(host);
+    assert!(pump_until(&mut owner, |online| online.stage
+        == Stage::Lobby
+        && online.slot == Some(0)));
+    let mut browser = Online::directory(
+        Client::connect_unjoined(&owner.host_addr().unwrap().to_string()).unwrap(),
+        "Observer".into(),
+        KeyBindings::default_for_slot(0),
+    );
+    assert!(pump_until(&mut browser, |online| online.stage == Stage::Directory));
+    owner.handle_key(KeyCode::Char('c'));
+    browser.refresh_rooms();
+    assert!(pump_until(&mut browser, |online| online
+        .rooms
+        .first()
+        .is_some_and(|room| room.capacity == 3)));
+    assert!(pump_until(&mut owner, |online| screen(online)
+        .contains("Capacity: 1/3")));
+
+    owner.handle_key(KeyCode::Char('p'));
+    assert_eq!(owner.stage, Stage::Password);
+    for character in "owner-room-password".chars() {
+        owner.handle_key(KeyCode::Char(character));
+    }
+    let masked = screen(&owner);
+    assert!(masked.contains("*******************"), "{masked}");
+    assert!(!masked.contains("owner-room-password"));
+    owner.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut owner, |online| online.stage
+        == Stage::Lobby
+        && screen(online).contains("Password: required")));
+    browser.refresh_rooms();
+    assert!(pump_until(&mut browser, |online| online
+        .rooms
+        .first()
+        .is_some_and(|room| room.password_required)));
+
+    owner.handle_key(KeyCode::Char('p'));
+    assert_eq!(owner.stage, Stage::Password);
+    owner.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut owner, |online| online.stage
+        == Stage::Lobby
+        && screen(online).contains("Password: open")));
+    browser.refresh_rooms();
+    assert!(pump_until(&mut browser, |online| online
+        .rooms
+        .first()
+        .is_some_and(|room| !room.password_required)));
+}
+
+#[test]
 fn the_host_player_sees_the_address_and_hosting_keys() {
     let host = host_with(open_game(1000));
     let port = host.addr().port();
