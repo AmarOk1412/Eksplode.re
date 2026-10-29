@@ -1,5 +1,7 @@
 # Eksplode.re
 
+[![CI](https://github.com/AmarOk1412/Eksplode.re/actions/workflows/ci.yml/badge.svg)](https://github.com/AmarOk1412/Eksplode.re/actions/workflows/ci.yml)
+
 Note: This is a "Toy project" fully sloppy generated.
 
 Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, and let browser and
