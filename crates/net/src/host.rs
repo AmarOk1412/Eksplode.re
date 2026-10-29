@@ -2522,6 +2522,214 @@ mod tests {
     }
 
     #[test]
+    fn delayed_owner_password_change_cannot_overwrite_a_newer_room_revision() {
+        use crate::protocol::v2::{Request, RequestId, Secret};
+        #[derive(Default)]
+        struct Clock(AtomicU64);
+        impl ServiceClock for Clock {
+            fn now(&self) -> Duration {
+                Duration::from_millis(self.0.load(Ordering::SeqCst))
+            }
+        }
+        let clock = Arc::new(Clock::default());
+        let services = HostServices::new(clock.clone(), Arc::new(OsRandom));
+        let identity =
+            ServerIdentity::new(Some("revision-tests"), services.random.as_ref()).unwrap();
+        let workers = PasswordWorkers::start(services.random.clone()).unwrap();
+        let (_sender, receiver) = mpsc::sync_channel(1);
+        let mut server = Server::new(
+            HostConfig::default(),
+            receiver,
+            identity,
+            services,
+            "127.0.0.1:0".parse().unwrap(),
+            workers,
+        );
+        let (outbound, replies) = mpsc::sync_channel(128);
+        server.handle(Ev::New {
+            id: 1,
+            tx: outbound,
+            context: ConnectionContext {
+                local: false,
+                peer: None,
+            },
+        });
+        let original_password = Secret::new("original-password");
+        let original_verifier = PasswordVerifier::create(&original_password, &OsRandom).unwrap();
+        let (room, _) = server
+            .create_room(
+                1,
+                "Owner",
+                serde_json::to_value(RoomSettings::default()).unwrap(),
+                4,
+                None,
+                Some(original_verifier.clone()),
+            )
+            .unwrap();
+        let reference = room.reference.clone();
+        let revision = room.revision.get();
+        server.conns.get_mut(&1).unwrap().room_id = Some(reference.room_id.clone());
+        server.rooms.insert(reference.room_id.clone(), room);
+
+        let request_id = RequestId::new("replace-password").unwrap();
+        let work_id = RequestId::new("delayed-password-work").unwrap();
+        let mut candidate_settings = serde_json::to_value(RoomSettings::default()).unwrap();
+        candidate_settings["name"] = serde_json::json!("Concurrent edit");
+        let delayed_request = Request::SetRoom {
+            request_id,
+            room_id: reference.room_id.clone(),
+            expected_revision: revision,
+            settings: serde_json::to_value(RoomSettings::default()).unwrap(),
+            capacity: 4,
+            password: None,
+        };
+        server.pending_passwords.insert(
+            (1, work_id.clone()),
+            PendingPassword {
+                request: delayed_request,
+                revision: None,
+                deadline: Duration::from_secs(5),
+            },
+        );
+
+        let concurrent_request = Request::SetRoom {
+            request_id: RequestId::new("concurrent-settings").unwrap(),
+            room_id: reference.room_id.clone(),
+            expected_revision: revision,
+            settings: candidate_settings,
+            capacity: 4,
+            password: None,
+        };
+        let random = server.services.random.clone();
+        let now = server.services.clock.now();
+        let tick = server.cfg.tick;
+        server
+            .rooms
+            .get_mut(&reference.room_id)
+            .unwrap()
+            .command(1, concurrent_request, now, tick, random.as_ref())
+            .unwrap();
+
+        let replacement =
+            PasswordVerifier::create(&Secret::new("replacement-password"), &OsRandom).unwrap();
+        server.complete_password(PasswordCompletion {
+            connection_id: 1,
+            request_id: work_id,
+            result: Ok(PasswordWorkResult::Created(replacement)),
+        });
+        let room = server.rooms.get(&reference.room_id).unwrap();
+        assert_eq!(room.revision.get(), revision + 1);
+        assert_eq!(room.lobby.settings.name, "Concurrent edit");
+        let verifier = room.password.as_ref().unwrap();
+        assert!(verifier.verify(&original_password).unwrap());
+        assert!(!verifier
+            .verify(&Secret::new("replacement-password"))
+            .unwrap());
+        assert!(matches!(
+            replies.try_recv().unwrap(),
+            ServerMsg::RoomV2(reply) if matches!(reply.as_ref(), crate::protocol::v2::Reply::Error {
+                code: crate::protocol::v2::ErrorCode::StaleRevision, ..
+            })
+        ));
+    }
+
+    #[test]
+    fn delayed_owner_password_change_is_rejected_after_match_start() {
+        use crate::protocol::v2::{Request, RequestId, Secret};
+        let services = HostServices::new(Arc::new(MonotonicClock::default()), Arc::new(OsRandom));
+        let identity = ServerIdentity::new(Some("phase-tests"), services.random.as_ref()).unwrap();
+        let workers = PasswordWorkers::start(services.random.clone()).unwrap();
+        let (_sender, receiver) = mpsc::sync_channel(1);
+        let mut server = Server::new(
+            HostConfig::default(),
+            receiver,
+            identity,
+            services,
+            "127.0.0.1:0".parse().unwrap(),
+            workers,
+        );
+        let (outbound, replies) = mpsc::sync_channel(128);
+        server.handle(Ev::New {
+            id: 1,
+            tx: outbound,
+            context: ConnectionContext {
+                local: false,
+                peer: None,
+            },
+        });
+        let old_password = Secret::new("phase-original-password");
+        let old_verifier = PasswordVerifier::create(&old_password, &OsRandom).unwrap();
+        let (room, _) = server
+            .create_room(
+                1,
+                "Owner",
+                serde_json::to_value(RoomSettings::default()).unwrap(),
+                4,
+                None,
+                Some(old_verifier.clone()),
+            )
+            .unwrap();
+        let reference = room.reference.clone();
+        let revision = room.revision.get();
+        server.conns.get_mut(&1).unwrap().room_id = Some(reference.room_id.clone());
+        server.rooms.insert(reference.room_id.clone(), room);
+        let work_id = RequestId::new("phase-password-work").unwrap();
+        let request = Request::SetRoom {
+            request_id: RequestId::new("phase-password-update").unwrap(),
+            room_id: reference.room_id.clone(),
+            expected_revision: revision,
+            settings: serde_json::to_value(RoomSettings::default()).unwrap(),
+            capacity: 4,
+            password: None,
+        };
+        server.pending_passwords.insert(
+            (1, work_id.clone()),
+            PendingPassword {
+                request,
+                revision: None,
+                deadline: Duration::from_secs(5),
+            },
+        );
+        let random = server.services.random.clone();
+        let now = server.services.clock.now();
+        let tick = server.cfg.tick;
+        server
+            .rooms
+            .get_mut(&reference.room_id)
+            .unwrap()
+            .command(
+                1,
+                Request::Start {
+                    request_id: RequestId::new("start").unwrap(),
+                    room_id: reference.room_id.clone(),
+                },
+                now,
+                tick,
+                random.as_ref(),
+            )
+            .unwrap();
+
+        let new_password = Secret::new("phase-replacement-password");
+        let new_verifier = PasswordVerifier::create(&new_password, &OsRandom).unwrap();
+        server.complete_password(PasswordCompletion {
+            connection_id: 1,
+            request_id: work_id,
+            result: Ok(PasswordWorkResult::Created(new_verifier)),
+        });
+        let room = server.rooms.get(&reference.room_id).unwrap();
+        assert_eq!(room.phase, crate::protocol::v2::RoomPhase::Running);
+        let verifier = room.password.as_ref().unwrap();
+        assert!(verifier.verify(&old_password).unwrap());
+        assert!(!verifier.verify(&new_password).unwrap());
+        assert!(matches!(
+            replies.try_recv().unwrap(),
+            ServerMsg::RoomV2(reply) if matches!(reply.as_ref(), crate::protocol::v2::Reply::Error {
+                code: crate::protocol::v2::ErrorCode::InMatch, ..
+            })
+        ));
+    }
+
+    #[test]
     fn peer_context_is_supplied_by_the_transport_not_a_player_message() {
         let (sender, receiver) = mpsc::sync_channel(8);
         let handle = HostHandle {
