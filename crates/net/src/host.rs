@@ -26,6 +26,10 @@ use crate::room::{
     AdmissionLedger, ControlBudget, InputBudget, MonotonicClock, OsRandom, RandomSource,
     RoomLimits, ServerIdentity, ServiceClock,
 };
+use crate::room::{
+    PasswordCompletion, PasswordJob, PasswordVerifier, PasswordWork, PasswordWorkResult,
+    PasswordWorkers,
+};
 
 /// Connections that cause this many errors are closed.
 const MAX_ERRORS: u32 = 10;
@@ -266,6 +270,8 @@ impl Host {
             .map_err(|error| NetError::Protocol(error.to_string()))?;
         let identity = ServerIdentity::new(cfg.server_id.as_deref(), services.random.as_ref())
             .map_err(|error| NetError::Protocol(error.to_string()))?;
+        let password_workers = PasswordWorkers::start(services.random.clone())
+            .map_err(|_| NetError::Protocol("password workers unavailable".into()))?;
         let listener = TcpListener::bind(&cfg.bind)?;
         listener.set_nonblocking(true)?;
         let addr = listener.local_addr()?;
@@ -279,7 +285,9 @@ impl Host {
             thread::spawn(move || accept_loop(listener, tx, next_id, stop, connection_limit));
         }
         let limits = cfg.limits;
-        let server = thread::spawn(move || Server::new(cfg, rx, identity, services, addr).run());
+        let server = thread::spawn(move || {
+            Server::new(cfg, rx, identity, services, addr, password_workers).run()
+        });
         Ok(Host {
             addr,
             tx,
@@ -527,6 +535,12 @@ struct Running {
     bots: [Option<DefaultBot>; MAX_PLAYERS],
 }
 
+struct PendingPassword {
+    request: crate::protocol::v2::Request,
+    revision: Option<u64>,
+    deadline: Duration,
+}
+
 struct Server {
     cfg: HostConfig,
     rx: Receiver<Ev>,
@@ -548,6 +562,9 @@ struct Server {
     http_cursors: HashMap<String, DirectoryCursor>,
     game_addr: SocketAddr,
     web_addr: Option<SocketAddr>,
+    password_workers: PasswordWorkers,
+    pending_passwords: HashMap<(u64, crate::protocol::v2::RequestId), PendingPassword>,
+    password_sequence: u64,
 }
 
 impl Server {
@@ -557,6 +574,7 @@ impl Server {
         identity: ServerIdentity,
         services: HostServices,
         game_addr: SocketAddr,
+        password_workers: PasswordWorkers,
     ) -> Self {
         let lobby = Lobby {
             settings: cfg.defaults.clone().sanitize(),
@@ -580,6 +598,9 @@ impl Server {
             http_cursors: HashMap::new(),
             game_addr: client_address(game_addr),
             web_addr: None,
+            password_workers,
+            pending_passwords: HashMap::new(),
+            password_sequence: 0,
         }
     }
 
@@ -607,6 +628,9 @@ impl Server {
                 }
                 Ok(ev) => self.handle(ev),
                 Err(RecvTimeoutError::Timeout) => {}
+            }
+            while let Ok(completion) = self.password_workers.try_recv() {
+                self.complete_password(completion);
             }
             if self.game.is_some() {
                 let now = Instant::now();
@@ -943,20 +967,37 @@ impl Server {
                 password,
                 look,
             } if negotiated => {
-                let result = if password.is_some_and(|value| !value.expose().is_empty()) {
-                    Err(ErrorCode::Unsupported)
-                } else {
-                    self.create_room(id, &name, settings, capacity, look.as_ref())
-                        .map(|(room, admission)| {
-                            (
-                                Reply::Welcome {
-                                    request_id: request_id.clone(),
-                                    admission,
-                                },
-                                room,
-                            )
-                        })
-                };
+                if let Some(password) = password {
+                    if let Err(code) = PasswordVerifier::validate(&password) {
+                        self.finish_room_admission(id, request_id, Err(code), None);
+                        return;
+                    }
+                    self.queue_password(
+                        id,
+                        Request::CreateRoom {
+                            request_id,
+                            name,
+                            settings,
+                            capacity,
+                            password: None,
+                            look,
+                        },
+                        PasswordWork::Create(password),
+                        None,
+                    );
+                    return;
+                }
+                let result = self
+                    .create_room(id, &name, settings, capacity, look.as_ref(), None)
+                    .map(|(room, admission)| {
+                        (
+                            Reply::Welcome {
+                                request_id: request_id.clone(),
+                                admission,
+                            },
+                            room,
+                        )
+                    });
                 self.finish_room_admission(id, request_id, result, look.as_ref());
             }
             Request::JoinRoom {
@@ -965,38 +1006,59 @@ impl Server {
                 room_id,
                 name,
                 look,
-                ..
+                password,
             } if negotiated => {
-                let result = if self.conns.get(&id).is_some_and(|connection| {
-                    connection.room_id.is_some() || connection.slot.is_some()
-                }) {
-                    Err(ErrorCode::AlreadyInRoom)
-                } else if server_epoch != self.identity.server_epoch {
-                    Err(ErrorCode::RoomNotFound)
-                } else {
-                    self.rooms
-                        .get(&room_id)
-                        .ok_or(ErrorCode::RoomNotFound)
-                        .and_then(crate::room::RoomRuntime::admission_candidate)
-                        .and_then(|mut room| {
-                            let admission = room.admit(
-                                id,
-                                &name,
-                                self.conns
-                                    .get(&id)
-                                    .is_some_and(|connection| connection.context.local),
-                                look.as_ref(),
-                                self.services.random.as_ref(),
-                            )?;
-                            Ok((
-                                Reply::Welcome {
-                                    request_id: request_id.clone(),
-                                    admission,
-                                },
-                                room,
-                            ))
-                        })
+                let policy = self
+                    .room_for_join(id, &server_epoch, &room_id, &name)
+                    .map(|room| (room.password.clone(), room.revision.get()));
+                let (verifier, revision) = match policy {
+                    Ok(policy) => policy,
+                    Err(code) => {
+                        self.finish_room_admission(id, request_id, Err(code), None);
+                        return;
+                    }
                 };
+                let request = Request::JoinRoom {
+                    request_id: request_id.clone(),
+                    server_epoch,
+                    room_id,
+                    name,
+                    look: look.clone(),
+                    password: None,
+                };
+                if let Some(verifier) = verifier {
+                    let Some(password) = password else {
+                        self.finish_room_admission(
+                            id,
+                            request_id,
+                            Err(ErrorCode::BadPassword),
+                            None,
+                        );
+                        return;
+                    };
+                    if let Err(code) = PasswordVerifier::validate(&password) {
+                        self.finish_room_admission(id, request_id, Err(code), None);
+                        return;
+                    }
+                    self.queue_password(
+                        id,
+                        request,
+                        PasswordWork::Verify { verifier, password },
+                        Some(revision),
+                    );
+                    return;
+                }
+                let result = self
+                    .join_candidate(id, &request, None)
+                    .map(|(room, admission)| {
+                        (
+                            Reply::Welcome {
+                                request_id: request_id.clone(),
+                                admission,
+                            },
+                            room,
+                        )
+                    });
                 self.finish_room_admission(id, request_id, result, look.as_ref());
             }
             Request::LeaveRoom {
@@ -1328,6 +1390,187 @@ impl Server {
         }
     }
 
+    fn queue_password(
+        &mut self,
+        id: u64,
+        request: crate::protocol::v2::Request,
+        work: PasswordWork,
+        revision: Option<u64>,
+    ) {
+        let Some(request_id) = request.request_id().cloned() else {
+            return;
+        };
+        let Some(deadline) = self.conns.get_mut(&id).and_then(|connection| {
+            connection
+                .admissions
+                .pending_deadline(&request_id, self.services.clock.now())
+        }) else {
+            self.finish_room_admission(
+                id,
+                request_id,
+                Err(crate::protocol::v2::ErrorCode::RequestExpired),
+                None,
+            );
+            return;
+        };
+        let Some(sequence) = self.password_sequence.checked_add(1) else {
+            self.finish_room_admission(
+                id,
+                request_id,
+                Err(crate::protocol::v2::ErrorCode::Unavailable),
+                None,
+            );
+            return;
+        };
+        self.password_sequence = sequence;
+        let Ok(work_id) = crate::protocol::v2::RequestId::new(format!("password-work-{sequence}"))
+        else {
+            self.finish_room_admission(
+                id,
+                request_id,
+                Err(crate::protocol::v2::ErrorCode::Unavailable),
+                None,
+            );
+            return;
+        };
+        match self.password_workers.try_submit(PasswordJob {
+            connection_id: id,
+            request_id: work_id.clone(),
+            work,
+        }) {
+            Ok(()) => {
+                self.pending_passwords.insert(
+                    (id, work_id),
+                    PendingPassword {
+                        request,
+                        revision,
+                        deadline,
+                    },
+                );
+            }
+            Err(code) => self.finish_room_admission(id, request_id, Err(code), None),
+        }
+    }
+
+    fn room_for_join(
+        &self,
+        id: u64,
+        epoch: &str,
+        room_id: &str,
+        name: &str,
+    ) -> Result<&crate::room::RoomRuntime, crate::protocol::v2::ErrorCode> {
+        use crate::protocol::v2::ErrorCode;
+        if self
+            .conns
+            .get(&id)
+            .is_some_and(|connection| connection.room_id.is_some() || connection.slot.is_some())
+        {
+            return Err(ErrorCode::AlreadyInRoom);
+        }
+        if epoch != self.identity.server_epoch {
+            return Err(ErrorCode::RoomNotFound);
+        }
+        let room = self.rooms.get(room_id).ok_or(ErrorCode::RoomNotFound)?;
+        room.admission_slot(name)?;
+        Ok(room)
+    }
+
+    fn join_candidate(
+        &self,
+        id: u64,
+        request: &crate::protocol::v2::Request,
+        revision: Option<u64>,
+    ) -> Result<
+        (crate::room::RoomRuntime, crate::protocol::v2::Admission),
+        crate::protocol::v2::ErrorCode,
+    > {
+        use crate::protocol::v2::{ErrorCode, Request};
+        let Request::JoinRoom {
+            server_epoch,
+            room_id,
+            name,
+            look,
+            ..
+        } = request
+        else {
+            return Err(ErrorCode::BadRoom);
+        };
+        let room = self.room_for_join(id, server_epoch, room_id, name)?;
+        if revision.is_some_and(|revision| revision != room.revision.get()) {
+            return Err(ErrorCode::StaleRevision);
+        }
+        let mut candidate = room.admission_candidate()?;
+        let local = self
+            .conns
+            .get(&id)
+            .is_some_and(|connection| connection.context.local);
+        let admission = candidate.admit(
+            id,
+            name,
+            local,
+            look.as_ref(),
+            self.services.random.as_ref(),
+        )?;
+        Ok((candidate, admission))
+    }
+
+    fn complete_password(&mut self, completion: PasswordCompletion) {
+        use crate::protocol::v2::{ErrorCode, Reply, Request, RequestState};
+        let id = completion.connection_id;
+        let Some(pending) = self.pending_passwords.remove(&(id, completion.request_id)) else {
+            return;
+        };
+        if self.services.clock.now() >= pending.deadline {
+            return;
+        }
+        let Some(request_id) = pending.request.request_id().cloned() else {
+            return;
+        };
+        let Some(connection) = self.conns.get_mut(&id) else {
+            return;
+        };
+        if connection
+            .admissions
+            .status(&request_id, self.services.clock.now())
+            .0
+            != RequestState::Pending
+        {
+            return;
+        }
+        let look = match &pending.request {
+            Request::CreateRoom { look, .. } | Request::JoinRoom { look, .. } => look.clone(),
+            _ => None,
+        };
+        let result = match (pending.request, completion.result) {
+            (
+                Request::CreateRoom {
+                    name,
+                    settings,
+                    capacity,
+                    look,
+                    ..
+                },
+                Ok(PasswordWorkResult::Created(verifier)),
+            ) => self.create_room(id, &name, settings, capacity, look.as_ref(), Some(verifier)),
+            (request @ Request::JoinRoom { .. }, Ok(PasswordWorkResult::Verified(true))) => {
+                self.join_candidate(id, &request, pending.revision)
+            }
+            (_, Ok(PasswordWorkResult::Verified(false))) => Err(ErrorCode::BadPassword),
+            (_, Err(code)) => Err(code),
+            _ => Err(ErrorCode::Unavailable),
+        }
+        .map(|(room, admission)| {
+            (
+                Reply::Welcome {
+                    request_id: request_id.clone(),
+                    admission,
+                },
+                room,
+            )
+        });
+        self.finish_room_admission(id, request_id, result, look.as_ref());
+    }
+
     fn create_room(
         &self,
         id: u64,
@@ -1335,6 +1578,7 @@ impl Server {
         settings: Value,
         capacity: u8,
         look: Option<&Value>,
+        password: Option<PasswordVerifier>,
     ) -> Result<
         (crate::room::RoomRuntime, crate::protocol::v2::Admission),
         crate::protocol::v2::ErrorCode,
@@ -1380,6 +1624,7 @@ impl Server {
             self.cfg.dev,
             self.cfg.seed,
         )?;
+        room.password = password;
         let local = self
             .conns
             .get(&id)
@@ -1842,6 +2087,8 @@ impl Server {
 
     /// Removes a connection; its slot is freed in the lobby or taken over by a bot in a match.
     fn remove(&mut self, id: u64) {
+        self.pending_passwords
+            .retain(|(connection, _), _| *connection != id);
         let Some(conn) = self.conns.remove(&id) else {
             return;
         };
@@ -1983,6 +2230,210 @@ fn client_address(mut address: SocketAddr) -> SocketAddr {
 #[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn password_completion_rechecks_deadline_cancellation_disconnect_and_duplicate_commit() {
+        use crate::protocol::v2::{Request, RequestId, RequestState, Secret};
+        #[derive(Default)]
+        struct Clock(AtomicU64);
+        impl ServiceClock for Clock {
+            fn now(&self) -> Duration {
+                Duration::from_millis(self.0.load(Ordering::SeqCst))
+            }
+        }
+        let verifier =
+            PasswordVerifier::create(&Secret::new("completion-canary"), &OsRandom).unwrap();
+        for scenario in [
+            "valid",
+            "before-deadline",
+            "expired",
+            "cancelled",
+            "disconnected",
+        ] {
+            let clock = Arc::new(Clock::default());
+            let services = HostServices::new(clock.clone(), Arc::new(OsRandom));
+            let identity =
+                ServerIdentity::new(Some("password-tests"), services.random.as_ref()).unwrap();
+            let workers = PasswordWorkers::start(services.random.clone()).unwrap();
+            let (_sender, receiver) = mpsc::sync_channel(1);
+            let mut server = Server::new(
+                HostConfig::default(),
+                receiver,
+                identity,
+                services,
+                "127.0.0.1:0".parse().unwrap(),
+                workers,
+            );
+            let (outbound, _replies) = mpsc::sync_channel(128);
+            server.handle(Ev::New {
+                id: 1,
+                tx: outbound,
+                context: ConnectionContext {
+                    local: false,
+                    peer: None,
+                },
+            });
+            let request_id = RequestId::new("controlled-create").unwrap();
+            server
+                .conns
+                .get_mut(&1)
+                .unwrap()
+                .admissions
+                .begin(request_id.clone(), Duration::ZERO)
+                .unwrap();
+            server.pending_passwords.insert(
+                (1, request_id.clone()),
+                PendingPassword {
+                    request: Request::create_room(
+                        request_id.clone(),
+                        "Owner".into(),
+                        &RoomSettings::default(),
+                        4,
+                    ),
+                    revision: None,
+                    deadline: Duration::from_secs(5),
+                },
+            );
+            match scenario {
+                "before-deadline" => clock.0.store(4_999, Ordering::SeqCst),
+                "expired" => clock.0.store(5_000, Ordering::SeqCst),
+                "cancelled" => {
+                    server
+                        .conns
+                        .get_mut(&1)
+                        .unwrap()
+                        .admissions
+                        .cancel(&request_id, Duration::ZERO);
+                }
+                "disconnected" => server.remove(1),
+                _ => {}
+            }
+            for _ in 0..2 {
+                server.complete_password(PasswordCompletion {
+                    connection_id: 1,
+                    request_id: request_id.clone(),
+                    result: Ok(PasswordWorkResult::Created(verifier.clone())),
+                });
+            }
+            assert!(server.pending_passwords.is_empty());
+            if matches!(scenario, "valid" | "before-deadline") {
+                assert_eq!(server.rooms.len(), 1, "{scenario}");
+                assert!(server.rooms.values().next().unwrap().password.is_some());
+                assert_eq!(
+                    server
+                        .conns
+                        .get_mut(&1)
+                        .unwrap()
+                        .admissions
+                        .status(&request_id, clock.now())
+                        .0,
+                    RequestState::Committed
+                );
+            } else {
+                assert!(
+                    server.rooms.is_empty(),
+                    "late work published a room: {scenario}"
+                );
+                if let Some(connection) = server.conns.get(&1) {
+                    assert!(connection.room_id.is_none());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn password_completion_cannot_commit_a_reused_request_after_the_original_deadline() {
+        use crate::protocol::v2::{Request, RequestId, Secret};
+        #[derive(Default)]
+        struct Clock(AtomicU64);
+        impl ServiceClock for Clock {
+            fn now(&self) -> Duration {
+                Duration::from_secs(self.0.load(Ordering::SeqCst))
+            }
+        }
+        let clock = Arc::new(Clock::default());
+        let services = HostServices::new(clock.clone(), Arc::new(OsRandom));
+        let identity = ServerIdentity::new(Some("reuse-tests"), services.random.as_ref()).unwrap();
+        let workers = PasswordWorkers::start(services.random.clone()).unwrap();
+        let (_sender, receiver) = mpsc::sync_channel(1);
+        let mut server = Server::new(
+            HostConfig::default(),
+            receiver,
+            identity,
+            services,
+            "127.0.0.1:0".parse().unwrap(),
+            workers,
+        );
+        let (outbound, _replies) = mpsc::sync_channel(128);
+        server.handle(Ev::New {
+            id: 1,
+            tx: outbound,
+            context: ConnectionContext {
+                local: false,
+                peer: None,
+            },
+        });
+        let original = RequestId::new("client-reused-id").unwrap();
+        let old_work = RequestId::new("old-private-work").unwrap();
+        let new_work = RequestId::new("new-private-work").unwrap();
+        let verifier =
+            PasswordVerifier::create(&Secret::new("reused-password-canary"), &OsRandom).unwrap();
+        server
+            .conns
+            .get_mut(&1)
+            .unwrap()
+            .admissions
+            .begin(original.clone(), Duration::ZERO)
+            .unwrap();
+        server.pending_passwords.insert(
+            (1, old_work.clone()),
+            PendingPassword {
+                request: Request::create_room(
+                    original.clone(),
+                    "Old".into(),
+                    &RoomSettings::default(),
+                    4,
+                ),
+                revision: None,
+                deadline: Duration::from_secs(5),
+            },
+        );
+        clock.0.store(65, Ordering::SeqCst);
+        server
+            .conns
+            .get_mut(&1)
+            .unwrap()
+            .admissions
+            .begin(original.clone(), clock.now())
+            .unwrap();
+        server.pending_passwords.insert(
+            (1, new_work.clone()),
+            PendingPassword {
+                request: Request::create_room(original, "New".into(), &RoomSettings::default(), 4),
+                revision: None,
+                deadline: Duration::from_secs(70),
+            },
+        );
+        server.complete_password(PasswordCompletion {
+            connection_id: 1,
+            request_id: old_work,
+            result: Ok(PasswordWorkResult::Created(verifier.clone())),
+        });
+        assert!(
+            server.rooms.is_empty(),
+            "the expired operation matched a newer ledger entry"
+        );
+        server.complete_password(PasswordCompletion {
+            connection_id: 1,
+            request_id: new_work,
+            result: Ok(PasswordWorkResult::Created(verifier)),
+        });
+        assert_eq!(server.rooms.len(), 1);
+        assert_eq!(
+            server.rooms.values().next().unwrap().lobby.settings.name,
+            "New's room"
+        );
+    }
 
     #[test]
     fn peer_context_is_supplied_by_the_transport_not_a_player_message() {

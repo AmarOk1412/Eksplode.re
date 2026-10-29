@@ -48,7 +48,7 @@ impl PasswordVerifier {
         Ok(bool::from(self.digest.ct_eq(&candidate)))
     }
 
-    fn validate(password: &Secret) -> Result<(), ErrorCode> {
+    pub(crate) fn validate(password: &Secret) -> Result<(), ErrorCode> {
         let value = password.expose();
         if value.is_empty()
             || value.len() > 512
@@ -334,6 +334,14 @@ impl AdmissionLedger {
             .get(request_id)
             .map(|entry| (entry.state, entry.reply.clone()))
             .unwrap_or((RequestState::Unknown, None))
+    }
+
+    pub fn pending_deadline(&mut self, request_id: &RequestId, now: Duration) -> Option<Duration> {
+        self.prune(now);
+        self.entries
+            .get(request_id)
+            .filter(|entry| entry.state == RequestState::Pending)
+            .map(|entry| entry.deadline)
     }
 
     pub fn cancel(
@@ -702,6 +710,7 @@ pub struct RoomRuntime {
     next_tick: Duration,
     drops: DropTable,
     bots_paused: bool,
+    pub(crate) password: Option<PasswordVerifier>,
 }
 
 struct RoomGame {
@@ -745,6 +754,7 @@ impl RoomRuntime {
             next_tick: Duration::ZERO,
             drops,
             bots_paused: false,
+            password: None,
         })
     }
 
@@ -767,6 +777,7 @@ impl RoomRuntime {
         candidate.matches = self.matches;
         candidate.drops = self.drops.clone();
         candidate.bots_paused = self.bots_paused;
+        candidate.password = self.password.clone();
         Ok(candidate)
     }
 
@@ -1103,6 +1114,21 @@ impl RoomRuntime {
         replies
     }
 
+    pub(crate) fn admission_slot(&self, name: &str) -> Result<usize, ErrorCode> {
+        if !crate::protocol::valid_name(name) {
+            return Err(ErrorCode::BadName);
+        }
+        if self.phase != RoomPhase::Lobby {
+            return Err(ErrorCode::InMatch);
+        }
+        self.lobby
+            .slots
+            .iter()
+            .take(usize::from(self.capacity))
+            .position(|slot| slot.controller == Controller::Empty)
+            .ok_or(ErrorCode::Full)
+    }
+
     pub fn admit(
         &mut self,
         connection_id: u64,
@@ -1111,19 +1137,7 @@ impl RoomRuntime {
         look: Option<&Value>,
         random: &dyn RandomSource,
     ) -> Result<Admission, ErrorCode> {
-        if !crate::protocol::valid_name(name) {
-            return Err(ErrorCode::BadName);
-        }
-        if self.phase != RoomPhase::Lobby {
-            return Err(ErrorCode::InMatch);
-        }
-        let slot = self
-            .lobby
-            .slots
-            .iter()
-            .take(usize::from(self.capacity))
-            .position(|slot| slot.controller == Controller::Empty)
-            .ok_or(ErrorCode::Full)?;
+        let slot = self.admission_slot(name)?;
         let mut revision = self.revision;
         revision.advance().map_err(|_| ErrorCode::Unavailable)?;
         let membership_id = self
@@ -1191,7 +1205,7 @@ impl RoomRuntime {
             owner_slot,
             revision: self.revision.get(),
             capacity: self.capacity,
-            password_required: false,
+            password_required: self.password.is_some(),
             config: self.lobby.settings.to_config(&self.config),
             lobby: self.lobby.clone(),
             looks: self.looks.to_vec(),
@@ -1220,7 +1234,7 @@ impl RoomRuntime {
             reserved_humans,
             bots: occupied.saturating_sub(connected_humans + reserved_humans),
             phase: self.phase,
-            password_required: false,
+            password_required: self.password.is_some(),
             revision: self.revision.get(),
             game_addr: None,
             web_origin: None,
@@ -1244,7 +1258,7 @@ impl RoomRuntime {
             owner_membership_id: self.members.owner_membership_id.clone(),
             owner_slot,
             capacity: self.capacity,
-            password_required: false,
+            password_required: self.password.is_some(),
             memberships,
             lobby: self.lobby.clone(),
             looks: self.looks.to_vec(),

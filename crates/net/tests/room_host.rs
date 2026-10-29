@@ -77,6 +77,117 @@ fn v2_create_settings(host: &Host, name: &str, settings: Value) -> (Raw, Value) 
 }
 
 #[test]
+fn protected_room_admission_verifies_passwords_without_public_secrets() {
+    let host = host();
+    let password = "protected-room-password-canary";
+    let mut owner = Raw::connect(host.addr());
+    owner.hello_v2().unwrap();
+    owner.send_value(
+        &json!({"type":"CreateRoom", "request_id":"protected-create", "name":"Owner",
+        "settings":RoomSettings::default(), "capacity":2, "password":password}),
+    );
+    let welcome = owner.recv_value().unwrap();
+    assert_eq!(welcome["type"], "Welcome", "protected creation was refused");
+    assert_eq!(welcome["password_required"], true);
+    let initial_update = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(initial_update["password_required"], true);
+    owner.send_value(
+        &json!({"type":"CreateRoom", "request_id":"protected-create", "name":"Owner",
+        "settings":RoomSettings::default(), "capacity":2, "password":password}),
+    );
+    let replay = v2_reply(&mut owner, "Welcome");
+    assert_eq!(
+        replay, welcome,
+        "a lost reply replays the original private result"
+    );
+    owner.send_value(&json!({"type":"CancelRequest", "request_id":"after-commit", "target_request_id":"protected-create"}));
+    let committed = v2_reply(&mut owner, "RequestStatus");
+    assert_eq!(committed["status"], "committed");
+    assert_eq!(committed["result"], welcome);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.send_value(&json!({"type":"RequestStatus", "request_id":"private-query", "target_request_id":"protected-create"}));
+    let private = v2_reply(&mut member, "RequestStatus");
+    assert_eq!(private["status"], "unknown");
+    assert!(private["result"].is_null());
+    for (index, supplied) in [None, Some("wrong-password")].into_iter().enumerate() {
+        member.send_value(&json!({"type":"JoinRoom", "request_id":format!("bad-password-{index}"),
+            "name":"Member", "room_id":welcome["room_id"], "server_epoch":welcome["server_epoch"], "password":supplied}));
+        let error = v2_reply(&mut member, "Error");
+        assert_eq!(error["code"], "BadPassword");
+        assert!(!error.to_string().contains(password));
+        member.send_value(&json!({"type":"ListRooms", "request_id":format!("directory-{index}"), "scope":"local"}));
+        let directory = v2_reply(&mut member, "Rooms");
+        assert_eq!(directory["rooms"][0]["occupied"], 1);
+        assert_eq!(directory["rooms"][0]["password_required"], true);
+        assert!(!directory.to_string().contains(password));
+        assert!(directory["rooms"][0].get("resume_proof").is_none());
+    }
+    member.send_value(
+        &json!({"type":"JoinRoom", "request_id":"correct-password", "name":"Member",
+        "room_id":welcome["room_id"], "server_epoch":welcome["server_epoch"], "password":password}),
+    );
+    let joined = v2_reply(&mut member, "Welcome");
+    assert_eq!(joined["slot"], 1);
+    assert_eq!(joined["room_id"], welcome["room_id"]);
+    assert_eq!(joined["password_required"], true);
+    let updated = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(updated["password_required"], true);
+    assert!(!updated.to_string().contains(password));
+    assert!(updated.get("resume_proof").is_none());
+}
+
+#[test]
+fn protected_room_final_seat_is_committed_once_after_concurrent_verification() {
+    let host = host();
+    let mut owner = Raw::connect(host.addr());
+    owner.hello_v2().unwrap();
+    owner.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Owner",
+        "settings":RoomSettings::default(), "capacity":2, "password":"race-password"}),
+    );
+    let room = v2_reply(&mut owner, "Welcome");
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let mut attempts = Vec::new();
+    for index in 0..2 {
+        let address = host.addr();
+        let room = room.clone();
+        let barrier = barrier.clone();
+        attempts.push(std::thread::spawn(move || {
+            let mut peer = Raw::connect(address);
+            peer.hello_v2().unwrap();
+            barrier.wait();
+            peer.send_value(&json!({"type":"JoinRoom", "request_id":"join", "name":format!("P{index}"),
+                "room_id":room["room_id"], "server_epoch":room["server_epoch"], "password":"race-password"}));
+            let result = peer.recv_value().unwrap();
+            (peer, result)
+        }));
+    }
+    let outcomes: Vec<_> = attempts
+        .into_iter()
+        .map(|attempt| attempt.join().unwrap())
+        .collect();
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|(_, reply)| reply["type"] == "Welcome")
+            .count(),
+        1
+    );
+    assert_eq!(
+        outcomes
+            .iter()
+            .filter(|(_, reply)| reply["code"] == "Full")
+            .count(),
+        1
+    );
+    owner.send_value(&json!({"type":"ListRooms", "request_id":"after-race", "scope":"local"}));
+    let directory = v2_reply(&mut owner, "Rooms");
+    assert_eq!(directory["rooms"][0]["occupied"], 2);
+    assert_eq!(directory["rooms"][0]["connected_humans"], 2);
+}
+
+#[test]
 fn room_name_creation_counts_trimmed_characters() {
     let host = host();
     for (index, expected) in ["x".to_string(), "x".repeat(24), "\u{e9}".repeat(24)]
