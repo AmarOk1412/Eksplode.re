@@ -790,11 +790,8 @@ impl RoomRuntime {
                     return Err(ErrorCode::BadRoom);
                 }
                 settings.name = settings.name.trim().to_string();
-                if settings.name.chars().count() > 24 {
+                if settings.name.is_empty() || settings.name.chars().count() > 24 {
                     return Err(ErrorCode::BadRoom);
-                }
-                if settings.name.is_empty() {
-                    settings.name = self.lobby.settings.name.clone();
                 }
                 Self::new(
                     self.reference.clone(),

@@ -143,6 +143,42 @@ fn room_name_updates_count_trimmed_characters_and_reject_controls_atomically() {
 }
 
 #[test]
+fn room_name_updates_reject_empty_and_overlong_names_without_changes() {
+    let host = host();
+    let (mut owner, room) = v2_create_settings(
+        &host,
+        "Owner",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    for (index, name) in [
+        String::new(),
+        " \u{2003} ".into(),
+        "x".repeat(25),
+        "\u{e9}".repeat(25),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut settings = room["lobby"]["settings"].clone();
+        settings["name"] = json!(name);
+        owner.send_value(&json!({"type":"SetRoom", "request_id":format!("invalid-name-{index}"),
+            "room_id":room["room_id"], "expected_revision":room["revision"], "settings":settings, "capacity":4}));
+        let reply = owner.recv_value().unwrap();
+        assert_eq!(reply["type"], "Error", "invalid name changed the room");
+        assert_eq!(reply["code"], "BadRoom");
+    }
+    owner.send_value(
+        &json!({"type":"ListRooms", "request_id":"after-invalid-names", "scope":"local"}),
+    );
+    let directory = v2_reply(&mut owner, "Rooms");
+    assert_eq!(directory["rooms"][0]["revision"], room["revision"]);
+    assert_eq!(
+        directory["rooms"][0]["name"],
+        room["lobby"]["settings"]["name"]
+    );
+}
+
+#[test]
 fn v2_only_one_of_a_hundred_connections_takes_the_last_seat() {
     let host = host();
     let (_owner, room) = v2_create(&host, "Owner", 2);
