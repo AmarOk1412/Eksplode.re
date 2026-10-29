@@ -1,0 +1,94 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, test and publish a release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out the tagged commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install stable Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint with clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Run full test suite
+        run: cargo test --workspace
+
+      - name: Build release binaries
+        run: cargo build --workspace --release
+
+      - name: Package release archive
+        run: |
+          set -eu
+          tag="${GITHUB_REF_NAME}"
+          stage="eksplode-re-${tag}-linux-x86_64"
+          mkdir -p "${stage}"
+          cp target/release/eksplode-re-cli "${stage}/"
+          cp target/release/eksplode-re-server "${stage}/"
+          if [ -d crates/web/assets ]; then
+            cp -r crates/web/assets "${stage}/assets"
+          fi
+          tar czf "${stage}.tar.gz" "${stage}"
+          echo "ARCHIVE_PATH=${stage}.tar.gz" >> "$GITHUB_ENV"
+
+      - name: Generate release notes (unreleased section only)
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.ref_name }} --unreleased --strip header
+        env:
+          OUTPUT: /tmp/release-notes.md
+
+      - name: Generate full changelog
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --tag ${{ github.ref_name }}
+        env:
+          OUTPUT: /tmp/CHANGELOG.md
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: /tmp/release-notes.md
+          files: ${{ env.ARCHIVE_PATH }}
+
+      - name: Commit updated CHANGELOG.md to main
+        continue-on-error: true
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          cp /tmp/CHANGELOG.md CHANGELOG.md
+          if git diff --quiet -- CHANGELOG.md; then
+            echo "CHANGELOG.md already up to date, nothing to commit."
+            exit 0
+          fi
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
+          git push origin main
