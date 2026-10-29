@@ -78,11 +78,11 @@ jobs:
           tar czf "${stage}.tar.gz" "${stage}"
           echo "ARCHIVE_PATH=${stage}.tar.gz" >> "$GITHUB_ENV"
 
-      - name: Generate release notes (unreleased section only)
+      - name: Generate release notes (current tag only)
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --tag ${{ github.ref_name }} --unreleased --strip header
+          args: --tag ${{ github.ref_name }} --latest --strip header
         env:
           OUTPUT: /tmp/release-notes.md
 
@@ -110,10 +110,10 @@ jobs:
           git checkout main
           git pull --ff-only origin main
           cp /tmp/CHANGELOG.md CHANGELOG.md
-          if git diff --quiet -- CHANGELOG.md; then
+          git add CHANGELOG.md
+          if git diff --cached --quiet -- CHANGELOG.md; then
             echo "CHANGELOG.md already up to date, nothing to commit."
             exit 0
           fi
-          git add CHANGELOG.md
           git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
           git push origin main
