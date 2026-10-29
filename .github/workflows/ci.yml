@@ -25,6 +25,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
@@ -35,8 +41,24 @@ jobs:
       - name: Lint with clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Check commit-msg hook itself
+        run: sh .githooks/test-commit-msg.sh
+
       - name: Build workspace
         run: cargo build --workspace
 
-      - name: Run full test suite
+      - name: Run Rust test suite
         run: cargo test --workspace
+
+      - name: Build and size-check the WebAssembly render module
+        run: sh scripts/build-wasm.sh
+
+      - name: Run web client JS test suite
+        working-directory: crates/web/js-tests
+        run: node --test
+
+      - name: Run terminal Enter-key integration check
+        run: python3 scripts/pty-enter-check.py
+
+      - name: Check acceptance-scenario test coverage
+        run: sh scripts/check-scenarios.sh
