@@ -18,7 +18,7 @@ use serde_json::Value;
 
 use crate::client::Client;
 use crate::codec::{decode_client, encode, LineReader, NetError};
-use crate::events::{EventKind, EventOutcome, EventRecord, EventSink, NoopEventSink};
+use crate::events::{EventDetails, EventKind, EventOutcome, EventRecord, EventSink, NoopEventSink};
 use crate::look::{resolve_colour, Colour, Look};
 use crate::protocol::{ClientMsg, RejectReason, ServerMsg};
 use crate::room::from_wire;
@@ -647,13 +647,27 @@ impl Server {
             }
             self.drop_silent();
             let service_now = self.services.clock.now();
-            let replies: Vec<_> = self
-                .rooms
-                .values_mut()
-                .flat_map(|room| room.advance(service_now, self.cfg.tick))
-                .collect();
+            let mut replies = Vec::new();
+            let mut ended_matches: Vec<(String, u64)> = Vec::new();
+            for (room_id, room) in self.rooms.iter_mut() {
+                let was_running = room.phase == crate::protocol::v2::RoomPhase::Running;
+                replies.extend(room.advance(service_now, self.cfg.tick));
+                if was_running && room.phase != crate::protocol::v2::RoomPhase::Running {
+                    ended_matches.push((room_id.clone(), room.revision.get()));
+                }
+            }
             for (connection, reply) in replies {
                 self.send(connection, ServerMsg::RoomV2(Box::new(reply)));
+            }
+            for (room_id, revision) in ended_matches {
+                self.emit_room_event(
+                    EventKind::MatchEnded,
+                    EventOutcome::Completed,
+                    Some(&room_id),
+                    None,
+                    Some(revision),
+                    EventDetails::default(),
+                );
             }
             let service_now = self.services.clock.now();
             let expired: Vec<u64> = self
@@ -675,17 +689,42 @@ impl Server {
     }
 
     fn emit_event(&mut self, kind: EventKind, outcome: EventOutcome) {
+        self.emit_room_event(
+            kind,
+            outcome,
+            None,
+            None,
+            None,
+            crate::events::EventDetails::default(),
+        );
+    }
+
+    /// Emits a typed event correlated to a room/actor/revision, with explicit allow-listed
+    /// details. `actor` is a membership ID, never user-supplied raw data.
+    fn emit_room_event(
+        &mut self,
+        kind: EventKind,
+        outcome: EventOutcome,
+        room_id: Option<&str>,
+        actor: Option<&str>,
+        revision: Option<u64>,
+        details: crate::events::EventDetails,
+    ) {
         let Some(sequence) = self.event_sequence.checked_add(1) else {
             return;
         };
         self.event_sequence = sequence;
-        let event = EventRecord::new(
+        let mut event = EventRecord::new(
             &self.identity,
             kind,
             outcome,
             self.services.clock.timestamp_ms(),
             sequence,
         );
+        event.room_id = room_id.map(String::from);
+        event.actor_id = actor.map(String::from);
+        event.room_revision = revision;
+        event.details = details;
         self.services.events.try_emit(event);
     }
 
@@ -802,6 +841,7 @@ impl Server {
         let joined = conn.slot.is_some();
         if conn.negotiated_v2 && !matches!(&msg, ClientMsg::RoomV2(_) | ClientMsg::Ping { .. }) {
             self.send_room_error(id, None, crate::protocol::v2::ErrorCode::BadVersion);
+            self.emit_event(EventKind::ProtocolRejected, EventOutcome::Rejected);
             self.remove(id);
             return;
         }
@@ -847,6 +887,7 @@ impl Server {
                         reason: RejectReason::BadVersion,
                     },
                 );
+                self.emit_event(EventKind::ProtocolRejected, EventOutcome::Rejected);
                 self.remove(id);
             }
             ClientMsg::Ping { nonce } => self.send(id, ServerMsg::Pong { nonce }),
@@ -927,6 +968,7 @@ impl Server {
                         reason: RejectReason::BadVersion,
                     },
                 );
+                self.emit_event(EventKind::ProtocolRejected, EventOutcome::Rejected);
                 self.conns.remove(&id);
             }
             Request::Hello { .. }
@@ -1095,7 +1137,7 @@ impl Server {
                 if let Some(connection) = self.conns.get_mut(&id) {
                     connection.room_id = None;
                 }
-                self.detach_room(id, &room_id);
+                self.detach_room(id, &room_id, true);
                 self.send(
                     id,
                     ServerMsg::RoomV2(Box::new(Reply::LeftRoom {
@@ -1147,6 +1189,11 @@ impl Server {
                     .get(&room_id)
                     .and_then(|room| room.members.get(&membership_id))
                     .and_then(|member| member.connection_id);
+                let owner_before = self
+                    .rooms
+                    .get(&room_id)
+                    .and_then(|room| room.members.owner_membership_id.clone());
+                let removed_actor = membership_id.clone();
                 let now = self.services.clock.now();
                 let result = self
                     .rooms
@@ -1171,6 +1218,29 @@ impl Server {
                             if let Some(connection) = self.conns.get_mut(&target_connection) {
                                 connection.room_id = None;
                             }
+                        }
+                        let revision = self.rooms.get(&room_id).map(|room| room.revision.get());
+                        self.emit_room_event(
+                            EventKind::PlayerRemoved,
+                            EventOutcome::Accepted,
+                            Some(&room_id),
+                            Some(&removed_actor),
+                            revision,
+                            EventDetails::default(),
+                        );
+                        let owner_after = self
+                            .rooms
+                            .get(&room_id)
+                            .and_then(|room| room.members.owner_membership_id.clone());
+                        if owner_after != owner_before {
+                            self.emit_room_event(
+                                EventKind::RoomOwnerChanged,
+                                EventOutcome::Accepted,
+                                Some(&room_id),
+                                owner_after.as_deref(),
+                                revision,
+                                EventDetails::default(),
+                            );
                         }
                         for (connection, reply) in replies {
                             self.send(connection, ServerMsg::RoomV2(Box::new(reply)));
@@ -1200,6 +1270,19 @@ impl Server {
                     self.send_room_error(id, request_id, ErrorCode::NotInRoom);
                     return;
                 }
+                let mutation = match &request {
+                    Request::Start { .. } => Some(EventKind::MatchStarted),
+                    Request::SetRoom { .. } => Some(EventKind::RoomSettingsChanged),
+                    _ => None,
+                };
+                let actor = bound.as_ref().and_then(|room| {
+                    self.rooms.get(room).and_then(|room| {
+                        room.members
+                            .values()
+                            .find(|member| member.connection_id == Some(id))
+                            .map(|member| member.membership_id.clone())
+                    })
+                });
                 let now = self.services.clock.now();
                 let result = bound
                     .as_ref()
@@ -1216,6 +1299,23 @@ impl Server {
                     });
                 match result {
                     Ok(replies) => {
+                        if let (Some(kind), Some(room_id)) = (mutation, bound.as_deref()) {
+                            let room = self.rooms.get(room_id);
+                            let revision = room.map(|room| room.revision.get());
+                            let details = EventDetails {
+                                capacity: room.map(|room| room.capacity),
+                                password_required: room.map(|room| room.password.is_some()),
+                                ..Default::default()
+                            };
+                            self.emit_room_event(
+                                kind,
+                                EventOutcome::Accepted,
+                                Some(room_id),
+                                actor.as_deref(),
+                                revision,
+                                details,
+                            );
+                        }
                         for (connection, reply) in replies {
                             self.send(connection, ServerMsg::RoomV2(Box::new(reply)));
                         }
@@ -1307,7 +1407,7 @@ impl Server {
     }
 
     fn send_room_error(
-        &self,
+        &mut self,
         id: u64,
         request_id: Option<crate::protocol::v2::RequestId>,
         code: crate::protocol::v2::ErrorCode,
@@ -1336,6 +1436,27 @@ impl Server {
         } else {
             format!("{code:?}")
         };
+        if code == crate::protocol::v2::ErrorCode::NotOwner {
+            let room_id = self
+                .conns
+                .get(&id)
+                .and_then(|connection| connection.room_id.clone());
+            let revision = room_id
+                .as_deref()
+                .and_then(|room_id| self.rooms.get(room_id))
+                .map(|room| room.revision.get());
+            self.emit_room_event(
+                EventKind::PermissionDenied,
+                EventOutcome::Rejected,
+                room_id.as_deref(),
+                None,
+                revision,
+                EventDetails {
+                    code: Some(code.clone()),
+                    ..Default::default()
+                },
+            );
+        }
         self.send(
             id,
             ServerMsg::RoomV2(Box::new(crate::protocol::v2::Reply::Error {
@@ -1675,8 +1796,27 @@ impl Server {
             match result {
                 Ok(room) => {
                     let room_id = room.reference.room_id.clone();
+                    let revision = room.revision.get();
+                    let capacity = room.capacity;
+                    let actor = room
+                        .members
+                        .values()
+                        .find(|member| member.connection_id == Some(id))
+                        .map(|member| member.membership_id.clone());
                     self.rooms.insert(room_id.clone(), room);
                     self.broadcast_room(&room_id);
+                    self.emit_room_event(
+                        EventKind::RoomSettingsChanged,
+                        EventOutcome::Accepted,
+                        Some(&room_id),
+                        actor.as_deref(),
+                        Some(revision),
+                        EventDetails {
+                            capacity: Some(capacity),
+                            password_required: Some(true),
+                            ..Default::default()
+                        },
+                    );
                 }
                 Err(code) => self.password_failure(id, &pending.request, code),
             }
@@ -1858,11 +1998,39 @@ impl Server {
         if committed {
             if let Some(room) = candidate {
                 let room_id = room.reference.room_id.clone();
+                let created = !self.rooms.contains_key(&room_id);
                 self.rooms.insert(room_id.clone(), room);
                 if let Some(connection) = self.conns.get_mut(&id) {
-                    connection.room_id = Some(room_id);
+                    connection.room_id = Some(room_id.clone());
+                }
+                if let Reply::Welcome { admission, .. } = &reply {
+                    self.emit_room_event(
+                        if created {
+                            EventKind::RoomCreated
+                        } else {
+                            EventKind::PlayerJoined
+                        },
+                        EventOutcome::Accepted,
+                        Some(&room_id),
+                        Some(&admission.membership_id),
+                        Some(admission.revision),
+                        EventDetails::default(),
+                    );
                 }
             }
+        } else if let Reply::Error { code, .. } = &reply {
+            let code = code.clone();
+            self.emit_room_event(
+                EventKind::PlayerJoinRejected,
+                EventOutcome::Rejected,
+                None,
+                None,
+                None,
+                EventDetails {
+                    code: Some(code),
+                    ..Default::default()
+                },
+            );
         }
         self.send(id, ServerMsg::RoomV2(Box::new(reply)));
         if committed {
@@ -1901,8 +2069,18 @@ impl Server {
         }
     }
 
-    fn detach_room(&mut self, id: u64, room_id: &str) {
+    fn detach_room(&mut self, id: u64, room_id: &str, explicit: bool) {
         use crate::protocol::v2::{Reply, RoomPhase};
+        let departing = self.rooms.get(room_id).and_then(|room| {
+            room.members
+                .values()
+                .find(|member| member.connection_id == Some(id))
+                .map(|member| member.membership_id.clone())
+        });
+        let owner_before = self
+            .rooms
+            .get(room_id)
+            .and_then(|room| room.members.owner_membership_id.clone());
         let left = self.rooms.get_mut(room_id).and_then(|room| {
             let slot = room
                 .members
@@ -1912,12 +2090,47 @@ impl Server {
             room.remove_connection(id);
             slot.map(|slot| (slot, room.phase, room.reference.clone()))
         });
+        let revision = self.rooms.get(room_id).map(|room| room.revision.get());
+        self.emit_room_event(
+            if explicit {
+                EventKind::PlayerLeft
+            } else {
+                EventKind::PlayerDisconnected
+            },
+            EventOutcome::Accepted,
+            Some(room_id),
+            departing.as_deref(),
+            revision,
+            EventDetails::default(),
+        );
+        let owner_after = self
+            .rooms
+            .get(room_id)
+            .and_then(|room| room.members.owner_membership_id.clone());
+        if owner_after.is_some() && owner_after != owner_before {
+            self.emit_room_event(
+                EventKind::RoomOwnerChanged,
+                EventOutcome::Accepted,
+                Some(room_id),
+                owner_after.as_deref(),
+                revision,
+                EventDetails::default(),
+            );
+        }
         let empty = self
             .rooms
             .get(room_id)
             .is_some_and(|room| room.members.values().next().is_none());
         if empty {
             self.rooms.remove(room_id);
+            self.emit_room_event(
+                EventKind::RoomClosed,
+                EventOutcome::Closed,
+                Some(room_id),
+                None,
+                revision,
+                EventDetails::default(),
+            );
         } else {
             if let Some((slot, RoomPhase::Running, reference)) = left {
                 for connection in self
@@ -2257,7 +2470,7 @@ impl Server {
             return;
         };
         if let Some(room_id) = conn.room_id.as_ref() {
-            self.detach_room(id, room_id);
+            self.detach_room(id, room_id, false);
             return;
         }
         let Some(slot) = conn.slot else {

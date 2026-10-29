@@ -349,16 +349,29 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
         }
     };
     let game_ip = opts.bind.unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED));
-    let host = Host::start(HostConfig {
-        bind: SocketAddr::new(game_ip, opts.port).to_string(),
-        seed: opts.seed,
-        dev: opts.dev,
-        defaults: room.clone(),
-        default_bots: opts.bots,
-        server_id: opts.server_id.clone(),
-        limits: opts.limits,
-        ..HostConfig::default()
-    })?;
+    // The terminal UI owns stdout while attached to a real terminal; writing JSONL events
+    // there at the same time would corrupt the rendered screen. Only emit them when stdout
+    // is redirected (piped/file), matching the terminal-vs-redirected-pipe distinction (T069).
+    use std::io::IsTerminal;
+    let event_writer = (!io::stdout().is_terminal())
+        .then(|| eksplode_re_net::events::JsonlEventWriter::start(io::stdout()));
+    let events: std::sync::Arc<dyn eksplode_re_net::events::EventSink> = match &event_writer {
+        Some(writer) => writer.clone(),
+        None => std::sync::Arc::new(eksplode_re_net::events::NoopEventSink),
+    };
+    let host = Host::start_with_services(
+        HostConfig {
+            bind: SocketAddr::new(game_ip, opts.port).to_string(),
+            seed: opts.seed,
+            dev: opts.dev,
+            defaults: room.clone(),
+            default_bots: opts.bots,
+            server_id: opts.server_id.clone(),
+            limits: opts.limits,
+            ..HostConfig::default()
+        },
+        eksplode_re_net::host::HostServices::default().with_events(events),
+    )?;
     let web = match opts.web_port {
         Some(port) => Some(Server::attach(
             host.handle(),
@@ -384,6 +397,9 @@ pub fn run_host(opts: &HostOptions) -> Result<(), AppError> {
     let result = online_loop(online);
     // the match host is gone by now, so every browser has been told before the page stops
     drop(web);
+    if let Some(writer) = event_writer {
+        writer.shutdown();
+    }
     result
 }
 

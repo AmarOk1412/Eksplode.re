@@ -1579,3 +1579,106 @@ fn owner_removal_during_a_match_replaces_the_player_with_a_bot_and_play_continue
         .iter()
         .all(|membership| membership["membership_id"] != membership_id));
 }
+
+#[test]
+fn significant_mutations_emit_correlated_secret_free_typed_events() {
+    use eksplode_re_net::events::{EventKind, EventRecord, EventSink};
+    use eksplode_re_net::host::HostServices;
+    use eksplode_re_net::HostConfig;
+    use std::sync::{Arc, Mutex};
+
+    struct Capture(Mutex<Vec<EventRecord>>);
+    impl EventSink for Capture {
+        fn try_emit(&self, event: EventRecord) -> bool {
+            self.0.lock().unwrap().push(event);
+            true
+        }
+    }
+    let captured = Arc::new(Capture(Mutex::new(Vec::new())));
+    let password = "events-test-password-canary";
+    let host = eksplode_re_net::Host::start_with_services(
+        HostConfig {
+            bind: "0.0.0.0:0".into(),
+            tick: Duration::from_millis(4),
+            seed: Some(11),
+            ..HostConfig::default()
+        },
+        HostServices::default().with_events(captured.clone()),
+    )
+    .unwrap();
+
+    let (mut owner, room) = v2_create(&host, "Owner", 3);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("member-join", &room, "Member");
+    let admission = v2_reply(&mut member, "Welcome");
+    let membership_id = admission["membership_id"].as_str().unwrap().to_string();
+
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"protect", "room_id":room["room_id"],
+        "expected_revision":admission["revision"], "settings":room["lobby"]["settings"],
+        "capacity":3, "password":password}),
+    );
+    let protected = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["password_required"] == true {
+            break updated;
+        }
+    };
+
+    let mut stranger = Raw::connect(host.addr());
+    stranger.hello_v2().unwrap();
+    stranger.send_value(&json!({"type":"JoinRoom", "request_id":"wrong", "name":"Stranger",
+        "room_id":room["room_id"], "server_epoch":room["server_epoch"], "password":"wrong-password"}));
+    assert_eq!(v2_reply(&mut stranger, "Error")["code"], "BadPassword");
+
+    member
+        .send_value(&json!({"type":"Start", "request_id":"not-owner", "room_id":room["room_id"]}));
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
+
+    owner.send_value(&json!({"type":"RemovePlayer", "request_id":"remove",
+        "room_id":protected["room_id"], "membership_id":membership_id.clone()}));
+    v2_reply(&mut member, "Removed");
+
+    // allow the background event-sink thread no time at all: try_emit is synchronous and
+    // in-process, so the events above are already captured by the time replies returned.
+    let events = captured.0.lock().unwrap();
+    let kinds: Vec<_> = events.iter().map(|event| event.event).collect();
+    assert!(kinds.contains(&EventKind::ServerStarted));
+    assert!(kinds.contains(&EventKind::RoomCreated));
+    assert!(kinds.contains(&EventKind::PlayerJoined));
+    assert!(kinds.contains(&EventKind::RoomSettingsChanged));
+    assert!(kinds.contains(&EventKind::PlayerJoinRejected));
+    assert!(kinds.contains(&EventKind::PermissionDenied));
+    assert!(kinds.contains(&EventKind::PlayerRemoved));
+
+    let room_created = events
+        .iter()
+        .find(|event| event.event == EventKind::RoomCreated)
+        .unwrap();
+    assert_eq!(
+        room_created.room_id.as_deref(),
+        Some(room["room_id"].as_str().unwrap())
+    );
+    assert!(
+        room_created.actor_id.is_some(),
+        "the creator is correlated as actor"
+    );
+
+    let removed = events
+        .iter()
+        .find(|event| event.event == EventKind::PlayerRemoved)
+        .unwrap();
+    assert_eq!(removed.actor_id.as_deref(), Some(membership_id.as_str()));
+    assert!(removed.room_revision.is_some());
+
+    // no event anywhere leaks the password, a proof, or any other secret.
+    for event in events.iter() {
+        let json = serde_json::to_string(event).unwrap();
+        assert!(!json.contains(password), "password leaked in {json}");
+        assert!(
+            !json.contains("resume_proof"),
+            "a proof field leaked in {json}"
+        );
+    }
+}

@@ -59,26 +59,39 @@ pub struct Server {
 }
 
 impl Server {
-    /// Starts the match host and the web server.
+    /// Starts the match host and the web server with a no-op event sink (used by tests and
+    /// callers that do not want stdout event logging).
     pub fn start(opts: ServerOptions) -> Result<Server, ServerError> {
+        Self::start_with_services(opts, eksplode_re_net::host::HostServices::default())
+    }
+
+    /// Starts the match host and the web server with explicit [`eksplode_re_net::host::HostServices`],
+    /// so the caller controls where significant events are written (or whether they are at all).
+    pub fn start_with_services(
+        opts: ServerOptions,
+        services: eksplode_re_net::host::HostServices,
+    ) -> Result<Server, ServerError> {
         let game_bind = SocketAddr::new(opts.bind, opts.game_port);
-        let host = Host::start(HostConfig {
-            bind: game_bind.to_string(),
-            tick: opts.tick,
-            seed: opts.seed,
-            game: opts.game.clone(),
-            silence_timeout: opts.silence_timeout,
-            dev: opts.dev,
-            defaults: opts.room.clone(),
-            default_bots: opts.bots,
-            server_id: opts.server_id.clone(),
-            limits: eksplode_re_net::room::RoomLimits {
-                max_rooms: opts.max_rooms,
-                max_connections: u16::try_from(opts.max_connections).map_err(|_| {
-                    ServerError::Net(NetError::Protocol("invalid connection limit".into()))
-                })?,
+        let host = Host::start_with_services(
+            HostConfig {
+                bind: game_bind.to_string(),
+                tick: opts.tick,
+                seed: opts.seed,
+                game: opts.game.clone(),
+                silence_timeout: opts.silence_timeout,
+                dev: opts.dev,
+                defaults: opts.room.clone(),
+                default_bots: opts.bots,
+                server_id: opts.server_id.clone(),
+                limits: eksplode_re_net::room::RoomLimits {
+                    max_rooms: opts.max_rooms,
+                    max_connections: u16::try_from(opts.max_connections).map_err(|_| {
+                        ServerError::Net(NetError::Protocol("invalid connection limit".into()))
+                    })?,
+                },
             },
-        })
+            services,
+        )
         .map_err(|e| match e {
             NetError::Io(source) => ServerError::Bind {
                 what: "game port",
