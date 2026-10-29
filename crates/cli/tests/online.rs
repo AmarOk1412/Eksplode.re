@@ -169,6 +169,76 @@ fn v2_terminal_directory_creates_joins_and_leaves_explicit_rooms() {
 }
 
 #[test]
+fn protected_room_and_authoritative_owner_controls_are_visible_to_terminal_players() {
+    let host = host_with(open_game(1000));
+    let client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    assert!(
+        matches!(client.recv_timeout(Duration::from_secs(2)).unwrap(),
+        eksplode_re_net::protocol::ServerMsg::RoomV2(reply)
+        if matches!(*reply, eksplode_re_net::protocol::v2::Reply::Hello { .. }))
+    );
+    let mut request = eksplode_re_net::protocol::v2::Request::create_room(
+        eksplode_re_net::protocol::v2::RequestId::new("protected-terminal-room").unwrap(),
+        "Hosty".into(),
+        &eksplode_re_core::RoomSettings::default(),
+        4,
+    );
+    if let eksplode_re_net::protocol::v2::Request::CreateRoom { password, .. } = &mut request {
+        *password = Some(eksplode_re_net::protocol::v2::Secret::new(
+            "terminal-password-canary",
+        ));
+    }
+    client.send_v2(request).unwrap();
+    let mut owner = Online::directory(client, "Hosty".into(), KeyBindings::default_for_slot(0));
+    assert!(pump_until(&mut owner, |online| online.stage
+        == Stage::Lobby
+        && online.slot == Some(0)));
+    let owner_screen = screen(&owner);
+    assert!(owner_screen.contains("Owner controls"), "{owner_screen}");
+    assert!(!owner_screen.contains("terminal-password-canary"));
+
+    let room_ref = owner.room_ref.clone().unwrap();
+    let member_client = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    let _hello = member_client.recv_timeout(Duration::from_secs(2)).unwrap();
+    member_client
+        .send_v2(eksplode_re_net::protocol::v2::Request::JoinRoom {
+            request_id: eksplode_re_net::protocol::v2::RequestId::new("protected-member").unwrap(),
+            server_epoch: room_ref.server_epoch.clone(),
+            room_id: room_ref.room_id.clone(),
+            name: "Member".into(),
+            password: Some(eksplode_re_net::protocol::v2::Secret::new(
+                "terminal-password-canary",
+            )),
+            look: None,
+        })
+        .unwrap();
+    let mut member = Online::directory(
+        member_client,
+        "Member".into(),
+        KeyBindings::default_for_slot(0),
+    );
+    assert!(pump_until(&mut member, |online| online.stage
+        == Stage::Lobby
+        && online.slot == Some(1)));
+    let member_screen = screen(&member);
+    assert!(
+        member_screen.contains("Password: required"),
+        "{member_screen}"
+    );
+    assert!(
+        member_screen.contains("Only Hosty can manage room settings"),
+        "{member_screen}"
+    );
+    assert!(!member_screen.contains("terminal-password-canary"));
+
+    owner.handle_key(KeyCode::Esc);
+    owner.handle_key(KeyCode::Enter);
+    assert!(pump_until(&mut member, |online| screen(online)
+        .contains("Owner controls")));
+    assert!(!screen(&member).contains("Only Hosty can manage room settings"));
+}
+
+#[test]
 fn the_host_player_sees_the_address_and_hosting_keys() {
     let host = host_with(open_game(1000));
     let port = host.addr().port();

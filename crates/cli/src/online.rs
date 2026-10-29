@@ -57,6 +57,7 @@ pub struct Online {
     owner_slot: Option<usize>,
     revision: u64,
     capacity: u8,
+    password_required: bool,
     setup: Option<SetupScreen>,
     initial_room: Option<RoomSettings>,
     requested_room_id: Option<String>,
@@ -95,6 +96,7 @@ impl Online {
             owner_slot: None,
             revision: 0,
             capacity: 4,
+            password_required: false,
             setup: None,
             initial_room: None,
             requested_room_id: None,
@@ -228,6 +230,7 @@ impl Online {
                 self.owner_slot = admission.owner_slot.map(usize::from);
                 self.revision = admission.revision;
                 self.capacity = admission.capacity;
+                self.password_required = admission.password_required;
                 self.on_message(ServerMsg::Welcome {
                     slot: admission.slot,
                     config: admission.config,
@@ -242,6 +245,7 @@ impl Online {
                 revision,
                 owner_slot,
                 capacity,
+                password_required,
                 lobby,
                 looks,
                 ..
@@ -249,6 +253,7 @@ impl Online {
                 self.owner_slot = owner_slot.map(usize::from);
                 self.revision = revision;
                 self.capacity = capacity;
+                self.password_required = password_required;
                 self.on_message(ServerMsg::Lobby { lobby, looks });
             }
             Reply::Start {
@@ -695,13 +700,18 @@ fn render_directory(frame: &mut Frame, online: &Online) {
             " "
         };
         let label = format!(
-            "{selected} {} [{}] | {} | {}/{} | {:?} | {}",
+            "{selected} {} [{}] | {} | {}/{} | {:?} | {} | {}",
             room.settings.name,
             room.reference.room_id.chars().take(8).collect::<String>(),
             room.settings.mode.label(),
             room.occupied,
             room.capacity,
             room.phase,
+            if room.password_required {
+                "password required"
+            } else {
+                "open"
+            },
             room.reference.server_id
         );
         lines.push(Line::from(
@@ -754,6 +764,9 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
         } else {
             lines.push(Line::default());
         }
+        if online.password_required {
+            lines.push(Line::from("Password: required"));
+        }
     }
     for (i, slot) in online.lobby.slots.iter().enumerate() {
         let who = match slot.controller {
@@ -796,9 +809,21 @@ fn render_lobby(frame: &mut Frame, online: &Online) {
         _ => "Enter start (owner)   b add bot   x remove bot   r ready   q quit",
     }));
     if online.stage == Stage::Lobby {
-        lines.push(Line::from(
-            "Owner: m mode   s size   t time   f friendly fire",
-        ));
+        if online.owner_slot == online.slot {
+            lines.push(Line::from(
+                "Owner controls: m mode   s size   t time   f friendly fire",
+            ));
+        } else {
+            let owner_name = online
+                .owner_slot
+                .and_then(|slot| online.lobby.slots.get(slot))
+                .map(|slot| slot.name.as_str())
+                .filter(|name| !name.is_empty())
+                .unwrap_or("the room owner");
+            lines.push(Line::from(format!(
+                "Only {owner_name} can manage room settings"
+            )));
+        }
     }
     let height = (lines.len() as u16 + 2).min(area.height);
     frame.render_widget(
