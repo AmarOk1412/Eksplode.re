@@ -789,7 +789,7 @@ impl RoomRuntime {
             .ok_or(ErrorCode::NotInRoom)
     }
 
-    fn owner(&self, connection_id: u64) -> Result<usize, ErrorCode> {
+    pub(crate) fn owner(&self, connection_id: u64) -> Result<usize, ErrorCode> {
         let slot = self.slot(connection_id)?;
         let owner = self
             .members
@@ -979,7 +979,10 @@ impl RoomRuntime {
                 if expected_revision != self.revision.get() {
                     return Err(ErrorCode::StaleRevision);
                 }
-                if password.is_some() {
+                if password
+                    .as_ref()
+                    .is_some_and(|password| !password.expose().is_empty())
+                {
                     return Err(ErrorCode::Unsupported);
                 }
                 if usize::from(capacity) < self.lobby.participants() {
@@ -1007,6 +1010,9 @@ impl RoomRuntime {
                     .map_err(|_| ErrorCode::Unavailable)?;
                 self.lobby.settings = settings;
                 self.capacity = capacity;
+                if password.is_some() {
+                    self.password = None;
+                }
             }
             Request::Input {
                 tick: input_tick,

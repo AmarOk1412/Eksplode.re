@@ -188,6 +188,93 @@ fn protected_room_final_seat_is_committed_once_after_concurrent_verification() {
 }
 
 #[test]
+fn owner_password_updates_are_atomic_omission_preserves_and_empty_removes_protection() {
+    let host = host();
+    let (mut owner, mut room) = v2_create_settings(
+        &host,
+        "Owner",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"protect", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":room["lobby"]["settings"], "capacity":4,
+        "password":"owner-password-canary"}),
+    );
+    let reply = owner.recv_value().unwrap();
+    assert_eq!(
+        reply["type"], "RoomUpdated",
+        "owner password change was refused"
+    );
+    assert_eq!(reply["password_required"], true);
+    assert_eq!(
+        reply["revision"].as_u64().unwrap(),
+        room["revision"].as_u64().unwrap() + 1
+    );
+    assert!(!reply.to_string().contains("owner-password-canary"));
+    room = reply;
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("missing-password", &room, "Member");
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "BadPassword");
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["name"] = json!("Still protected");
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"omit-password", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4}),
+    );
+    room = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(room["password_required"], true);
+    member.send_value(&json!({"type":"JoinRoom", "request_id":"correct-password", "name":"Member",
+        "room_id":room["room_id"], "server_epoch":room["server_epoch"], "password":"owner-password-canary"}));
+    v2_reply(&mut member, "Welcome");
+    room = v2_reply(&mut owner, "RoomUpdated");
+    member.send_value(
+        &json!({"type":"SetRoom", "request_id":"denied-password", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4, "password":""}),
+    );
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
+    let mut invalid_settings = settings.clone();
+    invalid_settings["name"] = json!("");
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"invalid-clear", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":invalid_settings, "capacity":4, "password":""}));
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "BadRoom");
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"replace-password", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4, "password":"replacement-password-canary"}));
+    let replacement = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(
+        replacement["revision"].as_u64().unwrap(),
+        room["revision"].as_u64().unwrap() + 1
+    );
+    assert_eq!(replacement["password_required"], true);
+    assert!(!replacement
+        .to_string()
+        .contains("replacement-password-canary"));
+    room = replacement;
+    member.send_value(&json!({"type":"SetReady", "request_id":"still-member", "room_id":room["room_id"], "ready":true}));
+    room = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(room["lobby"]["slots"][1]["ready"], true);
+    let mut returning = Raw::connect(host.addr());
+    returning.hello_v2().unwrap();
+    returning.send_value(&json!({"type":"JoinRoom", "request_id":"old-password", "name":"Returning",
+        "room_id":room["room_id"], "server_epoch":room["server_epoch"], "password":"owner-password-canary"}));
+    assert_eq!(v2_reply(&mut returning, "Error")["code"], "BadPassword");
+    returning.send_value(&json!({"type":"JoinRoom", "request_id":"new-password", "name":"Returning",
+        "room_id":room["room_id"], "server_epoch":room["server_epoch"], "password":"replacement-password-canary"}));
+    assert_eq!(v2_reply(&mut returning, "Welcome")["slot"], 2);
+    room = v2_reply(&mut owner, "RoomUpdated");
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"clear-password", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4, "password":""}),
+    );
+    room = v2_reply(&mut owner, "RoomUpdated");
+    assert_eq!(room["password_required"], false);
+    let mut fresh = Raw::connect(host.addr());
+    fresh.hello_v2().unwrap();
+    fresh.join_room_v2("unprotected-join", &room, "Fresh");
+    assert_eq!(v2_reply(&mut fresh, "Welcome")["slot"], 3);
+}
+
+#[test]
 fn room_name_creation_counts_trimmed_characters() {
     let host = host();
     for (index, expected) in ["x".to_string(), "x".repeat(24), "\u{e9}".repeat(24)]

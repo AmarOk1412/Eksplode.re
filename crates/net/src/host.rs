@@ -1091,6 +1091,31 @@ impl Server {
                     })),
                 );
             }
+            Request::SetRoom {
+                request_id,
+                room_id,
+                expected_revision,
+                settings,
+                capacity,
+                password: Some(password),
+            } if negotiated && !password.expose().is_empty() => {
+                let request = Request::SetRoom {
+                    request_id: request_id.clone(),
+                    room_id,
+                    expected_revision,
+                    settings,
+                    capacity,
+                    password: None,
+                };
+                let checked = self
+                    .settings_candidate(id, &request)
+                    .and_then(|_| PasswordVerifier::validate(&password));
+                if let Err(code) = checked {
+                    self.send_room_error(id, Some(request_id), code);
+                    return;
+                }
+                self.queue_password(id, request, PasswordWork::Create(password), None);
+            }
             request @ (Request::Start { .. }
             | Request::AddBot { .. }
             | Request::RemoveBot { .. }
@@ -1400,37 +1425,30 @@ impl Server {
         let Some(request_id) = request.request_id().cloned() else {
             return;
         };
-        let Some(deadline) = self.conns.get_mut(&id).and_then(|connection| {
-            connection
-                .admissions
-                .pending_deadline(&request_id, self.services.clock.now())
-        }) else {
-            self.finish_room_admission(
-                id,
-                request_id,
-                Err(crate::protocol::v2::ErrorCode::RequestExpired),
-                None,
-            );
+        let deadline = if matches!(&request, crate::protocol::v2::Request::SetRoom { .. }) {
+            self.services
+                .clock
+                .now()
+                .checked_add(Duration::from_secs(5))
+        } else {
+            self.conns.get_mut(&id).and_then(|connection| {
+                connection
+                    .admissions
+                    .pending_deadline(&request_id, self.services.clock.now())
+            })
+        };
+        let Some(deadline) = deadline else {
+            self.password_failure(id, &request, crate::protocol::v2::ErrorCode::RequestExpired);
             return;
         };
         let Some(sequence) = self.password_sequence.checked_add(1) else {
-            self.finish_room_admission(
-                id,
-                request_id,
-                Err(crate::protocol::v2::ErrorCode::Unavailable),
-                None,
-            );
+            self.password_failure(id, &request, crate::protocol::v2::ErrorCode::Unavailable);
             return;
         };
         self.password_sequence = sequence;
         let Ok(work_id) = crate::protocol::v2::RequestId::new(format!("password-work-{sequence}"))
         else {
-            self.finish_room_admission(
-                id,
-                request_id,
-                Err(crate::protocol::v2::ErrorCode::Unavailable),
-                None,
-            );
+            self.password_failure(id, &request, crate::protocol::v2::ErrorCode::Unavailable);
             return;
         };
         match self.password_workers.try_submit(PasswordJob {
@@ -1448,8 +1466,52 @@ impl Server {
                     },
                 );
             }
-            Err(code) => self.finish_room_admission(id, request_id, Err(code), None),
+            Err(code) => self.password_failure(id, &request, code),
         }
+    }
+
+    fn password_failure(
+        &mut self,
+        id: u64,
+        request: &crate::protocol::v2::Request,
+        code: crate::protocol::v2::ErrorCode,
+    ) {
+        let Some(request_id) = request.request_id().cloned() else {
+            return;
+        };
+        if matches!(request, crate::protocol::v2::Request::SetRoom { .. }) {
+            self.send_room_error(id, Some(request_id), code);
+        } else {
+            self.finish_room_admission(id, request_id, Err(code), None);
+        }
+    }
+
+    fn settings_candidate(
+        &self,
+        id: u64,
+        request: &crate::protocol::v2::Request,
+    ) -> Result<crate::room::RoomRuntime, crate::protocol::v2::ErrorCode> {
+        use crate::protocol::v2::ErrorCode;
+        let room_id = request.room_id().ok_or(ErrorCode::BadRoom)?;
+        if self
+            .conns
+            .get(&id)
+            .and_then(|connection| connection.room_id.as_deref())
+            != Some(room_id)
+        {
+            return Err(ErrorCode::NotInRoom);
+        }
+        let room = self.rooms.get(room_id).ok_or(ErrorCode::RoomNotFound)?;
+        room.owner(id)?;
+        let mut candidate = room.admission_candidate()?;
+        candidate.command(
+            id,
+            request.clone(),
+            self.services.clock.now(),
+            self.cfg.tick,
+            self.services.random.as_ref(),
+        )?;
+        Ok(candidate)
     }
 
     fn room_for_join(
@@ -1521,6 +1583,30 @@ impl Server {
             return;
         };
         if self.services.clock.now() >= pending.deadline {
+            if matches!(&pending.request, Request::SetRoom { .. }) {
+                self.password_failure(id, &pending.request, ErrorCode::RequestExpired);
+            }
+            return;
+        }
+        if matches!(&pending.request, Request::SetRoom { .. }) {
+            let result = match completion.result {
+                Ok(PasswordWorkResult::Created(verifier)) => self
+                    .settings_candidate(id, &pending.request)
+                    .map(|mut room| {
+                        room.password = Some(verifier);
+                        room
+                    }),
+                Err(code) => Err(code),
+                _ => Err(ErrorCode::Unavailable),
+            };
+            match result {
+                Ok(room) => {
+                    let room_id = room.reference.room_id.clone();
+                    self.rooms.insert(room_id.clone(), room);
+                    self.broadcast_room(&room_id);
+                }
+                Err(code) => self.password_failure(id, &pending.request, code),
+            }
             return;
         }
         let Some(request_id) = pending.request.request_id().cloned() else {
