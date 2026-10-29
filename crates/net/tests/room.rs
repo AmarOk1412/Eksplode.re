@@ -477,3 +477,58 @@ fn the_wire_names_are_lowercase_strings() {
         assert_eq!(serde_json::to_value(size).unwrap(), json!(name));
     }
 }
+
+#[test]
+fn failure_accounting_bounds_per_source_host_aggregate_and_tracked_sources() {
+    use eksplode_re_net::room::FailureAccounting;
+    use std::time::Duration;
+
+    let mut failures = FailureAccounting::new(Duration::ZERO);
+    for _ in 0..5 {
+        assert!(!failures.is_blocked("1.2.3.4:1", Duration::ZERO));
+        failures.record_failure("1.2.3.4:1", Duration::ZERO);
+    }
+    assert!(
+        failures.is_blocked("1.2.3.4:1", Duration::ZERO),
+        "a sixth attempt in the same minute from the same source is blocked"
+    );
+    assert!(
+        !failures.is_blocked("1.2.3.4:1", Duration::from_secs(61)),
+        "a new minute resets the per-source window"
+    );
+
+    let mut host_wide = FailureAccounting::new(Duration::ZERO);
+    for source in 0..20 {
+        for _ in 0..5 {
+            let key = format!("10.0.0.{source}:1");
+            assert!(!host_wide.is_blocked(&key, Duration::ZERO));
+            host_wide.record_failure(&key, Duration::ZERO);
+        }
+    }
+    assert!(
+        host_wide.is_blocked("10.0.0.21:1", Duration::ZERO),
+        "the 101st failure this minute exceeds the host aggregate even from a fresh source"
+    );
+
+    // Each record lands in its own fresh 61-second host window, isolating the 4,096-source
+    // eviction bound from the separate 100/minute host aggregate exercised above.
+    let minute = |index: u32| Duration::from_secs(u64::from(index) * 61);
+    let mut bounded = FailureAccounting::new(Duration::ZERO);
+    for source in 0..4096u32 {
+        let key = format!("source-{source}");
+        assert!(!bounded.is_blocked(&key, minute(source)));
+        bounded.record_failure(&key, minute(source));
+    }
+    // The 4,097th distinct source evicts the oldest tracked entry rather than growing forever;
+    // the evicted source is treated as unseen and gets a fresh allowance.
+    assert!(!bounded.is_blocked("source-4096", minute(4096)));
+    bounded.record_failure("source-4096", minute(4096));
+    for extra in 0..5 {
+        let now = minute(4097 + extra);
+        assert!(
+            !bounded.is_blocked("source-0", now),
+            "source-0 was evicted, so it has a fresh five-failure allowance"
+        );
+        bounded.record_failure("source-0", now);
+    }
+}

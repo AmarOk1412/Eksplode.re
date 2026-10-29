@@ -138,6 +138,47 @@ fn protected_room_admission_verifies_passwords_without_public_secrets() {
 }
 
 #[test]
+fn five_wrong_passwords_from_one_source_are_denied_then_rate_limited() {
+    let host = host();
+    let password = "rate-limit-password-canary";
+    let mut owner = Raw::connect(host.addr());
+    owner.hello_v2().unwrap();
+    owner.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Owner",
+        "settings":RoomSettings::default(), "capacity":4, "password":password}),
+    );
+    let room = v2_reply(&mut owner, "Welcome");
+
+    let mut attacker = Raw::connect(host.addr());
+    attacker.hello_v2().unwrap();
+    for attempt in 0..5 {
+        attacker.send_value(
+            &json!({"type":"JoinRoom", "request_id":format!("guess-{attempt}"),
+            "name":"Attacker", "room_id":room["room_id"], "server_epoch":room["server_epoch"],
+            "password":"wrong-password-guess"}),
+        );
+        assert_eq!(v2_reply(&mut attacker, "Error")["code"], "BadPassword");
+    }
+    attacker.send_value(&json!({"type":"JoinRoom", "request_id":"guess-6",
+        "name":"Attacker", "room_id":room["room_id"], "server_epoch":room["server_epoch"],
+        "password":"wrong-password-guess"}));
+    assert_eq!(v2_reply(&mut attacker, "Error")["code"], "RateLimited");
+    // the correct password is denied too: the source is rate-limited, not just bad guesses
+    attacker.send_value(&json!({"type":"JoinRoom", "request_id":"guess-7",
+        "name":"Attacker", "room_id":room["room_id"], "server_epoch":room["server_epoch"],
+        "password":password}));
+    assert_eq!(v2_reply(&mut attacker, "Error")["code"], "RateLimited");
+
+    // a different source is unaffected
+    let mut other = Raw::connect(host.addr());
+    other.hello_v2().unwrap();
+    other.send_value(&json!({"type":"JoinRoom", "request_id":"other-join",
+        "name":"Other", "room_id":room["room_id"], "server_epoch":room["server_epoch"],
+        "password":password}));
+    assert_eq!(v2_reply(&mut other, "Welcome")["slot"], 1);
+}
+
+#[test]
 fn protected_room_final_seat_is_committed_once_after_concurrent_verification() {
     let host = host();
     let mut owner = Raw::connect(host.addr());
@@ -272,6 +313,47 @@ fn owner_password_updates_are_atomic_omission_preserves_and_empty_removes_protec
     fresh.hello_v2().unwrap();
     fresh.join_room_v2("unprotected-join", &room, "Fresh");
     assert_eq!(v2_reply(&mut fresh, "Welcome")["slot"], 3);
+}
+
+#[test]
+fn owner_removal_revokes_membership_frees_slot_and_allows_only_a_fresh_rejoin() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 2);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("member-join", &room, "Member");
+    let admission = v2_reply(&mut member, "Welcome");
+    let membership_id = admission["membership_id"].as_str().unwrap().to_string();
+    assert_eq!(admission["slot"], 1);
+
+    owner.send_value(&json!({"type":"RemovePlayer", "request_id":"remove-member",
+        "room_id":room["room_id"], "membership_id":membership_id}));
+    let after_removal = admission["revision"].as_u64().unwrap() + 1;
+    let updated = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["revision"].as_u64() == Some(after_removal) {
+            break updated;
+        }
+    };
+    assert_eq!(updated["lobby"]["slots"][1]["controller"], "Empty");
+    assert!(updated["memberships"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|membership| membership["membership_id"] != membership_id));
+    let removed = v2_reply(&mut member, "Removed");
+    assert_eq!(removed["room_id"], room["room_id"]);
+    assert_eq!(removed["reason"], "owner removal");
+
+    member.send_value(
+        &json!({"type":"Start", "request_id":"stale-start", "room_id":room["room_id"]}),
+    );
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotInRoom");
+    member.join_room_v2("fresh-join", &room, "Member");
+    let fresh = v2_reply(&mut member, "Welcome");
+    assert_eq!(fresh["slot"], 1);
+    assert_ne!(fresh["membership_id"], membership_id);
+    assert_eq!(fresh["owner_membership_id"], room["membership_id"]);
 }
 
 #[test]
@@ -1377,4 +1459,123 @@ fn f4_a_set_room_line_over_the_limit_closes_the_connection_and_changes_nothing()
         directory["rooms"][0]["name"],
         before["lobby"]["settings"]["name"]
     );
+}
+
+#[test]
+fn set_room_capacity_cannot_drop_below_occupied_slots() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 4);
+    let mut first = Raw::connect(host.addr());
+    first.hello_v2().unwrap();
+    first.join_room_v2("first-join", &room, "First");
+    v2_reply(&mut first, "Welcome");
+    let mut second = Raw::connect(host.addr());
+    second.hello_v2().unwrap();
+    second.join_room_v2("second-join", &room, "Second");
+    let joined = v2_reply(&mut second, "Welcome");
+
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"shrink-too-far",
+        "room_id":room["room_id"], "expected_revision":joined["revision"],
+        "settings":room["lobby"]["settings"], "capacity":2}));
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "CapacityConflict");
+
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"shrink-to-fit",
+        "room_id":room["room_id"], "expected_revision":joined["revision"],
+        "settings":room["lobby"]["settings"], "capacity":3}));
+    let updated = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["capacity"] == 3 {
+            break updated;
+        }
+    };
+    assert_eq!(updated["capacity"], 3);
+}
+
+#[test]
+fn v2_start_addbot_and_removebot_require_the_room_owner() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 4);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("member-join", &room, "Member");
+    v2_reply(&mut member, "Welcome");
+    v2_reply(&mut owner, "RoomUpdated");
+
+    member.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
+    member.send_value(&json!({"type":"AddBot", "request_id":"add-bot", "room_id":room["room_id"]}));
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
+    member.send_value(
+        &json!({"type":"RemoveBot", "request_id":"remove-bot", "room_id":room["room_id"]}),
+    );
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
+
+    owner.send_value(
+        &json!({"type":"AddBot", "request_id":"owner-add-bot", "room_id":room["room_id"]}),
+    );
+    let updated = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"][2]["controller"] == "Bot" {
+            break updated;
+        }
+    };
+    assert_eq!(updated["lobby"]["slots"][2]["controller"], "Bot");
+}
+
+#[test]
+fn removing_a_player_requires_ownership_and_a_real_target() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 4);
+    let mut first = Raw::connect(host.addr());
+    first.hello_v2().unwrap();
+    first.join_room_v2("first-join", &room, "First");
+    let first_admission = v2_reply(&mut first, "Welcome");
+    let first_id = first_admission["membership_id"].as_str().unwrap();
+    let mut second = Raw::connect(host.addr());
+    second.hello_v2().unwrap();
+    second.join_room_v2("second-join", &room, "Second");
+    v2_reply(&mut second, "Welcome");
+
+    first.send_value(
+        &json!({"type":"RemovePlayer", "request_id":"non-owner-remove",
+        "room_id":room["room_id"], "membership_id":first_id}),
+    );
+    assert_eq!(v2_reply(&mut first, "Error")["code"], "NotOwner");
+
+    owner.send_value(
+        &json!({"type":"RemovePlayer", "request_id":"unknown-target",
+        "room_id":room["room_id"], "membership_id":"no-such-membership"}),
+    );
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "NotInRoom");
+}
+
+#[test]
+fn owner_removal_during_a_match_replaces_the_player_with_a_bot_and_play_continues() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 2);
+    let mut member = Raw::connect(host.addr());
+    member.hello_v2().unwrap();
+    member.join_room_v2("member-join", &room, "Member");
+    let admission = v2_reply(&mut member, "Welcome");
+    let membership_id = admission["membership_id"].as_str().unwrap().to_string();
+    v2_reply(&mut owner, "RoomUpdated");
+
+    owner.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
+    v2_reply(&mut owner, "Start");
+
+    owner.send_value(&json!({"type":"RemovePlayer", "request_id":"remove-member",
+        "room_id":room["room_id"], "membership_id":membership_id}));
+    let removed = v2_reply(&mut member, "Removed");
+    assert_eq!(removed["room_id"], room["room_id"]);
+    let updated = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"][1]["controller"] == "Bot" {
+            break updated;
+        }
+    };
+    assert!(updated["memberships"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|membership| membership["membership_id"] != membership_id));
 }

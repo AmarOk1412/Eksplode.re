@@ -565,6 +565,7 @@ struct Server {
     password_workers: PasswordWorkers,
     pending_passwords: HashMap<(u64, crate::protocol::v2::RequestId), PendingPassword>,
     password_sequence: u64,
+    failures: crate::room::FailureAccounting,
 }
 
 impl Server {
@@ -580,6 +581,7 @@ impl Server {
             settings: cfg.defaults.clone().sanitize(),
             ..Lobby::new()
         };
+        let failures = crate::room::FailureAccounting::new(services.clock.now());
         Self {
             drops: DropTable::defaults(cfg.game.powerup_chance),
             cfg,
@@ -601,6 +603,7 @@ impl Server {
             password_workers,
             pending_passwords: HashMap::new(),
             password_sequence: 0,
+            failures,
         }
     }
 
@@ -1040,6 +1043,16 @@ impl Server {
                         self.finish_room_admission(id, request_id, Err(code), None);
                         return;
                     }
+                    let source = self.failure_source(id);
+                    if self.failures.is_blocked(&source, self.services.clock.now()) {
+                        self.finish_room_admission(
+                            id,
+                            request_id,
+                            Err(ErrorCode::RateLimited),
+                            None,
+                        );
+                        return;
+                    }
                     self.queue_password(
                         id,
                         request,
@@ -1115,6 +1128,56 @@ impl Server {
                     return;
                 }
                 self.queue_password(id, request, PasswordWork::Create(password), None);
+            }
+            Request::RemovePlayer {
+                request_id,
+                room_id,
+                membership_id,
+            } if negotiated => {
+                let bound = self
+                    .conns
+                    .get(&id)
+                    .and_then(|connection| connection.room_id.clone());
+                if bound.as_deref() != Some(room_id.as_str()) {
+                    self.send_room_error(id, Some(request_id), ErrorCode::NotInRoom);
+                    return;
+                }
+                let target_connection = self
+                    .rooms
+                    .get(&room_id)
+                    .and_then(|room| room.members.get(&membership_id))
+                    .and_then(|member| member.connection_id);
+                let now = self.services.clock.now();
+                let result = self
+                    .rooms
+                    .get_mut(&room_id)
+                    .ok_or(ErrorCode::RoomNotFound)
+                    .and_then(|room| {
+                        room.command(
+                            id,
+                            Request::RemovePlayer {
+                                request_id: request_id.clone(),
+                                room_id: room_id.clone(),
+                                membership_id,
+                            },
+                            now,
+                            self.cfg.tick,
+                            self.services.random.as_ref(),
+                        )
+                    });
+                match result {
+                    Ok(replies) => {
+                        if let Some(target_connection) = target_connection {
+                            if let Some(connection) = self.conns.get_mut(&target_connection) {
+                                connection.room_id = None;
+                            }
+                        }
+                        for (connection, reply) in replies {
+                            self.send(connection, ServerMsg::RoomV2(Box::new(reply)));
+                        }
+                    }
+                    Err(code) => self.send_room_error(id, Some(request_id), code),
+                }
             }
             request @ (Request::Start { .. }
             | Request::AddBot { .. }
@@ -1470,6 +1533,16 @@ impl Server {
         }
     }
 
+    /// A stable key for bounded failure accounting: the socket peer address, or the
+    /// connection ID for in-process clients that have none.
+    fn failure_source(&self, id: u64) -> String {
+        self.conns
+            .get(&id)
+            .and_then(|connection| connection.context.peer)
+            .map(|peer| peer.to_string())
+            .unwrap_or_else(|| format!("in-process:{id}"))
+    }
+
     fn password_failure(
         &mut self,
         id: u64,
@@ -1641,7 +1714,12 @@ impl Server {
             (request @ Request::JoinRoom { .. }, Ok(PasswordWorkResult::Verified(true))) => {
                 self.join_candidate(id, &request, pending.revision)
             }
-            (_, Ok(PasswordWorkResult::Verified(false))) => Err(ErrorCode::BadPassword),
+            (_, Ok(PasswordWorkResult::Verified(false))) => {
+                let source = self.failure_source(id);
+                self.failures
+                    .record_failure(&source, self.services.clock.now());
+                Err(ErrorCode::BadPassword)
+            }
             (_, Err(code)) => Err(code),
             _ => Err(ErrorCode::Unavailable),
         }

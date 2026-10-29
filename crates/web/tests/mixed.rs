@@ -656,3 +656,92 @@ fn f3_us2_as9_powers_work_the_same_for_every_client() {
     assert_eq!(web.looks, term.looks, "the same looks for everyone");
     assert_eq!(web.looks[0].colour.name(), "Teal");
 }
+
+#[test]
+fn a_password_protected_room_and_its_settings_are_consistent_across_websocket_and_tcp() {
+    use eksplode_re_net::protocol::v2::{Reply, RequestId, Secret};
+    use serde_json::json;
+
+    let server = server(|_| {});
+    let password = "mixed-transport-password-canary";
+    let mut owner = Ws::open(server.http_addr());
+    owner.hello_v2().unwrap();
+    owner.send_value(
+        &json!({"type":"CreateRoom", "request_id":"create", "name":"Owner",
+        "settings":{"name":"Owner", "mode":"normal", "size":"small", "minutes":3,
+            "friendly_fire":true}, "capacity":4, "password":password}),
+    );
+    let welcome = v2_ws_reply(&mut owner, "Welcome");
+    assert_eq!(welcome["password_required"], true);
+    v2_ws_reply(&mut owner, "RoomUpdated"); // the creator's own post-admission broadcast
+
+    let terminal = Client::connect_unjoined(&server.game_addr().to_string()).unwrap();
+    terminal.recv_timeout(WAIT).unwrap();
+    terminal
+        .send_v2(eksplode_re_net::protocol::v2::Request::JoinRoom {
+            request_id: RequestId::new("wrong").unwrap(),
+            server_epoch: welcome["server_epoch"].as_str().unwrap().into(),
+            room_id: welcome["room_id"].as_str().unwrap().into(),
+            name: "Terminal".into(),
+            password: Some(Secret::new("wrong-password-guess")),
+            look: None,
+        })
+        .unwrap();
+    assert!(matches!(
+        tcp_wait(
+            &terminal,
+            |message| matches!(message, ServerMsg::RoomV2(reply)
+            if matches!(reply.as_ref(), Reply::Error { code: eksplode_re_net::protocol::v2::ErrorCode::BadPassword, .. }))
+        ),
+        Some(ServerMsg::RoomV2(_))
+    ));
+
+    terminal
+        .send_v2(eksplode_re_net::protocol::v2::Request::JoinRoom {
+            request_id: RequestId::new("correct").unwrap(),
+            server_epoch: welcome["server_epoch"].as_str().unwrap().into(),
+            room_id: welcome["room_id"].as_str().unwrap().into(),
+            name: "Terminal".into(),
+            password: Some(Secret::new(password)),
+            look: None,
+        })
+        .unwrap();
+    assert!(matches!(
+        tcp_wait(
+            &terminal,
+            |message| matches!(message, ServerMsg::RoomV2(reply)
+            if matches!(reply.as_ref(), Reply::Welcome { .. }))
+        ),
+        Some(ServerMsg::RoomV2(_))
+    ));
+    let joined = v2_ws_reply(&mut owner, "RoomUpdated");
+    assert_eq!(joined["password_required"], true);
+    assert!(!joined.to_string().contains(password));
+
+    // an owner settings change with a stale revision changes nothing and leaves both
+    // transports consistent.
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"stale", "room_id":welcome["room_id"],
+        "expected_revision":0, "settings":{"name":"Changed", "mode":"normal", "size":"small",
+            "minutes":3, "friendly_fire":true}, "capacity":4}),
+    );
+    let rejected = v2_ws_reply(&mut owner, "Error");
+    assert_eq!(rejected["code"], "StaleRevision");
+
+    owner.send_value(
+        &json!({"type":"SetRoom", "request_id":"shrink", "room_id":welcome["room_id"],
+        "expected_revision":joined["revision"], "settings":{"name":"Changed", "mode":"normal",
+            "size":"small", "minutes":3, "friendly_fire":true}, "capacity":4, "password":""}),
+    );
+    let updated = v2_ws_reply(&mut owner, "RoomUpdated");
+    assert_eq!(updated["lobby"]["settings"]["name"], "Changed");
+    assert_eq!(updated["password_required"], false);
+    let tcp_update = tcp_wait(&terminal, |message| {
+        matches!(message, ServerMsg::RoomV2(reply)
+        if matches!(reply.as_ref(), Reply::RoomUpdated { password_required: false, .. }))
+    });
+    assert!(
+        tcp_update.is_some(),
+        "the terminal connection sees the same unprotected room"
+    );
+}

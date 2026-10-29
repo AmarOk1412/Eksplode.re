@@ -2,7 +2,7 @@
 //! field becomes its default and a value that is not an object gives the defaults, so an old
 //! page, a typo or a hostile message never breaks a room.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -390,6 +390,104 @@ impl AdmissionLedger {
         entry.finished_at = Some(now);
         entry.reply = Some(reply);
         Ok(())
+    }
+}
+
+const FAILURE_WINDOW: Duration = Duration::from_secs(60);
+const FAILURES_PER_SOURCE: u32 = 5;
+const FAILURES_PER_HOST: u32 = 100;
+const MAX_FAILURE_SOURCES: usize = 4096;
+
+#[derive(Clone, Copy)]
+struct FailureWindow {
+    window_start: Duration,
+    count: u32,
+}
+
+impl FailureWindow {
+    fn empty(now: Duration) -> Self {
+        Self {
+            window_start: now,
+            count: 0,
+        }
+    }
+
+    fn rolled(self, now: Duration) -> Self {
+        if now.checked_sub(self.window_start).unwrap_or_default() >= FAILURE_WINDOW {
+            Self::empty(now)
+        } else {
+            self
+        }
+    }
+
+    /// True once `limit` failures have already landed in the window containing `now`. A read
+    /// of a window that has aged out reports not-blocked without mutating it; the next
+    /// [`Self::record`] performs the actual roll.
+    fn blocked(&self, now: Duration, limit: u32) -> bool {
+        self.rolled(now).count >= limit
+    }
+
+    /// Rolls the window forward if a minute has elapsed, then records one failure. Saturates
+    /// at `limit` rather than overflowing once already blocked.
+    fn record(&mut self, now: Duration, limit: u32) {
+        *self = self.rolled(now);
+        if self.count < limit {
+            self.count += 1;
+        }
+    }
+}
+
+/// Bounded password/resume failure accounting: five failures per minute per source address,
+/// a 100/minute host aggregate, and at most 4,096 tracked sources (oldest inserted evicted
+/// first) so an attacker cannot grow this table without bound. Successful attempts are not
+/// recorded; only failed password checks and resume denials count against the allowance.
+///
+/// Callers must gate on [`Self::is_blocked`] *before* attempting verification, then call
+/// [`Self::record_failure`] only when that attempt actually fails. Checking the gate first
+/// (rather than only relabelling the error after the fact) stops a correct password from
+/// still being accepted once a source has exhausted its allowance.
+pub struct FailureAccounting {
+    per_source: HashMap<String, FailureWindow>,
+    insertion_order: VecDeque<String>,
+    host: FailureWindow,
+}
+
+impl FailureAccounting {
+    pub fn new(now: Duration) -> Self {
+        Self {
+            per_source: HashMap::new(),
+            insertion_order: VecDeque::new(),
+            host: FailureWindow::empty(now),
+        }
+    }
+
+    /// True when `source` (or the host aggregate) has already exhausted its failure allowance
+    /// for the window containing `now`; the caller must reject without attempting the guess.
+    pub fn is_blocked(&self, source: &str, now: Duration) -> bool {
+        self.host.blocked(now, FAILURES_PER_HOST)
+            || self
+                .per_source
+                .get(source)
+                .is_some_and(|window| window.blocked(now, FAILURES_PER_SOURCE))
+    }
+
+    /// Records one failed attempt from `source`, evicting the oldest tracked source first if
+    /// the bounded table is full and `source` is not already in it.
+    pub fn record_failure(&mut self, source: &str, now: Duration) {
+        self.host.record(now, FAILURES_PER_HOST);
+        if !self.per_source.contains_key(source) {
+            if self.per_source.len() >= MAX_FAILURE_SOURCES {
+                if let Some(oldest) = self.insertion_order.pop_front() {
+                    self.per_source.remove(&oldest);
+                }
+            }
+            self.per_source
+                .insert(source.to_string(), FailureWindow::empty(now));
+            self.insertion_order.push_back(source.to_string());
+        }
+        if let Some(window) = self.per_source.get_mut(source) {
+            window.record(now, FAILURES_PER_SOURCE);
+        }
     }
 }
 
@@ -931,6 +1029,27 @@ impl RoomRuntime {
                         .map_err(|_| ErrorCode::Unavailable)?;
                     self.lobby.clear(bot).map_err(|_| ErrorCode::BadRoom)?;
                 }
+            }
+            Request::RemovePlayer { membership_id, .. } => {
+                self.owner(connection_id)?;
+                if self.members.owner_membership_id.as_deref() == Some(membership_id.as_str()) {
+                    return Err(ErrorCode::NotInRoom);
+                }
+                let target_connection = self
+                    .members
+                    .get(&membership_id)
+                    .and_then(|member| member.connection_id)
+                    .ok_or(ErrorCode::NotInRoom)?;
+                self.remove_connection(target_connection);
+                let mut replies = self.fanout(self.updated());
+                replies.push((
+                    target_connection,
+                    Reply::Removed {
+                        reference: self.reference.clone(),
+                        reason: "owner removal".into(),
+                    },
+                ));
+                return Ok(replies);
             }
             Request::SetReady { ready, .. } => {
                 if self.phase != RoomPhase::Lobby {
