@@ -4,6 +4,12 @@
 
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    mpsc::{self, Receiver, SyncSender, TryRecvError},
+    Arc, Mutex,
+};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -67,6 +73,140 @@ impl PasswordVerifier {
 impl fmt::Debug for PasswordVerifier {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("PasswordVerifier([REDACTED])")
+    }
+}
+
+#[derive(Debug)]
+pub enum PasswordWork {
+    Create(Secret),
+    Verify {
+        verifier: PasswordVerifier,
+        password: Secret,
+    },
+}
+
+#[derive(Debug)]
+pub enum PasswordWorkResult {
+    Created(PasswordVerifier),
+    Verified(bool),
+}
+
+#[derive(Debug)]
+pub struct PasswordJob {
+    pub connection_id: u64,
+    pub request_id: RequestId,
+    pub work: PasswordWork,
+}
+
+#[derive(Debug)]
+pub struct PasswordCompletion {
+    pub connection_id: u64,
+    pub request_id: RequestId,
+    pub result: Result<PasswordWorkResult, ErrorCode>,
+}
+
+pub struct PasswordWorkers {
+    jobs: Option<SyncSender<PasswordJob>>,
+    results: Receiver<PasswordCompletion>,
+    outstanding: Arc<AtomicUsize>,
+    stopped: Arc<AtomicBool>,
+    threads: Vec<JoinHandle<()>>,
+}
+
+impl PasswordWorkers {
+    pub fn start(random: Arc<dyn RandomSource>) -> Result<Self, ErrorCode> {
+        Self::start_with(move |work| match work {
+            PasswordWork::Create(password) => PasswordVerifier::create(&password, random.as_ref())
+                .map(PasswordWorkResult::Created),
+            PasswordWork::Verify { verifier, password } => {
+                verifier.verify(&password).map(PasswordWorkResult::Verified)
+            }
+        })
+    }
+
+    fn start_with(
+        process: impl Fn(PasswordWork) -> Result<PasswordWorkResult, ErrorCode> + Send + Sync + 'static,
+    ) -> Result<Self, ErrorCode> {
+        let (jobs, receiver) = mpsc::sync_channel::<PasswordJob>(32);
+        let receiver = Arc::new(Mutex::new(receiver));
+        let (completed, results) = mpsc::sync_channel(34);
+        let process = Arc::new(process);
+        let mut pool = Self {
+            jobs: Some(jobs),
+            results,
+            outstanding: Arc::new(AtomicUsize::new(0)),
+            stopped: Arc::new(AtomicBool::new(false)),
+            threads: Vec::new(),
+        };
+        for index in 0..2 {
+            let receiver = receiver.clone();
+            let completed = completed.clone();
+            let process = process.clone();
+            let stopped = pool.stopped.clone();
+            let worker = thread::Builder::new()
+                .name(format!("password-{index}"))
+                .spawn(move || {
+                    while !stopped.load(Ordering::SeqCst) {
+                        let job = match receiver.lock() {
+                            Ok(receiver) => receiver.recv(),
+                            Err(_) => break,
+                        };
+                        let Ok(job) = job else {
+                            break;
+                        };
+                        if stopped.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        let result = process(job.work);
+                        if completed
+                            .try_send(PasswordCompletion {
+                                connection_id: job.connection_id,
+                                request_id: job.request_id,
+                                result,
+                            })
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                })
+                .map_err(|_| ErrorCode::Unavailable)?;
+            pool.threads.push(worker);
+        }
+        Ok(pool)
+    }
+
+    pub fn try_submit(&self, job: PasswordJob) -> Result<(), ErrorCode> {
+        let jobs = self.jobs.as_ref().ok_or(ErrorCode::Unavailable)?;
+        self.outstanding
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count < 34).then_some(count + 1)
+            })
+            .map_err(|_| ErrorCode::Busy)?;
+        if let Err(error) = jobs.try_send(job) {
+            self.outstanding.fetch_sub(1, Ordering::SeqCst);
+            return Err(match error {
+                mpsc::TrySendError::Full(_) => ErrorCode::Busy,
+                mpsc::TrySendError::Disconnected(_) => ErrorCode::Unavailable,
+            });
+        }
+        Ok(())
+    }
+
+    pub fn try_recv(&self) -> Result<PasswordCompletion, TryRecvError> {
+        let result = self.results.try_recv()?;
+        self.outstanding.fetch_sub(1, Ordering::SeqCst);
+        Ok(result)
+    }
+}
+
+impl Drop for PasswordWorkers {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::SeqCst);
+        self.jobs.take();
+        for worker in self.threads.drain(..) {
+            let _ = worker.join();
+        }
     }
 }
 
@@ -1187,6 +1327,219 @@ pub fn from_wire(value: &Value) -> RoomSettings {
 #[cfg(test)]
 mod password_tests {
     use super::*;
+
+    #[test]
+    fn password_workers_bound_running_queued_and_unread_results() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            mpsc, Arc, Mutex,
+        };
+        let (entered_tx, entered_rx) = mpsc::sync_channel(2);
+        let (release_tx, release_rx) = mpsc::sync_channel(2);
+        let release_rx = Mutex::new(release_rx);
+        let entered = Arc::new(AtomicUsize::new(0));
+        let observed = entered.clone();
+        let pool = PasswordWorkers::start_with(move |_| {
+            let index = observed.fetch_add(1, Ordering::SeqCst);
+            if index < 2 {
+                entered_tx.send(()).unwrap();
+                release_rx
+                    .lock()
+                    .unwrap()
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap();
+            }
+            Ok(PasswordWorkResult::Verified(true))
+        })
+        .unwrap();
+        let job = |index: u64| PasswordJob {
+            connection_id: index + 10,
+            request_id: RequestId::new(format!("password-{index}")).unwrap(),
+            work: PasswordWork::Create(Secret::new("worker-password-canary")),
+        };
+        pool.try_submit(job(0)).unwrap();
+        pool.try_submit(job(1)).unwrap();
+        for _ in 0..2 {
+            entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        }
+        for index in 2..34 {
+            pool.try_submit(job(index)).unwrap();
+        }
+        assert_eq!(entered.load(Ordering::SeqCst), 2);
+        assert_eq!(pool.try_submit(job(34)), Err(ErrorCode::Busy));
+        release_tx.send(()).unwrap();
+        release_tx.send(()).unwrap();
+        assert_eq!(
+            pool.try_submit(job(34)),
+            Err(ErrorCode::Busy),
+            "unread outcomes retain their bounded slots"
+        );
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let mut completed = std::collections::HashSet::new();
+        while completed.len() < 34 {
+            match pool.try_recv() {
+                Ok(completion) => {
+                    assert_eq!(
+                        completion.request_id.as_str(),
+                        format!("password-{}", completion.connection_id - 10)
+                    );
+                    assert!(matches!(
+                        completion.result,
+                        Ok(PasswordWorkResult::Verified(true))
+                    ));
+                    assert!(completed.insert(completion.connection_id));
+                }
+                Err(mpsc::TryRecvError::Empty) => std::thread::yield_now(),
+                Err(error) => panic!("completion channel closed: {error}"),
+            }
+            assert!(Instant::now() < deadline, "worker results did not complete");
+        }
+        pool.try_submit(job(34)).unwrap();
+    }
+
+    #[test]
+    fn password_workers_hash_off_thread_and_redact_jobs_and_results() {
+        use std::sync::{mpsc::TryRecvError, Arc};
+        let pool = PasswordWorkers::start(Arc::new(OsRandom)).unwrap();
+        let password = Secret::new("worker-private-canary");
+        let job = PasswordJob {
+            connection_id: 7,
+            request_id: RequestId::new("private-create").unwrap(),
+            work: PasswordWork::Create(password.clone()),
+        };
+        assert!(!format!("{job:?}").contains(password.expose()));
+        pool.try_submit(job).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let result = loop {
+            match pool.try_recv() {
+                Ok(completion) => break completion,
+                Err(TryRecvError::Empty) => std::thread::yield_now(),
+                Err(error) => panic!("completion channel closed: {error}"),
+            }
+            assert!(
+                Instant::now() < deadline,
+                "password hashing did not complete"
+            );
+        };
+        assert_eq!(result.connection_id, 7);
+        assert_eq!(result.request_id.as_str(), "private-create");
+        assert!(!format!("{result:?}").contains(password.expose()));
+        match result.result.unwrap() {
+            PasswordWorkResult::Created(verifier) => assert!(verifier.verify(&password).unwrap()),
+            _ => panic!("expected a private verifier"),
+        }
+    }
+
+    #[test]
+    fn password_workers_keep_serving_after_validation_and_verification_failures() {
+        use std::sync::{mpsc::TryRecvError, Arc};
+        let pool = PasswordWorkers::start(Arc::new(OsRandom)).unwrap();
+        let verifier =
+            PasswordVerifier::create(&Secret::new("correct-password"), &OsRandom).unwrap();
+        let work = [
+            PasswordWork::Create(Secret::new("")),
+            PasswordWork::Verify {
+                verifier: verifier.clone(),
+                password: Secret::new("incorrect-password"),
+            },
+            PasswordWork::Verify {
+                verifier,
+                password: Secret::new("correct-password"),
+            },
+        ];
+        for (index, work) in work.into_iter().enumerate() {
+            pool.try_submit(PasswordJob {
+                connection_id: 42,
+                request_id: RequestId::new(format!("verify-{index}")).unwrap(),
+                work,
+            })
+            .unwrap();
+        }
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut results = std::collections::HashMap::new();
+        while results.len() < 3 {
+            match pool.try_recv() {
+                Ok(completion) => {
+                    assert_eq!(completion.connection_id, 42);
+                    results.insert(
+                        completion.request_id.as_str().to_string(),
+                        completion.result,
+                    );
+                }
+                Err(TryRecvError::Empty) => std::thread::yield_now(),
+                Err(error) => panic!("completion channel closed: {error}"),
+            }
+            assert!(Instant::now() < deadline, "worker results did not complete");
+        }
+        assert!(matches!(
+            results.remove("verify-0").unwrap(),
+            Err(ErrorCode::BadPassword)
+        ));
+        assert!(matches!(
+            results.remove("verify-1").unwrap(),
+            Ok(PasswordWorkResult::Verified(false))
+        ));
+        assert!(matches!(
+            results.remove("verify-2").unwrap(),
+            Ok(PasswordWorkResult::Verified(true))
+        ));
+    }
+
+    #[test]
+    fn password_workers_discard_queued_work_on_shutdown() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            mpsc, Arc, Mutex,
+        };
+        let (entered_tx, entered_rx) = mpsc::sync_channel(2);
+        let (release_tx, release_rx) = mpsc::sync_channel(2);
+        let release_rx = Mutex::new(release_rx);
+        let processed = Arc::new(AtomicUsize::new(0));
+        let observed = processed.clone();
+        let submitter = std::thread::current().id();
+        let pool = PasswordWorkers::start_with(move |_| {
+            assert_ne!(std::thread::current().id(), submitter);
+            observed.fetch_add(1, Ordering::SeqCst);
+            entered_tx.send(()).unwrap();
+            release_rx
+                .lock()
+                .unwrap()
+                .recv_timeout(Duration::from_secs(2))
+                .unwrap();
+            Ok(PasswordWorkResult::Verified(true))
+        })
+        .unwrap();
+        for index in 0..2 {
+            pool.try_submit(PasswordJob {
+                connection_id: 1,
+                request_id: RequestId::new(format!("active-{index}")).unwrap(),
+                work: PasswordWork::Create(Secret::new("shutdown-canary")),
+            })
+            .unwrap();
+        }
+        for _ in 0..2 {
+            entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        }
+        for index in 0..32 {
+            pool.try_submit(PasswordJob {
+                connection_id: 1,
+                request_id: RequestId::new(format!("queued-{index}")).unwrap(),
+                work: PasswordWork::Create(Secret::new("shutdown-canary")),
+            })
+            .unwrap();
+        }
+        let stopped = pool.stopped.clone();
+        let shutdown = std::thread::spawn(move || drop(pool));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !stopped.load(Ordering::SeqCst) {
+            assert!(Instant::now() < deadline, "shutdown did not start");
+            std::thread::yield_now();
+        }
+        release_tx.send(()).unwrap();
+        release_tx.send(()).unwrap();
+        shutdown.join().unwrap();
+        assert_eq!(processed.load(Ordering::SeqCst), 2);
+    }
 
     #[test]
     fn salts_change_digests_and_hashes_use_the_approved_argon2id_policy() {
