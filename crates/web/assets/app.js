@@ -146,6 +146,7 @@ export function initialState() {
     membership_id: null,
     revision: 0,
     capacity: 4,
+    password_required: false,
     rooms: [],
     sources: [],
     selectedRoom: null,
@@ -223,10 +224,12 @@ export function reduce(state, event) {
       return { ...state, rooms: Array.isArray(event.rooms) ? event.rooms : [], sources: event.sources ?? [],
         stage: state.room_id ? state.stage : "directory" };
     case "select-room":
-      return { ...state, selectedRoom: event.room, menu: "join",
+      return { ...state, selectedRoom: event.room, capacity: event.room.capacity ?? 4,
+        password_required: event.room.password_required === true, menu: "join",
         room: { open: true, settings: sanitizeRoom(event.room), humans: event.room.connected_humans ?? 0 } };
     case "new-room":
-      return { ...state, menu: "room", selectedRoom: null, room: { open: false, settings: sanitizeRoom(null), humans: 0 } };
+      return { ...state, menu: "room", selectedRoom: null, password_required: false,
+        room: { open: false, settings: sanitizeRoom(null), humans: 0 } };
     case "show-directory":
       return { ...state, stage: "directory", menu: "directory", selectedRoom: null, room: null, notice: "" };
     case "LeftRoom":
@@ -261,7 +264,7 @@ export function reduce(state, event) {
       return { ...state, stage: "lobby", slot: event.slot, lobby, notice: "", looks: looksOf(event, null), dev: event.dev === true, devState: null,
         room_id: event.room_id ?? state.room_id, server_epoch: event.server_epoch ?? state.server_epoch,
         membership_id: event.membership_id ?? state.membership_id, revision: event.revision ?? state.revision,
-        capacity: event.capacity ?? state.capacity };
+        capacity: event.capacity ?? state.capacity, password_required: event.password_required === true };
     }
     case "DevState":
       return { ...state, devState: { paused: event.paused === true, drops: event.drops } };
@@ -272,7 +275,8 @@ export function reduce(state, event) {
       const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
       const lobby = Object.hasOwn(event, "owner_slot") ? { ...event.lobby, owner_slot: event.owner_slot } : event.lobby;
       return { ...state, stage, lobby, looks: looksOf(event, state.looks),
-        revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity };
+        revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity,
+        password_required: event.password_required ?? state.password_required };
     }
     case "Start":
       return { ...state, stage: "playing", notice: "" };
@@ -624,12 +628,15 @@ function start() {
     directoryCreate: $("directory-create"),
     roomBack: $("room-back"),
     roomCapacity: $("room-capacity"),
+    roomPassword: $("room-password"),
     leaveRoom: $("leave-room"),
     leavePanel: $("leave-panel"),
     leaveConfirm: $("leave-confirm"),
     leaveCancel: $("leave-cancel"),
     hubLeave: $("hub-leave"),
     joinPanel: $("join-panel"),
+    joinPasswordLabel: $("join-password-label"),
+    joinPassword: $("join-password"),
     roomPanel: $("room-panel"),
     roomName: $("room-name"),
     roomModes: $("room-modes"),
@@ -643,11 +650,16 @@ function start() {
     roomSummary: $("room-summary"),
     roomNote: $("room-note"),
     lobbyName: $("lobby-room-name"),
+    lobbyCapacity: $("lobby-capacity"),
     lobbyMode: $("lobby-mode"),
     lobbySize: $("lobby-size"),
     lobbyMinutes: $("lobby-minutes"),
     lobbyFfLabel: $("lobby-ff-label"),
     lobbyFf: $("lobby-ff"),
+    lobbyPasswordStatus: $("lobby-password-status"),
+    lobbyPassword: $("lobby-password"),
+    lobbyPasswordSet: $("lobby-password-set"),
+    lobbyPasswordRemove: $("lobby-password-remove"),
     lobbyPanel: $("lobby-panel"),
     gamePanel: $("game-panel"),
     name: $("name"),
@@ -913,6 +925,17 @@ function start() {
     const previousState = state;
     state = reduce(state, event);
     if (state === previousState) return;
+    if (event.type === "Welcome") {
+      el.roomPassword.value = "";
+      el.joinPassword.value = "";
+    }
+    if (event.type === "show-directory" || event.type === "new-room") {
+      el.joinPassword.value = "";
+      el.roomPassword.value = "";
+    }
+    if (event.type === "select-room" && previousState.selectedRoom?.room_id !== event.room?.room_id) {
+      el.joinPassword.value = "";
+    }
     if (["LeftRoom", "Removed", "RoomClosed"].includes(event.type)) {
       keys.clear();
       gamepads.clear();
@@ -1377,7 +1400,7 @@ function start() {
       const name = document.createElement("strong");
       name.textContent = room.name;
       const detail = document.createElement("span");
-      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${room.occupied}/${room.capacity} - ${room.phase} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
+      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${room.occupied}/${room.capacity} - ${room.phase}${room.password_required ? " - password" : ""} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
       select.append(name, detail);
       select.addEventListener("click", () => dispatch({ type: "select-room", room }));
       item.append(select);
@@ -1399,8 +1422,11 @@ function start() {
     const name = validPlayerName();
     if (!name || !state.selectedRoom || state.stage === "joining") return;
     const room = state.selectedRoom;
+    const password = el.joinPassword.value;
     state = { ...state, stage: "joining", notice: "" };
-    send({ type: "JoinRoom", name, room_id: room.room_id, server_epoch: room.server_epoch, look: draft });
+    send({ type: "JoinRoom", name, room_id: room.room_id, server_epoch: room.server_epoch, look: draft,
+      ...(password.length > 0 ? { password } : {}) });
+    el.joinPassword.value = "";
     updateUi();
   }
 
@@ -1408,8 +1434,11 @@ function start() {
     const name = validPlayerName();
     if (!name || state.stage === "joining") return;
     saveRoom(storage, roomDraft);
+    const password = el.roomPassword.value;
     state = { ...state, stage: "joining", notice: "" };
-    send({ type: "CreateRoom", name, settings: roomPayload(roomDraft), capacity: Number(el.roomCapacity.value), look: draft });
+    send({ type: "CreateRoom", name, settings: roomPayload(roomDraft), capacity: Number(el.roomCapacity.value), look: draft,
+      ...(password.length > 0 ? { password } : {}) });
+    el.roomPassword.value = "";
     updateUi();
   }
 
@@ -1434,10 +1463,12 @@ function start() {
     fillOptions(minutes, MINUTES, (m) => `${m} minutes`);
     if (mode) fillOptions(mode, PLAYABLE_MODES, modeLabel);
   }
+  fillOptions(el.lobbyCapacity, [1, 2, 3, 4], (capacity) => String(capacity));
   let roomDraft = loadRoom(storage);
 
   function renderRoomMenu() {
     el.roomName.value = roomDraft.name;
+    if (roomDraft.mode !== "normal") el.roomCapacity.value = "4";
     el.roomSize.value = roomDraft.size;
     el.roomMinutes.value = String(roomDraft.minutes);
     el.roomFf.checked = roomDraft.friendly_fire;
@@ -1471,17 +1502,31 @@ function start() {
     el.roomNote.textContent = state.stage === "lobby" ? controls.note : "";
     const s = controls.settings;
     if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
+    el.lobbyCapacity.value = String(controls.capacity);
+    for (const option of el.lobbyCapacity.options) {
+      option.disabled = Number(option.value) < controls.occupied ||
+        (s.mode !== "normal" && Number(option.value) !== 4);
+    }
     el.lobbyMode.value = s.mode;
     el.lobbySize.value = s.size;
     el.lobbyMinutes.value = String(s.minutes);
     el.lobbyFf.checked = s.friendly_fire;
     el.lobbyFfLabel.hidden = !controls.showFriendlyFire;
-    for (const control of [el.lobbyName, el.lobbyMode, el.lobbySize, el.lobbyMinutes, el.lobbyFf]) {
+    for (const control of [el.lobbyName, el.lobbyCapacity, el.lobbyMode, el.lobbySize, el.lobbyMinutes, el.lobbyFf]) {
       control.disabled = !controls.enabled;
     }
+    el.lobbyPasswordStatus.textContent = controls.passwordRequired ? "Password required" : "No password";
+    el.lobbyPassword.disabled = !controls.enabled;
+    el.lobbyPasswordSet.disabled = !controls.enabled || el.lobbyPassword.value.length === 0;
+    el.lobbyPasswordRemove.disabled = !controls.enabled || !controls.passwordRequired;
     const room = state.room;
     el.joinRoom.hidden = !(room && room.open);
     el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}${state.selectedRoom ? ` / ${state.selectedRoom.room_id}` : ""}` : "";
+    const protectedRoom = state.selectedRoom?.password_required === true;
+    el.joinPassword.hidden = !protectedRoom;
+    el.joinPasswordLabel.hidden = !protectedRoom;
+    el.joinPassword.disabled = state.stage === "joining";
+    el.roomPassword.disabled = state.stage === "joining";
     if (["idle", "directory"].includes(state.stage) && state.menu === "room") renderRoomMenu();
   }
 
@@ -1489,8 +1534,21 @@ function start() {
 
   function changeRoom(field, value) {
     if (state.stage !== "lobby") return;
-    const settings = { ...sanitizeRoom(state.lobby?.settings), [field]: value };
-    send(setRoomMessage(settings));
+    const settings = sanitizeRoom(state.lobby?.settings);
+    let capacity = state.capacity;
+    if (field === "capacity") {
+      capacity = Number(value);
+    } else {
+      settings[field] = value;
+      if (settings.mode !== "normal" && capacity !== 4) capacity = 4;
+    }
+    send({ ...setRoomMessage(settings), capacity });
+  }
+  function changeRoomPassword(password) {
+    if (state.stage !== "lobby" || !roomControls(state).enabled) return;
+    send({ type: "SetRoom", settings: sanitizeRoom(state.lobby?.settings), capacity: state.capacity, password });
+    el.lobbyPassword.value = "";
+    updateUi();
   }
   el.roomName.addEventListener("input", () => {
     roomDraft = roomReducer(roomDraft, { type: "name", value: el.roomName.value });
@@ -1511,10 +1569,18 @@ function start() {
   el.leaveCancel.addEventListener("click", closeNavigationLayer);
   el.leaveConfirm.addEventListener("click", () => { closeNavigationLayer(); send({ type: "LeaveRoom" }); });
   el.lobbyName.addEventListener("change", () => changeRoom("name", el.lobbyName.value));
+  el.lobbyCapacity.addEventListener("change", () => changeRoom("capacity", el.lobbyCapacity.value));
   el.lobbyMode.addEventListener("change", () => changeRoom("mode", el.lobbyMode.value));
   el.lobbySize.addEventListener("change", () => changeRoom("size", el.lobbySize.value));
   el.lobbyMinutes.addEventListener("change", () => changeRoom("minutes", Number(el.lobbyMinutes.value)));
   el.lobbyFf.addEventListener("change", () => changeRoom("friendly_fire", el.lobbyFf.checked));
+  el.lobbyPassword.addEventListener("input", () => {
+    el.lobbyPasswordSet.disabled = !roomControls(state).enabled || el.lobbyPassword.value.length === 0;
+  });
+  el.lobbyPasswordSet.addEventListener("click", () => {
+    if (el.lobbyPassword.value.length > 0) changeRoomPassword(el.lobbyPassword.value);
+  });
+  el.lobbyPasswordRemove.addEventListener("click", () => changeRoomPassword(""));
 
   el.join.addEventListener("click", joinSelectedRoom);
   el.name.addEventListener("keydown", (e) => {

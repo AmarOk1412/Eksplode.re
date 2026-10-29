@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { lobbyCards, Animator } from "../assets/app.js";
+import { readFileSync } from "node:fs";
+import { lobbyCards, Animator, initialState, reduce } from "../assets/app.js";
+import { defaultRoom, loadRoom, roomControls, saveRoom } from "../assets/room.js";
 
 const slot = (controller, name = "", ready = false) => ({ controller, name, ready });
 
@@ -81,4 +83,48 @@ test("f4_us3_as1_in_team_mode_each_card_shows_its_team", () => {
   const normal = lobbyCards({ ...lobby, settings: { ...lobby.settings, mode: "normal" } }, 2);
   assert.ok(normal.every((c) => c.team === null && !c.marks.some((m) => m.startsWith("team"))));
   assert.deepEqual(lobbyCards({ slots: lobby.slots }, 0).map((c) => c.team), [null, null, null, null], "an old host sends no settings");
+});
+
+test("us2_as2_room_password_inputs_are_masked_and_passwords_never_enter_room_defaults", () => {
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  assert.match(html, /<input[^>]*id="room-password"[^>]*type="password"/);
+  assert.match(html, /<input[^>]*id="join-password"[^>]*type="password"/);
+  assert.match(html, /<select[^>]*id="lobby-capacity"/);
+  assert.match(html, /<input[^>]*id="lobby-password"[^>]*type="password"/);
+  assert.match(html, /id="lobby-password-set"/);
+  assert.match(html, /id="lobby-password-remove"/);
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
+  saveRoom(storage, { ...defaultRoom(), password: "password-canary" });
+  assert.equal(loadRoom(storage).password, undefined);
+  assert.ok(![...values.values()].some((value) => value.includes("password-canary")));
+});
+
+test("us2_as6_room_updates_refresh_explicit_owner_capacity_and_protection_controls", () => {
+  const lobby = (ownerSlot, name) => ({
+    owner_slot: ownerSlot,
+    slots: [slot("Remote", "Ann"), slot("Remote", "Bob"), slot("Empty"), slot("Empty")],
+    settings: { name, mode: "normal", size: "small", minutes: 3, friendly_fire: true },
+  });
+  let state = reduce(initialState(), {
+    type: "Welcome", slot: 0, owner_slot: 0, capacity: 2, password_required: true,
+    lobby: lobby(0, "Protected"), looks: [],
+  });
+  let controls = roomControls(state);
+  assert.equal(controls.enabled, true);
+  assert.equal(controls.capacity, 2);
+  assert.equal(controls.passwordRequired, true);
+
+  state = reduce(state, {
+    type: "RoomUpdated", owner_slot: 1, capacity: 3, password_required: false,
+    lobby: lobby(1, "Transferred"), looks: [],
+  });
+  controls = roomControls(state);
+  assert.equal(controls.enabled, false, "the former owner loses controls immediately");
+  assert.equal(controls.capacity, 3);
+  assert.equal(controls.passwordRequired, false);
+  assert.equal(roomControls({ ...state, slot: 1 }).enabled, true, "the authoritative new owner gains controls");
+  assert.equal(roomControls({ ...state, slot: 1, stage: "playing" }).enabled, false);
+  assert.equal(reduce(state, { type: "Error", code: "NotOwner", message: "Only Bob can manage this room" }).notice,
+    "Only Bob can manage this room");
 });

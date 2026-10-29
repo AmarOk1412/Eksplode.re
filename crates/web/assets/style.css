@@ -426,6 +426,10 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .room-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: center; }
 .room-controls input { width: min(200px, 100%); font-size: 1rem; }
 .room-controls select { width: auto; }
+.room-password-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 8px; }
+.room-password-controls p { width: 100%; margin: 0; }
+.room-password-controls input { width: min(220px, 100%); font-size: 1rem; }
+.room-password-controls button { font-size: 0.9rem; padding: 5px 8px; }
 .check input { width: auto; }
 
 .card.team-A { box-shadow: 0 0 0 5px #3373f2; }
@@ -494,6 +498,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   #lobby-panel > h2 { font-size: 1.3rem; margin: 0; }
   #room-summary, #room-note { margin: 0; }
   #room-controls { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px; min-width: 0; }
+  #lobby-password-controls { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; min-width: 0; }
   #room-controls label { font-size: 0.75rem; }
   #room-controls input, #room-controls select { width: 100%; min-width: 0; padding: 3px 4px; font-size: 0.8rem; }
   #slots { gap: 4px; margin: 0; justify-content: space-between; }

@@ -41,6 +41,15 @@ test("v2 presentation messages scope actions without falling back to legacy Join
   const update = roomProtocolMessage(state, setRoomMessage(defaultRoom()), "settings");
   assert.equal(update.expected_revision, 3);
   assert.equal(update.capacity, 4);
+  assert.deepEqual(roomProtocolMessage({}, { type:"CreateRoom", name:"Owner", settings:defaultRoom(), capacity:2,
+    password:"create-canary" }, "create"), { type:"CreateRoom", name:"Owner", settings:defaultRoom(),
+    capacity:2, password:"create-canary", request_id:"create" });
+  assert.deepEqual(roomProtocolMessage({}, { type:"JoinRoom", name:"Member", room_id:"r", server_epoch:"e",
+    password:"join-canary" }, "join"), { type:"JoinRoom", name:"Member", room_id:"r", server_epoch:"e",
+    password:"join-canary", request_id:"join" });
+  assert.deepEqual(roomProtocolMessage(state, { type:"SetRoom", settings:defaultRoom(), capacity:2,
+    password:"replace-canary" }, "replace"), { type:"SetRoom", room_id:"room", request_id:"replace",
+    settings:defaultRoom(), capacity:2, password:"replace-canary", expected_revision:3 });
 });
 
 test("the nested join panel retains horizontal centering independently of the app grid", () => {

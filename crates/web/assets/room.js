@@ -129,6 +129,9 @@ export function roomControls(state) {
     settings,
     summary: roomLabel(state.lobby?.settings),
     enabled,
+    capacity: state.capacity ?? 4,
+    occupied: state.lobby?.slots?.filter((slot) => slot.controller !== "Empty").length ?? 0,
+    passwordRequired: state.password_required === true,
     showFriendlyFire: settings.mode === "team",
     note: settings.mode === "chaser" ? "One chaser with bombs and hearts, three runners without bombs. Roles are drawn at the start." : "",
   };

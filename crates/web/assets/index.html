@@ -73,6 +73,8 @@
       <select id="room-minutes"></select>
       <label for="room-capacity">Maximum players</label>
       <select id="room-capacity"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select>
+      <label for="room-password">Room password (optional)</label>
+      <input id="room-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
       <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
       <button id="room-create" type="button">Create room</button>
       <button id="room-back" type="button">Back</button>
@@ -91,6 +93,8 @@
       <p id="join-room" class="hint" hidden></p>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
+      <label id="join-password-label" for="join-password" hidden>Room password</label>
+      <input id="join-password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" hidden>
       <button id="join" type="button">Join room</button>
       <button id="retry" type="button" hidden>Retry</button>
     </section>
@@ -126,6 +130,8 @@
       <div id="room-controls" class="room-controls" role="group" aria-label="Room settings">
         <label for="lobby-room-name">Name</label>
         <input id="lobby-room-name" maxlength="24" autocomplete="off" spellcheck="false">
+        <label for="lobby-capacity">Maximum players</label>
+        <select id="lobby-capacity"></select>
         <label for="lobby-mode">Mode</label>
         <select id="lobby-mode"></select>
         <label for="lobby-size">Board</label>
@@ -133,6 +139,13 @@
         <label for="lobby-minutes">Time</label>
         <select id="lobby-minutes"></select>
         <label id="lobby-ff-label" class="check" hidden><input id="lobby-ff" type="checkbox"> Friendly fire</label>
+      </div>
+      <div id="lobby-password-controls" class="room-password-controls" role="group" aria-label="Room password settings">
+        <p id="lobby-password-status" class="hint" aria-live="polite"></p>
+        <label for="lobby-password">New password</label>
+        <input id="lobby-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
+        <button id="lobby-password-set" type="button">Set password</button>
+        <button id="lobby-password-remove" type="button">Remove protection</button>
       </div>
       <ul id="slots" class="cards"></ul>
       <div class="buttons">
