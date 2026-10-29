@@ -77,6 +77,72 @@ fn v2_create_settings(host: &Host, name: &str, settings: Value) -> (Raw, Value) 
 }
 
 #[test]
+fn room_name_creation_counts_trimmed_characters() {
+    let host = host();
+    for (index, expected) in ["x".to_string(), "x".repeat(24), "\u{e9}".repeat(24)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut peer = Raw::connect(host.addr());
+        peer.hello_v2().unwrap();
+        let settings = RoomSettings {
+            name: format!("\u{2003} {expected}  "),
+            ..RoomSettings::default()
+        };
+        peer.send_value(
+            &json!({"type":"CreateRoom", "request_id":format!("trimmed-{index}"),
+            "name":"Owner", "settings":settings, "capacity":4}),
+        );
+        let reply = peer.recv_value().unwrap();
+        assert_eq!(
+            reply["type"], "Welcome",
+            "a valid trimmed name was rejected"
+        );
+        assert_eq!(reply["lobby"]["settings"]["name"], expected);
+    }
+}
+
+#[test]
+fn room_name_updates_count_trimmed_characters_and_reject_controls_atomically() {
+    let host = host();
+    let (mut owner, mut room) = v2_create_settings(
+        &host,
+        "Owner",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    for (index, expected) in ["x".repeat(24), "\u{e9}".repeat(24)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut settings = room["lobby"]["settings"].clone();
+        settings["name"] = json!(format!("  {expected}\u{2003}"));
+        owner.send_value(&json!({"type":"SetRoom", "request_id":format!("trimmed-{index}"),
+            "room_id":room["room_id"], "expected_revision":room["revision"], "settings":settings, "capacity":4}));
+        let reply = owner.recv_value().unwrap();
+        assert_eq!(
+            reply["type"], "RoomUpdated",
+            "a valid trimmed name was rejected"
+        );
+        assert_eq!(reply["lobby"]["settings"]["name"], expected);
+        room = reply;
+    }
+    for (index, name) in ["\nValid", "Valid\t", "x\u{7}y"].into_iter().enumerate() {
+        let mut settings = room["lobby"]["settings"].clone();
+        settings["name"] = json!(name);
+        owner.send_value(&json!({"type":"SetRoom", "request_id":format!("control-{index}"),
+            "room_id":room["room_id"], "expected_revision":room["revision"], "settings":settings, "capacity":4}));
+        assert_eq!(v2_reply(&mut owner, "Error")["code"], "BadRoom");
+    }
+    owner.send_value(&json!({"type":"ListRooms", "request_id":"after-controls", "scope":"local"}));
+    let directory = v2_reply(&mut owner, "Rooms");
+    assert_eq!(directory["rooms"][0]["revision"], room["revision"]);
+    assert_eq!(
+        directory["rooms"][0]["name"],
+        room["lobby"]["settings"]["name"]
+    );
+}
+
+#[test]
 fn v2_only_one_of_a_hundred_connections_takes_the_last_seat() {
     let host = host();
     let (_owner, room) = v2_create(&host, "Owner", 2);

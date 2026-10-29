@@ -1352,10 +1352,13 @@ impl Server {
         }
         let mut settings: RoomSettings =
             serde_json::from_value(settings).map_err(|_| ErrorCode::BadRoom)?;
-        if settings.name.chars().any(char::is_control) || settings.name.chars().count() > 24 {
+        if settings.name.chars().any(char::is_control) {
             return Err(ErrorCode::BadRoom);
         }
         settings.name = settings.name.trim().to_string();
+        if settings.name.chars().count() > 24 {
+            return Err(ErrorCode::BadRoom);
+        }
         if settings.name.is_empty() {
             settings.name = format!("{name}'s room").chars().take(24).collect();
         }
