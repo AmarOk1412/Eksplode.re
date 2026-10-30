@@ -21,9 +21,9 @@ test("the reducer keeps dev and the dev state", () => {
   let s = reduce(initialState(), welcome(0, true));
   assert.equal(s.dev, true);
   s = reduce(s, { type: "DevState", paused: true, drops: DEFAULTS });
-  assert.deepEqual(s.devState, { paused: true, drops: DEFAULTS });
-  s = reduce(s, { type: "DevState", paused: false, drops: [1, 0, 0, 0, 0, 0, 0] });
-  assert.deepEqual(s.devState, { paused: false, drops: [1, 0, 0, 0, 0, 0, 0] });
+  assert.deepEqual(s.devState, { paused: true, drops: DEFAULTS, behaviour: null });
+  s = reduce(s, { type: "DevState", paused: false, drops: [1, 0, 0, 0, 0, 0, 0], behaviour: "balanced" });
+  assert.deepEqual(s.devState, { paused: false, drops: [1, 0, 0, 0, 0, 0, 0], behaviour: "balanced" });
   assert.equal(reduce(initialState(), welcome(0, undefined)).dev, false, "an old host means no dev");
   assert.equal(reduce(initialState(), welcome(0, false)).dev, false);
   assert.equal(reduce(s, { type: "retry" }).dev, false, "a new session forgets it");
@@ -93,4 +93,26 @@ test("the messages follow the protocol", () => {
   assert.deepEqual(m.pause(false), { type: "DevPauseBots", paused: false });
   assert.deepEqual(m.reset(), { type: "DevResetDrops" });
   assert.deepEqual(m.drops([0, 0, 0, 100, 0, 0, 0, 0]), { type: "DevSetDrops", chances: [0, 0, 0, 1, 0, 0, 0, 0] });
+});
+
+test("f12_us1_as7_the_panel_offers_the_bot_behaviour", () => {
+  let s = reduce(initialState(), welcome(0, true));
+  let panel = devPanel(s);
+  assert.deepEqual(panel.behaviour.options.map((o) => o.value), ["random", "aggressive", "protective", "balanced"]);
+  assert.deepEqual(panel.behaviour.options.map((o) => o.label), ["Random", "Aggressive", "Protective", "Balanced"]);
+  assert.equal(panel.behaviour.value, "random", "random until the host says otherwise");
+  s = reduce(s, { type: "DevState", paused: false, drops: DEFAULTS, behaviour: "protective" });
+  assert.equal(devPanel(s).behaviour.value, "protective");
+  s = reduce(s, { type: "DevState", paused: false, drops: DEFAULTS, behaviour: "unknown" });
+  assert.equal(devPanel(s).behaviour.value, "random", "an unknown name shows as random");
+  s = reduce(s, { type: "DevState", paused: false, drops: DEFAULTS });
+  assert.equal(devPanel(s).behaviour.value, "random", "an older host sends none");
+});
+
+test("f12_us1_as8_the_behaviour_message_maps_random_to_null", () => {
+  const m = devMessages();
+  assert.deepEqual(m.behaviour("aggressive"), { type: "DevSetBotBehaviour", behaviour: "aggressive" });
+  assert.deepEqual(m.behaviour("balanced"), { type: "DevSetBotBehaviour", behaviour: "balanced" });
+  assert.deepEqual(m.behaviour("random"), { type: "DevSetBotBehaviour", behaviour: null });
+  assert.deepEqual(m.behaviour("nonsense"), { type: "DevSetBotBehaviour", behaviour: null });
 });

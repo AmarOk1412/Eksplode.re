@@ -40,7 +40,10 @@ See [AUDIO.md](AUDIO.md).
 `--dev` (also `eksplode-re-cli host --dev`) turns on developer mode for testing. The page then shows
 a "DEV MODE" marker and a panel for the lobby owner: pause or resume every bot (placed bombs keep
 burning, people are not affected), eight sliders from 0 to 100 % for the drop chance of each power
-(extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick) and a reset button. The sliders
+(extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick), a reset button and a "Bot
+behaviour" choice (Random, Aggressive, Protective, Balanced) that every bot created from then on
+uses (the next match, or a bot taking over a seat mid-match); Random lets each bot draw its own.
+Forcing Balanced in a Hard room gives the bot as it was before behaviours existed. The sliders
 change what blocks destroyed from then on drop, also in the middle of a match; for example punch
 at 100 % and the rest at 0 % makes every block drop a punch. Without `--dev` the server refuses
 every developer command (`DevDisabled`) and the page shows no panel. Developer mode is for testing
@@ -67,7 +70,7 @@ network, see [SECURITY.md](SECURITY.md).
 | `--size <SIZE>` | default board size: small, medium or large (default small) |
 | `--time <MIN>` | default round time in minutes: 2, 3, 5 or 10 (default 3) |
 | `--friendly-fire <on|off>` | default friendly fire for Team mode (default on) |
-| `--dev` | developer mode: owner-only commands to pause bots and set drop chances (testing only) |
+| `--dev` | developer mode: owner-only commands to pause bots, force the bot behaviour and set drop chances (testing only) |
 | `-h, --help` | show this help |
 | `-V, --version` | show the version |
 <!-- options:end -->

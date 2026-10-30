@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  BOT_DIFFICULTIES,
   MAX_NAME,
   MINUTES,
   MODES,
@@ -61,7 +62,7 @@ test("the nested join panel retains horizontal centering independently of the ap
 });
 
 test("the defaults are the game as it was: Normal, small board, 3 minutes, friendly fire on", () => {
-  assert.deepEqual(defaultRoom(), { name: "", mode: "normal", size: "small", minutes: 3, friendly_fire: true });
+  assert.deepEqual(defaultRoom(), { name: "", mode: "normal", size: "small", minutes: 3, friendly_fire: true, bot_difficulty: "medium" });
   assert.deepEqual(MODES, ["normal", "team", "chaser"]);
   assert.deepEqual(SIZES, ["small", "medium", "large"]);
   assert.deepEqual(MINUTES, [2, 3, 5, 10]);
@@ -73,7 +74,7 @@ test("sanitizeRoom turns anything into valid settings, one field at a time", () 
   const s = sanitizeRoom({ name: 5, mode: 3, size: ["large"], minutes: "5", friendly_fire: "no", extra: {} });
   assert.deepEqual(s, defaultRoom());
   const t = sanitizeRoom({ name: "Friday", size: "large", minutes: 10, friendly_fire: false, mode: "battle" });
-  assert.deepEqual(t, { name: "Friday", mode: "normal", size: "large", minutes: 10, friendly_fire: false });
+  assert.deepEqual(t, { name: "Friday", mode: "normal", size: "large", minutes: 10, friendly_fire: false, bot_difficulty: "medium" });
   assert.equal(sanitizeRoom({ minutes: 4 }).minutes, 3);
   assert.equal(sanitizeRoom({ name: "\u0007Hi\nthere " }).name, "Hithere");
   assert.equal([...sanitizeRoom({ name: "é".repeat(80) }).name].length, MAX_NAME);
@@ -85,7 +86,7 @@ test("the reducer changes one value at a time and ignores bad ones", () => {
   r = roomReducer(r, { type: "size", value: "medium" });
   r = roomReducer(r, { type: "minutes", value: "5" });
   r = roomReducer(r, { type: "friendly_fire", value: false });
-  assert.deepEqual(r, { name: "Friday room", mode: "normal", size: "medium", minutes: 5, friendly_fire: false });
+  assert.deepEqual(r, { name: "Friday room", mode: "normal", size: "medium", minutes: 5, friendly_fire: false, bot_difficulty: "medium" });
   assert.equal(roomReducer(r, { type: "size", value: "huge" }), r);
   assert.equal(roomReducer(r, { type: "minutes", value: 4 }), r);
   assert.equal(roomReducer(r, { type: "mode", value: "battle" }), r);
@@ -129,13 +130,29 @@ test("the payloads for Join and SetRoom carry sanitized settings", () => {
   assert.deepEqual(roomPayload({ size: "large", minutes: 99 }), { ...defaultRoom(), size: "large" });
   assert.deepEqual(setRoomMessage({ name: "A", minutes: 5 }), {
     type: "SetRoom",
-    settings: { name: "A", mode: "normal", size: "small", minutes: 5, friendly_fire: true },
+    settings: { name: "A", mode: "normal", size: "small", minutes: 5, friendly_fire: true, bot_difficulty: "medium" },
   });
 });
 
 test("roomLabel matches the one line of the terminal lobby", () => {
-  assert.equal(roomLabel({ name: "Lab", size: "medium", minutes: 5 }), "Lab - Normal - 19 x 15 - 5 min");
-  assert.equal(roomLabel(undefined), "Normal - 15 x 13 - 3 min");
+  assert.equal(roomLabel({ name: "Lab", size: "medium", minutes: 5 }), "Lab - Normal - 19 x 15 - 5 min - Medium bots");
+  assert.equal(roomLabel(undefined), "Normal - 15 x 13 - 3 min - Medium bots");
+  assert.equal(
+    roomLabel({ name: "Duo", mode: "team", friendly_fire: false, bot_difficulty: "hard" }),
+    "Duo - Team - 15 x 13 - 3 min - friendly fire off - Hard bots",
+  );
+});
+
+test("f12_us3_the_bot_difficulty_is_a_room_setting", () => {
+  assert.deepEqual(BOT_DIFFICULTIES, ["easy", "medium", "hard"]);
+  assert.equal(sanitizeRoom({ bot_difficulty: "hard" }).bot_difficulty, "hard");
+  for (const bad of ["HARD", 3, null, undefined, ["easy"]]) {
+    assert.equal(sanitizeRoom({ bot_difficulty: bad }).bot_difficulty, "medium", String(bad));
+  }
+  let r = roomReducer(defaultRoom(), { type: "bot_difficulty", value: "easy" });
+  assert.equal(r.bot_difficulty, "easy");
+  assert.equal(roomReducer(r, { type: "bot_difficulty", value: "extreme" }), r);
+  assert.equal(setRoomMessage(r).settings.bot_difficulty, "easy");
 });
 
 test("f4_us1_as1_a_closed_room_shows_the_creation_menu_and_an_open_room_the_join_screen", () => {
@@ -171,12 +188,12 @@ test("f4_us1_as2_the_lobby_shows_the_settings_to_everybody_but_only_the_owner_ca
   let s = reduce(initialState(), { type: "Welcome", slot: 1, lobby: lobby({ name: "Friday", size: "medium", minutes: 5 }), looks: [] });
   assert.equal(s.stage, "lobby");
   const bob = roomControls(s);
-  assert.equal(bob.summary, "Friday - Normal - 19 x 15 - 5 min");
+  assert.equal(bob.summary, "Friday - Normal - 19 x 15 - 5 min - Medium bots");
   assert.equal(bob.enabled, false, "the second player cannot change the room");
   s = reduce({ ...s, slot: 0 }, { type: "Lobby", lobby: lobby({ name: "Renamed", size: "large", minutes: 10 }), looks: [] });
   const ann = roomControls(s);
   assert.equal(ann.enabled, true);
-  assert.equal(ann.summary, "Renamed - Normal - 25 x 19 - 10 min", "a lobby message updates the summary at once");
+  assert.equal(ann.summary, "Renamed - Normal - 25 x 19 - 10 min - Medium bots", "a lobby message updates the summary at once");
   assert.equal(roomControls({ ...s, stage: "playing" }).enabled, false, "nobody can change it during a match");
   assert.equal(roomControls({ stage: "lobby", lobby: null, slot: null }).enabled, false);
 });
@@ -263,14 +280,15 @@ test("f11_us2_as5_as6_the_configuration_icon_is_for_the_owner_only", () => {
 test("f11_us2_as5_saving_the_configuration_sends_one_set_room", () => {
   const state = { stage: "lobby", slot: 0, lobby: configLobby(0), capacity: 4, password_required: false };
   let draft = roomConfigDraft(state);
-  assert.deepEqual(draft, { settings: { name: "Friday", mode: "normal", size: "small", minutes: 3, friendly_fire: true },
-    capacity: 4, password: "", removePassword: false });
+  assert.deepEqual(draft, { settings: { name: "Friday", mode: "normal", size: "small", minutes: 3, friendly_fire: true,
+    bot_difficulty: "medium" }, capacity: 4, password: "", removePassword: false });
   draft = roomConfigReducer(draft, { type: "name", value: "Saturday" });
   draft = roomConfigReducer(draft, { type: "size", value: "large" });
   draft = roomConfigReducer(draft, { type: "capacity", value: "3" });
   draft = roomConfigReducer(draft, { type: "password", value: "hunter22" });
   assert.deepEqual(roomConfigMessage(draft), { type: "SetRoom",
-    settings: { name: "Saturday", mode: "normal", size: "large", minutes: 3, friendly_fire: true }, capacity: 3, password: "hunter22" });
+    settings: { name: "Saturday", mode: "normal", size: "large", minutes: 3, friendly_fire: true, bot_difficulty: "medium" },
+    capacity: 3, password: "hunter22" });
   const scoped = roomProtocolMessage({ room_id: "r", revision: 7, capacity: 4 }, roomConfigMessage(draft), "save");
   assert.equal(scoped.expected_revision, 7);
   assert.equal(scoped.capacity, 3);
@@ -295,4 +313,24 @@ test("f11_us2_edge_a_bot_filled_room_stays_joinable_until_four_humans_are_in", a
   assert.equal(roomJoinable({ ...room, phase: "running" }), false);
   assert.equal(roomJoinable({ phase: "lobby", capacity: 2, occupied: 1 }), true, "an old host without bot counts");
   assert.equal(roomJoinable({ phase: "lobby", capacity: 2, occupied: 2 }), false);
+});
+
+test("f12_us3_as2_the_configuration_panel_sets_the_bot_difficulty_for_the_owner_only", () => {
+  const { html, config } = lobbySection();
+  assert.match(config, /id="lobby-bot-difficulty"/, "the lobby configuration panel offers it");
+  const form = /<section[^>]*id="room-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(form, /id="room-bot-difficulty"/, "the creation form offers it");
+  for (const value of ["easy", "medium", "hard"]) {
+    assert.match(config, new RegExp(`<option value="${value}"`));
+  }
+  const lobby = { ...configLobby(0), settings: { ...configLobby(0).settings, bot_difficulty: "easy" } };
+  const owner = { stage: "lobby", slot: 0, lobby, capacity: 4 };
+  assert.equal(roomControls(owner).settings.bot_difficulty, "easy");
+  assert.equal(roomControls(owner).enabled, true);
+  assert.equal(roomControls({ ...owner, slot: 1 }).enabled, false, "a guest cannot change it");
+  assert.equal(roomControls({ ...owner, stage: "playing" }).enabled, false, "nor anybody during a match");
+  let draft = roomConfigDraft(owner);
+  draft = roomConfigReducer(draft, { type: "bot_difficulty", value: "hard" });
+  assert.equal(roomConfigMessage(draft).settings.bot_difficulty, "hard");
+  assert.match(roomControls(owner).summary, /Easy bots$/);
 });

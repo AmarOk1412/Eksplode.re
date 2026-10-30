@@ -277,7 +277,8 @@ export function reduce(state, event) {
         capacity: event.capacity ?? state.capacity, password_required: event.password_required === true };
     }
     case "DevState":
-      return { ...state, devState: { paused: event.paused === true, drops: event.drops } };
+      return { ...state, devState: { paused: event.paused === true, drops: event.drops,
+        behaviour: typeof event.behaviour === "string" ? event.behaviour : null } };
     case "Rejected":
       return { ...state, stage: "closed", notice: rejectText(event.reason) };
     case "RoomUpdated":
@@ -394,6 +395,17 @@ export function percentsFromChances(chances) {
   return DROP_KINDS.map((_, i) => Math.round(unit(chances?.[i]) * 100));
 }
 
+/** The bot behaviours the developer can force; `random` lets each bot pick its own. */
+export const BOT_BEHAVIOURS = [
+  { value: "random", label: "Random" },
+  { value: "aggressive", label: "Aggressive" },
+  { value: "protective", label: "Protective" },
+  { value: "balanced", label: "Balanced" },
+];
+
+const forcedBehaviour = (name) =>
+  BOT_BEHAVIOURS.some((b) => b.value === name && name !== "random") ? name : null;
+
 /** What the developer panel shows, or `null` when the host is not in developer mode. */
 export function devPanel(state) {
   if (!state.dev) return null;
@@ -411,6 +423,7 @@ export function devPanel(state) {
     noDropEffect,
     hint: noDropEffect ? `${base} Chaser mode: bonuses appear on their own, the drop sliders have no effect.` : base,
     pause: { paused, label: paused ? "Resume bots" : "Pause bots" },
+    behaviour: { value: forcedBehaviour(state.devState?.behaviour) ?? "random", options: BOT_BEHAVIOURS },
     sliders: DROP_KINDS.map((kind, i) => ({ kind, label: DROP_LABELS[i], percent: percents[i] })),
     reset: { label: "Reset drops" },
   };
@@ -422,6 +435,7 @@ export function devMessages() {
     pause: (paused) => ({ type: "DevPauseBots", paused: paused === true }),
     drops: (percents) => ({ type: "DevSetDrops", chances: chancesFromPercents(percents) }),
     reset: () => ({ type: "DevResetDrops" }),
+    behaviour: (name) => ({ type: "DevSetBotBehaviour", behaviour: forcedBehaviour(name) }),
   };
 }
 
@@ -758,6 +772,7 @@ function start() {
     roomMinutes: $("room-minutes"),
     roomFfLabel: $("room-ff-label"),
     roomFf: $("room-ff"),
+    roomBots: $("room-bot-difficulty"),
     roomCreate: $("room-create"),
     joinRoom: $("join-room"),
     roomSummary: $("room-summary"),
@@ -769,6 +784,7 @@ function start() {
     lobbyMinutes: $("lobby-minutes"),
     lobbyFfLabel: $("lobby-ff-label"),
     lobbyFf: $("lobby-ff"),
+    lobbyBots: $("lobby-bot-difficulty"),
     lobbyPasswordStatus: $("lobby-password-status"),
     lobbyPassword: $("lobby-password"),
     lobbyPasswordRemove: $("lobby-password-remove"),
@@ -825,6 +841,7 @@ function start() {
     devHint: $("dev-hint"),
     devPause: $("dev-pause"),
     devReset: $("dev-reset"),
+    devBehaviour: $("dev-behaviour"),
     devSliders: $("dev-sliders"),
     app: $("app"),
     hub: $("menu-hub"),
@@ -1103,6 +1120,7 @@ function start() {
     if (panel) send(devSend.pause(!panel.pause.paused));
   });
   el.devReset.addEventListener("click", () => send(devSend.reset()));
+  el.devBehaviour.addEventListener("change", () => send(devSend.behaviour(el.devBehaviour.value)));
 
   function renderDev() {
     const panel = devPanel(state);
@@ -1112,6 +1130,8 @@ function start() {
     el.devPause.textContent = panel.pause.label;
     el.devPause.disabled = !panel.enabled;
     el.devReset.disabled = !panel.enabled;
+    el.devBehaviour.disabled = !panel.enabled;
+    if (document.activeElement !== el.devBehaviour) el.devBehaviour.value = panel.behaviour.value;
     panel.sliders.forEach((s, i) => {
       const row = devRows[i];
       row.input.disabled = !panel.enabled;
@@ -1607,6 +1627,7 @@ function start() {
     el.roomMinutes.value = String(roomDraft.minutes);
     el.roomFf.checked = roomDraft.friendly_fire;
     el.roomFfLabel.hidden = roomDraft.mode !== "team";
+    el.roomBots.value = roomDraft.bot_difficulty;
     el.roomModeHint.textContent = MODE_HINTS[roomDraft.mode] ?? "";
     el.roomModes.replaceChildren(
       ...PLAYABLE_MODES.map((mode) => {
@@ -1662,6 +1683,7 @@ function start() {
     el.lobbyMinutes.value = String(s.minutes);
     el.lobbyFf.checked = s.friendly_fire;
     el.lobbyFfLabel.hidden = s.mode !== "team";
+    el.lobbyBots.value = s.bot_difficulty;
     el.lobbyPasswordStatus.textContent = controls.passwordRequired ? "Password required" : "No password";
     if (document.activeElement !== el.lobbyPassword) el.lobbyPassword.value = configDraft.password;
     el.lobbyPasswordRemoveLabel.hidden = !controls.passwordRequired;
@@ -1684,6 +1706,7 @@ function start() {
   el.roomSize.addEventListener("change", () => editRoom({ type: "size", value: el.roomSize.value }));
   el.roomMinutes.addEventListener("change", () => editRoom({ type: "minutes", value: el.roomMinutes.value }));
   el.roomFf.addEventListener("change", () => editRoom({ type: "friendly_fire", value: el.roomFf.checked }));
+  el.roomBots.addEventListener("change", () => editRoom({ type: "bot_difficulty", value: el.roomBots.value }));
   el.roomCreate.addEventListener("click", createSelectedRoom);
   el.roomBack.addEventListener("click", () => dispatch({ type: "show-main" }));
   el.directoryCreate.addEventListener("click", () => dispatch({ type: "new-room" }));
@@ -1712,6 +1735,7 @@ function start() {
   el.lobbySize.addEventListener("change", () => editRoomConfig({ type: "size", value: el.lobbySize.value }));
   el.lobbyMinutes.addEventListener("change", () => editRoomConfig({ type: "minutes", value: el.lobbyMinutes.value }));
   el.lobbyFf.addEventListener("change", () => editRoomConfig({ type: "friendly_fire", value: el.lobbyFf.checked }));
+  el.lobbyBots.addEventListener("change", () => editRoomConfig({ type: "bot_difficulty", value: el.lobbyBots.value }));
   el.lobbyPassword.addEventListener("input", () => {
     configDraft = roomConfigReducer(configDraft, { type: "password", value: el.lobbyPassword.value });
     el.lobbyPasswordRemove.checked = false;

@@ -27,7 +27,7 @@ Options:
   --size <SIZE>            default board size: small, medium or large (default small)
   --time <MIN>             default round time in minutes: 2, 3, 5 or 10 (default 3)
   --friendly-fire <on|off>  default friendly fire for Team mode (default on)
-  --dev                    developer mode: owner-only commands to pause bots and set drop chances (testing only)
+  --dev                    developer mode: owner-only commands to pause bots, force the bot behaviour and set drop chances (testing only)
   -h, --help               show this help
   -V, --version            show the version
 

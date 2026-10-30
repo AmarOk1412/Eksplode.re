@@ -16,13 +16,16 @@ export const SIZE_LABELS = { small: "Small", medium: "Medium", large: "Large" };
 export const SIZE_DIMENSIONS = { small: [15, 13], medium: [19, 15], large: [25, 19] };
 export const MINUTES = [2, 3, 5, 10];
 export const MAX_NAME = 24;
+/** How well the room's bots play; the owner chooses, Medium by default. */
+export const BOT_DIFFICULTIES = ["easy", "medium", "hard"];
+export const BOT_DIFFICULTY_LABELS = { easy: "Easy", medium: "Medium", hard: "Hard" };
 
 export const ROOM_KEY = "eksplode.re.room.v1";
 const LEGACY_ROOM_KEY = "bomberust.room.v1";
 
-/** The room of the game as it was before rooms: Normal, small board, 3 minutes. */
+/** The room of the game as it was before rooms: Normal, small board, 3 minutes, Medium bots. */
 export function defaultRoom() {
-  return { name: "", mode: "normal", size: "small", minutes: 3, friendly_fire: true };
+  return { name: "", mode: "normal", size: "small", minutes: 3, friendly_fire: true, bot_difficulty: "medium" };
 }
 
 function cleanName(value) {
@@ -41,6 +44,7 @@ export function sanitizeRoom(value) {
     size: SIZES.includes(value.size) ? value.size : d.size,
     minutes: MINUTES.includes(value.minutes) ? value.minutes : d.minutes,
     friendly_fire: typeof value.friendly_fire === "boolean" ? value.friendly_fire : d.friendly_fire,
+    bot_difficulty: BOT_DIFFICULTIES.includes(value.bot_difficulty) ? value.bot_difficulty : d.bot_difficulty,
   };
 }
 
@@ -59,17 +63,21 @@ export function roomReducer(room, action) {
     }
     case "friendly_fire":
       return { ...room, friendly_fire: action.value === true };
+    case "bot_difficulty":
+      return BOT_DIFFICULTIES.includes(action.value) ? { ...room, bot_difficulty: action.value } : room;
     default:
       return room;
   }
 }
 
-/** One line for the lobby: `name - Normal - 19 x 15 - 5 min`, with friendly fire for Team. */
+/** One line for the lobby: `name - Normal - 19 x 15 - 5 min - Medium bots`, with friendly fire
+ * for Team. */
 export function roomLabel(settings) {
   const s = sanitizeRoom(settings);
   const [w, h] = SIZE_DIMENSIONS[s.size];
   const parts = [s.name, MODE_LABELS[s.mode], `${w} x ${h}`, `${s.minutes} min`];
   if (s.mode === "team") parts.push(`friendly fire ${s.friendly_fire ? "on" : "off"}`);
+  parts.push(`${BOT_DIFFICULTY_LABELS[s.bot_difficulty]} bots`);
   return parts.filter((p) => p !== "").join(" - ");
 }
 

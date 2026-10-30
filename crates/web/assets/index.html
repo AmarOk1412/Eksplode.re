@@ -112,6 +112,8 @@
       <label for="room-password">Room password (optional)</label>
       <input id="room-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
       <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
+      <label for="room-bot-difficulty">Bot difficulty</label>
+      <select id="room-bot-difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
       <button id="room-create" type="button">Create room</button>
       <button id="room-back" type="button">Back</button>
     </section>
@@ -169,6 +171,8 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
         <label for="lobby-minutes">Time</label>
         <select id="lobby-minutes"></select>
         <label id="lobby-ff-label" class="check" hidden><input id="lobby-ff" type="checkbox"> Friendly fire</label>
+        <label for="lobby-bot-difficulty">Bot difficulty</label>
+        <select id="lobby-bot-difficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       </div>
       <div id="lobby-password-controls" class="room-password-controls" role="group" aria-label="Room password settings">
         <p id="lobby-password-status" class="hint" aria-live="polite"></p>
@@ -219,6 +223,13 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
         <button id="dev-pause" type="button">Pause bots</button>
         <button id="dev-reset" type="button">Reset drops</button>
       </div>
+      <label for="dev-behaviour">Bot behaviour</label>
+      <select id="dev-behaviour">
+        <option value="random">Random</option>
+        <option value="aggressive">Aggressive</option>
+        <option value="protective">Protective</option>
+        <option value="balanced">Balanced</option>
+      </select>
       <h2>Drop chance per destroyed block</h2>
       <ul id="dev-sliders" class="dev-sliders"></ul>
     </section>
