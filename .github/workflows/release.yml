@@ -33,6 +33,9 @@ jobs:
       - name: Cache Cargo artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Set the package version from the tag
+        run: sh scripts/set-version.sh "${GITHUB_REF_NAME}"
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -100,20 +103,29 @@ jobs:
           body_path: /tmp/release-notes.md
           files: ${{ env.ARCHIVE_PATH }}
 
-      - name: Commit updated CHANGELOG.md to main
+      - name: Commit the version bump and the updated CHANGELOG.md to main
         continue-on-error: true
         run: |
           set -eu
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # the tagged tree was bumped for the build; redo it on top of main
+          git checkout -- Cargo.toml Cargo.lock
           git fetch origin main
           git checkout main
           git pull --ff-only origin main
+          sh scripts/set-version.sh "${GITHUB_REF_NAME}"
+          git add Cargo.toml Cargo.lock
+          if git diff --cached --quiet -- Cargo.toml Cargo.lock; then
+            echo "Cargo.toml already at ${GITHUB_REF_NAME#v}, nothing to commit."
+          else
+            git commit -m "build: set the version to ${GITHUB_REF_NAME#v}"
+          fi
           cp /tmp/CHANGELOG.md CHANGELOG.md
           git add CHANGELOG.md
           if git diff --cached --quiet -- CHANGELOG.md; then
             echo "CHANGELOG.md already up to date, nothing to commit."
-            exit 0
+          else
+            git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
           fi
-          git commit -m "docs: update CHANGELOG.md for ${GITHUB_REF_NAME}"
           git push origin main
