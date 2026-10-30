@@ -480,14 +480,18 @@ export function lobbyCards(lobby, you, context = {}) {
   });
 }
 
-/** The lobby action row: exactly Ready (everybody) then Start (shown to the owner only). */
+/** The lobby action row: Ready for everybody but the owner, who gets Start instead; Start stays
+ * disabled until every other occupied seat is ready (bots always are). */
 export function lobbyActions(state) {
   const owner = lobbyOwner(state.lobby);
   const isOwner = owner !== null && owner === state.slot;
-  const mine = state.lobby?.slots?.[state.slot]?.ready === true;
+  const slots = state.lobby?.slots ?? [];
+  const mine = slots[state.slot]?.ready === true;
+  const everybodyReady = slots.every((s, i) =>
+    i === owner || s.controller === "Empty" || s.controller === "Bot" || s.ready === true);
   return [
-    { id: "ready", label: "Ready", visible: true, pressed: mine, message: { type: "SetReady", ready: !mine } },
-    { id: "start", label: "Start", visible: isOwner, message: { type: "Start" } },
+    { id: "ready", label: "Ready", visible: !isOwner, pressed: mine, message: { type: "SetReady", ready: !mine } },
+    { id: "start", label: "Start", visible: isOwner, disabled: !everybodyReady, message: { type: "Start" } },
   ];
 }
 
@@ -1351,8 +1355,10 @@ function start() {
     renderDirectory();
 
     const [readyAction, startAction] = lobbyActions(state);
+    el.ready.hidden = !readyAction.visible;
     el.ready.setAttribute("aria-pressed", String(readyAction.pressed));
     el.start.hidden = !startAction.visible;
+    el.start.disabled = startAction.disabled;
     const header = lobbyHeader(state);
     el.roomConfigOpen.hidden = !header.config;
     // ownership moved (or the match started) while the panel was open: close it, edits are dropped
@@ -2092,7 +2098,8 @@ function start() {
     } else if (state.stage === "lobby" && e.key === "Enter") {
       // Enter in a text field or a list belongs to that control
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-      send({ type: "Start" });
+      const start = lobbyActions(state)[1];
+      if (start.visible && !start.disabled) send(start.message);
     }
   });
   window.addEventListener("keyup", (e) => {

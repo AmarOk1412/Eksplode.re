@@ -166,16 +166,22 @@ test("f11_us2_as4_every_empty_seat_shows_plus_for_any_session", () => {
   assert.deepEqual(small.map((c) => c.closed), [false, false, true, true]);
 });
 
-test("f11_us2_as8_the_action_row_is_exactly_ready_then_start_for_the_owner", () => {
-  const lobby = owned([slot("Remote", "Ann"), slot("Remote", "Bob", true), slot("Bot"), slot("Bot")]);
+test("f11_us2_as8_the_owner_sees_only_start_enabled_once_everybody_else_is_ready", () => {
+  const lobby = owned([slot("Remote", "Ann"), slot("Remote", "Bob"), slot("Bot"), slot("Empty")]);
   const owner = lobbyActions({ stage: "lobby", slot: 0, lobby });
-  assert.deepEqual(owner.map((a) => [a.id, a.label]), [["ready", "Ready"], ["start", "Start"]]);
-  assert.deepEqual(owner.map((a) => a.visible), [true, true]);
-  const other = lobbyActions({ stage: "lobby", slot: 1, lobby });
+  assert.deepEqual(owner.map((a) => [a.id, a.label, a.visible]), [["ready", "Ready", false], ["start", "Start", true]]);
+  assert.equal(owner[1].disabled, true, "Bob is not ready yet");
+  const allReady = owned([slot("Remote", "Ann"), slot("Remote", "Bob", true), slot("Bot"), slot("Empty")]);
+  assert.equal(lobbyActions({ stage: "lobby", slot: 0, lobby: allReady })[1].disabled, false,
+    "bots count as ready, empty seats and the owner's own flag do not matter");
+  const alone = owned([slot("Remote", "Ann"), slot("Bot"), slot("Bot"), slot("Bot")]);
+  assert.equal(lobbyActions({ stage: "lobby", slot: 0, lobby: alone })[1].disabled, false);
+
+  const other = lobbyActions({ stage: "lobby", slot: 1, lobby: allReady });
   assert.deepEqual(other.map((a) => [a.id, a.visible]), [["ready", true], ["start", false]]);
   assert.equal(other[0].pressed, true, "Ready shows the sender's own state");
-  assert.deepEqual(owner[0].message, { type: "SetReady", ready: true });
   assert.deepEqual(other[0].message, { type: "SetReady", ready: false });
+  assert.deepEqual(lobbyActions({ stage: "lobby", slot: 1, lobby })[0].message, { type: "SetReady", ready: true });
 
   const panel = lobbyHtml();
   const row = /<div class="buttons lobby-actions"[^>]*>([\s\S]*?)<\/div>/.exec(panel)?.[1] ?? "";

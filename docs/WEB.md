@@ -23,8 +23,9 @@ settings panel (name, mode, board size, round time, maximum players, friendly fi
 saved together with one `SetRoom`; Cancel or Escape drops the edits) and a leave icon. On each seat
 the owner sees a small cross: it removes that bot (`RemoveBot{slot}`) or kicks that player
 (`RemovePlayer`), and the seat then stays empty. Every empty seat within the capacity shows "+",
-usable by anybody, which puts a bot there (`AddBot{slot}`). The action row is exactly Ready (all)
-and Start (owner only; Enter also starts).
+usable by anybody, which puts a bot there (`AddBot{slot}`). The action row shows Ready to every
+player but the owner, and Start to the owner only; Start stays disabled until every other player
+is ready (bots always are; Enter also starts).
 
 The lobby shows one tall card per slot: a cubic isometric character that bobs and turns every
 few seconds (`eksplode_re_portrait3d` in the WebAssembly module), a coloured `PLAYER n` banner, the
