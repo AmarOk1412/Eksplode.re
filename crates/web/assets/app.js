@@ -796,7 +796,7 @@ function start() {
     roomConfig: $("room-config"),
     roomConfigOpen: $("room-config-open"),
     roomConfigSave: $("room-config-save"),
-    roomConfigCancel: $("room-config-cancel"),
+    roomConfigClose: $("room-config-close"),
     lobbyPanel: $("lobby-panel"),
     gamePanel: $("game-panel"),
     name: $("name"),
@@ -1753,7 +1753,7 @@ function start() {
     el.lobbyPassword.value = "";
     closeNavigationLayer();
   });
-  el.roomConfigCancel.addEventListener("click", () => {
+  el.roomConfigClose.addEventListener("click", () => {
     configDraft = roomConfigReducer(configDraft, { type: "cancel" });
     el.lobbyPassword.value = "";
     closeNavigationLayer();

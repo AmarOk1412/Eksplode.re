@@ -666,7 +666,18 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .card.closed { opacity: 0.45; }
 .lobby-actions button { min-width: 140px; }
 .lobby-actions #ready[aria-pressed="true"] { background: var(--ink); color: #fff; }
-.room-config { width: min(520px, 100%); display: grid; gap: 12px; }
+.room-config {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+}
 .room-config .room-controls, .room-config .room-password-controls { display: grid; gap: 6px; justify-items: start; }
 .room-config select { font: inherit; font-size: 1rem; padding: 4px 8px; border: 3px solid var(--ink); background: #fff; color: var(--ink); border-radius: 0; }
 

@@ -274,7 +274,18 @@ test("f11_us2_as5_as6_the_configuration_icon_is_for_the_owner_only", () => {
     assert.doesNotMatch(lobby, new RegExp(`id="${id}"`), `${id} is not in the lobby body`);
   }
   assert.match(config, /id="room-config-save"/);
-  assert.match(config, /id="room-config-cancel"/);
+  assert.match(config, /<button id="room-config-close"[^>]*>Close<\/button>/, "closing drops unsaved edits, like Cancel did");
+});
+
+test("room settings is a centred modal like Options", () => {
+  const css = readFileSync(new URL("../assets/style.css", import.meta.url), "utf8");
+  const rule = (selector) => new RegExp(`^${selector}\\s*\\{([^}]*)\\}`, "m").exec(css)?.[1] ?? "";
+  for (const selector of ["\\.options", "\\.room-config"]) {
+    const body = rule(selector);
+    assert.match(body, /position:\s*fixed/, selector);
+    assert.match(body, /transform:\s*translate\(-50%,\s*-50%\)/, selector);
+    assert.match(body, /z-index:\s*4/, selector);
+  }
 });
 
 test("f11_us2_as5_saving_the_configuration_sends_one_set_room", () => {
