@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::mpsc::TryRecvError;
 use std::time::{Duration, Instant};
 
-use eksplode_re_core::{Controller, Lobby, Observation, Outcome, RoomSettings};
+use eksplode_re_core::{Controller, Lobby, Observation, RoomSettings};
 use eksplode_re_net::protocol::v2::{Reply, Request, RequestId, RoomRef, RoomSummary, Scope};
 use eksplode_re_net::protocol::{ClientMsg, RejectReason, ServerMsg};
 use eksplode_re_net::{Client, Host};
@@ -17,7 +17,7 @@ use ratatui::Frame;
 
 use crate::input::{map_key_for_player, normalize, InputState, KeyAction, KeyBindings};
 use crate::setup::SetupScreen;
-use crate::view::{self, player_color, team_letter, team_members, ViewContext};
+use crate::view::{self, player_color, team_letter, ViewContext};
 
 /// Where an online session is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -511,7 +511,7 @@ impl Online {
             ServerMsg::PlayerLeft { slot, .. } => {
                 self.notice = Some(format!("Player {} left, a bot took over", slot + 1));
             }
-            ServerMsg::Ended { outcome } => {
+            ServerMsg::Ended { .. } => {
                 self.notice = None;
                 if self.stage == Stage::ConfirmLeave {
                     self.leave_return = Stage::Lobby;
