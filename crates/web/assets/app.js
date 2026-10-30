@@ -1802,6 +1802,8 @@ function start() {
     options = optionsReducer(options, { type: "open", tab });
     renderOptions();
     const opened = openNavigationLayer("options", el.optionsPanel, opener);
+    // the preview can only be measured and drawn once the panel is shown
+    paintPreview();
     el.optionsTabs.find((t) => t.id === options?.tab)?.button.focus();
     return opened;
   }
