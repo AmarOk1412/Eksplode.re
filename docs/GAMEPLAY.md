@@ -8,10 +8,12 @@ seconds.
 
 A room is described by one set of settings that the owner (the first person who opens the room,
 later the lowest slot held by a person) chooses before the match: a name of at most 24
-characters, the mode, the board size, the round time and, for Team mode, friendly fire. The page
+characters, the mode, the board size, the round time, for Team mode friendly fire, and the bot
+difficulty. The page
 shows a creation menu on an empty server, the terminal host a setup screen; in the lobby everybody
-sees the settings and only the owner changes them (page: the controls above the cards; terminal:
-`m` mode, `s` size, `t` time, `f` friendly fire). Nobody can change them during a match, and they
+sees the settings and only the owner changes them (page: the room settings behind the gear icon;
+terminal: `m` mode, `s` size, `t` time, `f` friendly fire, `d` bot difficulty). Nobody can change
+them during a match, and they
 stay for the rematch. The room closes when the last person leaves.
 
 | Setting | Values | Default |
@@ -19,7 +21,35 @@ stay for the rematch. The room closes when the last person leaves.
 | Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x20, 40x22 and 52x26) | small |
 | Round time | 2, 3, 5 or 10 minutes | 3 |
 | Friendly fire | on or off (Team mode only) | on |
+| Bot difficulty | Easy, Medium or Hard, for every bot of the room (only the owner chooses it; local terminal games keep Medium) | Medium |
 | Mode | Normal, Team, Chaser | Normal |
+
+## Bots
+
+Every bot sees only what a human sees. When a match starts (and when a bot takes over the seat of
+a player who left) it draws one of three behaviours, each equally likely, from the match seed:
+
+- **Aggressive**: goes after opponents first and from farther away, and walks up to them when
+  there is nothing else to do.
+- **Protective**: collects power-ups and digs first, steps back from an opponent that comes within
+  three squares and avoids the squares next to opponents; it only fights opponents that are close.
+  A Protective runner in Chaser mode starts fleeing the chaser earlier.
+- **Balanced**: power-ups, then opponents, then blocks.
+
+Every behaviour keeps the same safety rules: it flees danger first, never places a bomb without a
+way out, respects friendly fire and moves inward during the end pattern.
+
+The bot difficulty changes how fast and how well bots play:
+
+| Difficulty | Decides every | Notices an opponent's new bomb after | Mistakes |
+|------------|---------------|--------------------------------------|----------|
+| Easy | 0.30 s | 0.50 s | about 1 decision in 5 |
+| Medium | 0.15 s | 0.25 s | about 1 decision in 16 |
+| Hard | every tick | at once | none |
+
+Between two decisions a bot keeps walking the same way. A mistake is a skipped bomb, a hesitation
+or a wrong turn; no bot ever steps onto a burning square. In developer mode the owner can force
+every new bot to one behaviour from the page's developer panel.
 
 ## Normal mode and the end pattern
 

@@ -285,8 +285,27 @@ fn f4_the_guides_describe_every_mode_setting_option_and_sound_of_game_modes() {
         "--time",
         "--friendly-fire",
         "--no-setup",
+        "--bot-difficulty",
     ] {
         assert!(readme.contains(flag), "README.md lacks {flag}");
+    }
+    for difficulty in eksplode_re_core::BotDifficulty::ALL {
+        assert!(
+            gameplay.contains(difficulty.label()) && readme.contains(difficulty.label()),
+            "the guides lack the {} bot difficulty",
+            difficulty.label()
+        );
+        assert!(
+            protocol.contains(&format!("`{}`", difficulty.name())),
+            "docs/PROTOCOL.md lacks `{}`",
+            difficulty.name()
+        );
+    }
+    for behaviour in ["Aggressive", "Protective", "Balanced"] {
+        assert!(
+            gameplay.contains(behaviour) && readme.contains(behaviour) && web.contains(behaviour),
+            "the guides lack the {behaviour} bot behaviour"
+        );
     }
     for needle in [
         "end pattern",
