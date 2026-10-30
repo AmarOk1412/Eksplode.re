@@ -635,6 +635,11 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   display: inline-grid;
   place-items: center;
 }
+.icon-button svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+}
 .seat-control {
   position: absolute;
   z-index: 1;
