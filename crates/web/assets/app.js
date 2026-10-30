@@ -379,6 +379,18 @@ export function lobbyOwner(lobby) {
 
 // ---- developer mode ----
 
+/** The per-player stats under the arena (bombs, range, speed) are shown in developer mode only. */
+export function hudVisible(state) {
+  return state.dev === true;
+}
+
+/** `Version: <text>` for the server's `/version` answer, or nothing when it looks wrong. */
+export function versionLabel(text) {
+  if (typeof text !== "string") return "";
+  const version = text.trim();
+  return /^[0-9A-Za-z.+-]{1,40}$/.test(version) ? `Version: ${version}` : "";
+}
+
 /** The seven powers in the order of `DevSetDrops.chances`. */
 export const DROP_KINDS = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb", "Kick"];
 export const DROP_LABELS = ["Extra bomb", "Flame", "Roller", "Punch", "Slow", "Hyper speed", "Small bomb", "Kick"];
@@ -818,6 +830,7 @@ function start() {
     timer: $("timer"),
     banner: $("banner"),
     logo: $("logo"),
+    version: $("version"),
     editor: $("editor"),
     preview: $("preview"),
     swatches: $("swatches"),
@@ -873,7 +886,7 @@ function start() {
   let renderer = null;
   let pageFocused = true;
   let lastSnapshotAt = 0;
-  let logoPainted = false;
+  let logoKey = "";
   let lobbyCanvases = [];
   let bannerTimer = null;
   let lastFocusRoot = null;
@@ -1024,18 +1037,6 @@ function start() {
     paintLobby,
   );
   document.addEventListener("visibilitychange", () => animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion()));
-
-  /** Paints a character into a canvas whose CSS size is set by the stylesheet. */
-  function paintPortrait(canvas, slot, rows) {
-    if (!renderer) return;
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
-    const w = Math.max(16, Math.round((rect.width || canvas.width) * dpr));
-    const h = Math.max(16, Math.round((rect.height || canvas.height) * dpr));
-    canvas.width = w;
-    canvas.height = h;
-    paintCommands(canvas.getContext("2d"), renderer.portrait(slot, w, h, rows));
-  }
 
   el.name.value = `Player${1 + Math.floor(Math.random() * 99)}`;
 
@@ -1431,10 +1432,8 @@ function start() {
     paintLobby(0);
     animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion());
     el.timer.textContent = timerText(state.observation);
-    if (renderer && !logoPainted && !el.mainMenu.hidden) {
-      paintPortrait(el.logo, 0, 0);
-      logoPainted = true;
-    }
+    if (renderer && !el.mainMenu.hidden) paintLogo();
+    el.hud.hidden = !hudVisible(state);
     el.hud.replaceChildren(
       ...hudRows(state).map((row) => {
         const li = document.createElement("li");
@@ -2018,6 +2017,21 @@ function start() {
     el.costume.value = draft.costume;
     for (const b of el.swatches.children) b.classList.toggle("selected", b.dataset.colour === draft.colour);
     paintPreview();
+    if (renderer && !el.mainMenu.hidden) paintLogo();
+  }
+
+  /** The main menu shows the player's own character, repainted when the look or size changes. */
+  function paintLogo() {
+    const dpr = window.devicePixelRatio || 1;
+    const rect = el.logo.getBoundingClientRect();
+    const w = Math.max(16, Math.round((rect.width || 96) * dpr));
+    const h = Math.max(16, Math.round((rect.height || 136) * dpr));
+    const key = `${JSON.stringify(draft)} ${w}x${h}`;
+    if (key === logoKey) return;
+    logoKey = key;
+    el.logo.width = w;
+    el.logo.height = h;
+    paintCommands(el.logo.getContext("2d"), previewCommands(renderer, draft, w, h, 0, state.looks));
   }
 
   function paintPreview() {
@@ -2213,6 +2227,10 @@ function start() {
   updateUi();
   loadGraphics();
   connect();
+  fetch("/version")
+    .then((response) => (response.ok ? response.text() : ""))
+    .then((text) => { el.version.textContent = versionLabel(text); })
+    .catch(() => {});
   setInterval(() => {
     if (state.stage === "directory" && screens(state).directoryPanel && directoryRequest === null) refreshDirectory();
   }, 5000);

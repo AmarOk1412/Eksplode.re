@@ -13,6 +13,10 @@ const HTML: &str = "text/html; charset=utf-8";
 const JS: &str = "text/javascript; charset=utf-8";
 const CSS: &str = "text/css; charset=utf-8";
 const WASM: &str = "application/wasm";
+const TEXT: &str = "text/plain; charset=utf-8";
+
+/// `<package version>-<short git commit>`, shown in the page's corner.
+pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-", env!("EKSPLODE_RE_GIT_SHA"));
 
 /// The fixed routes; anything else is `None`.
 pub fn lookup(path: &str) -> Option<Asset> {
@@ -27,6 +31,7 @@ pub fn lookup(path: &str) -> Option<Asset> {
         "/touch.js" => (JS, include_bytes!("../assets/touch.js")),
         "/style.css" => (CSS, include_bytes!("../assets/style.css")),
         "/eksplode_re_render.wasm" => (WASM, include_bytes!("../assets/eksplode_re_render.wasm")),
+        "/version" => (TEXT, VERSION.as_bytes()),
         _ => return None,
     };
     Some(Asset { content_type, body })

@@ -527,3 +527,34 @@ test("f11_us3_pause_menu_sound_and_controls_open_the_matching_tab", () => {
   assert.match(hub, /id="hub-sound"[^>]*aria-controls="options-panel"/);
   assert.match(hub, /id="hub-controls"[^>]*aria-controls="options-panel"/);
 });
+
+test("the player stats under the arena are a developer-mode aid only", async () => {
+  const { hudVisible } = await import("../assets/app.js");
+  assert.equal(hudVisible(initialState()), false);
+  assert.equal(hudVisible(reduce(initialState(), { ...welcome(0), dev: false })), false);
+  assert.equal(hudVisible(reduce(initialState(), { ...welcome(0), dev: true })), true);
+  const html = readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
+  assert.match(html, /<ul id="hud" class="slots" hidden>/, "hidden until the host says dev");
+});
+
+test("the version line reads the server's version text", async () => {
+  const { versionLabel } = await import("../assets/app.js");
+  assert.equal(versionLabel("0.1.0-e24adbd\n"), "Version: 0.1.0-e24adbd");
+  assert.equal(versionLabel("0.1.0-unknown"), "Version: 0.1.0-unknown");
+  for (const bad of ["", "   ", null, undefined, 42, "<b>1</b>", "x".repeat(80)]) {
+    assert.equal(versionLabel(bad), "", String(bad));
+  }
+  const html = readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
+  assert.match(html, /<p id="version" class="version"[^>]*><\/p>/);
+  const css = readAsset(new URL("../assets/style.css", import.meta.url), "utf8");
+  const rule = /^\.version\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+  assert.match(rule, /position:\s*fixed/);
+  assert.match(rule, /right:/);
+  assert.match(rule, /bottom:/);
+});
+
+test("the main menu shows the player's character instead of a fixed logo", () => {
+  const html = readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
+  const menu = /<section id="main-menu"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(menu, /<canvas id="logo"[^>]*aria-label="Your character"/);
+});

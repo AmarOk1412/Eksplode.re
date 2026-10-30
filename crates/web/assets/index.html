@@ -86,7 +86,7 @@
     </section>
 
     <section id="main-menu" class="menu main-menu" aria-label="Main menu">
-      <canvas id="logo" aria-hidden="true"></canvas>
+      <canvas id="logo" role="img" aria-label="Your character"></canvas>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
       <div class="menu-actions" role="group" aria-label="Main menu actions">
@@ -190,7 +190,7 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       <div id="timer" aria-label="Time left"></div>
       <p id="banner" class="pattern-banner" role="alert" hidden></p>
       <canvas id="view" aria-label="Game arena" tabindex="0"></canvas>
-      <ul id="hud" class="slots"></ul>
+      <ul id="hud" class="slots" hidden></ul>
       <div id="touch-controls" class="touch-controls" role="group" aria-label="Mobile match controls" hidden>
         <button id="touch-joystick" class="touch-joystick" type="button" aria-label="Movement joystick">
           <span class="touch-joystick-knob" aria-hidden="true"></span>
@@ -240,6 +240,7 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       <div id="osk-keys" class="osk-keys" role="grid" aria-label="Text entry keys"></div>
     </section>
   </main>
+  <p id="version" class="version" aria-live="off"></p>
   <script type="module" src="/app.js"></script>
 </body>
 </html>

@@ -404,3 +404,21 @@ fn sc005_the_whole_page_stays_small() {
     assert!(wasm <= 300 * 1024, "wasm is {wasm} bytes");
     assert!(total <= 500 * 1024, "page is {total} bytes");
 }
+
+#[test]
+fn the_page_can_read_the_server_version() {
+    let server = server(|_| {});
+    let response = get(server.http_addr(), "/version");
+    assert_eq!(response.status, 200);
+    assert_eq!(
+        response.header("content-type"),
+        Some("text/plain; charset=utf-8")
+    );
+    let text = String::from_utf8(response.body).unwrap();
+    let (version, sha) = text.split_once('-').expect("version-sha");
+    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    assert!(
+        sha == "unknown" || (!sha.is_empty() && sha.chars().all(|c| c.is_ascii_hexdigit())),
+        "{text}"
+    );
+}

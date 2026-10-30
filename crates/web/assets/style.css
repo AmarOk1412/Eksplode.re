@@ -102,9 +102,20 @@ section[hidden], [hidden] { display: none !important; }
 .dialog { width: min(1000px, 100%); }
 
 #logo {
-  width: 64px;
-  height: 64px;
+  width: 96px;
+  height: 136px;
   image-rendering: pixelated;
+}
+
+.version {
+  position: fixed;
+  right: 8px;
+  bottom: 6px;
+  z-index: 1;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  pointer-events: none;
 }
 
 label { font-size: 0.9rem; color: var(--muted); }
