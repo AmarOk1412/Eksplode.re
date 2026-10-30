@@ -770,10 +770,12 @@ impl Server {
                             OwnerCommand::AddBot => Request::AddBot {
                                 request_id,
                                 room_id,
+                                slot: None,
                             },
                             OwnerCommand::RemoveBot => Request::RemoveBot {
                                 request_id,
                                 room_id,
+                                slot: None,
                             },
                             OwnerCommand::Start => Request::Start {
                                 request_id,
@@ -1940,19 +1942,12 @@ impl Server {
             .get(&id)
             .is_some_and(|connection| connection.context.local);
         let creator = room.admit(id, name, local, look, self.services.random.as_ref())?;
-        for _ in 0..self.cfg.default_bots.min(capacity.saturating_sub(1)) {
-            let request_id = crate::protocol::v2::RequestId::new("startup-bot")
+        // FR-008: every seat of a new room starts with a bot (up to its capacity); `--bots`
+        // (`default_bots`) is kept for the command line but no longer limits this.
+        if room.fill_bots() {
+            room.revision
+                .advance()
                 .map_err(|_| ErrorCode::Unavailable)?;
-            room.command(
-                id,
-                crate::protocol::v2::Request::AddBot {
-                    request_id,
-                    room_id: room_id.clone(),
-                },
-                self.services.clock.now(),
-                self.cfg.tick,
-                self.services.random.as_ref(),
-            )?;
         }
         let admission = room.admission(&creator.membership_id)?;
         Ok((room, admission))

@@ -19,6 +19,7 @@ fn look(gender: Gender, head: Head, face: Face) -> Look {
         gender,
         head,
         face,
+        costume: Costume::None,
     }
 }
 

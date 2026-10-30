@@ -63,17 +63,15 @@ fn f3_us2_as10_at_normal_size_an_icon_is_pixels_not_a_letter() {
 }
 
 #[test]
-fn f3_us2_as10_a_tiny_icon_falls_back_to_its_letter() {
+fn f11_a_tiny_icon_still_stays_pixels_not_a_letter() {
     let scale = fit(7, 7, (130.0, 130.0)).scale;
     assert!(0.48 * scale < 20.0, "the test canvas must be tiny");
     for kind in PowerUpKind::ALL {
         let list = only_the_icon(kind, (130.0, 130.0));
-        assert_eq!(
-            list.iter().filter(|c| c.kind == Kind::Text).count(),
-            1,
-            "{kind:?}"
+        assert!(
+            !list.iter().any(|c| c.kind == Kind::Text),
+            "{kind:?} is drawn as a letter"
         );
-        assert!(list.len() <= 4, "{kind:?}: {} commands", list.len());
     }
 }
 

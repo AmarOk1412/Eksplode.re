@@ -156,3 +156,27 @@ fn flames_expire_after_flame_ticks() {
     step(&mut s, &idle());
     assert!(s.flames.is_empty());
 }
+
+// ---- 011 US5: bombs placed ----
+
+#[test]
+fn f11_us5_bombs_placed_counts_each_successful_placement_once() {
+    let mut s = state_with(short_fuse(), &OPEN, only(0, 3, 3));
+    s.players[0].bombs_max = 2;
+    assert_eq!(s.players[0].bombs_placed, 0, "a match starts at zero");
+    let mut i = idle();
+    i[0] = bomb_input();
+    step(&mut s, &i);
+    assert_eq!(s.players[0].bombs_placed, 1);
+    // a refused placement (a bomb already lies on the tile) does not count
+    step(&mut s, &i);
+    assert_eq!(s.bombs.len(), 1);
+    assert_eq!(s.players[0].bombs_placed, 1);
+    // what happens to the bomb afterwards does not change the count
+    run_until_explosion(&mut s);
+    assert!(s.bombs.is_empty());
+    assert_eq!(s.players[0].bombs_placed, 1);
+    // a bomb added without placing it (as the tests do) is not counted either
+    add_bomb(&mut s, 0, 1, 1, 50);
+    assert_eq!(s.players[0].bombs_placed, 1);
+}

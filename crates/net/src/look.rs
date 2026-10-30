@@ -1,8 +1,10 @@
-//! How a player looks: colour, gender look and accessories. Purely cosmetic; no rule depends on it.
+//! How a player looks: colour, accessories and costume. Purely cosmetic; no rule depends on it.
 //!
 //! The wire form is a JSON object such as
-//! `{"colour":"Blue","gender":"Male","head":"Cap","face":"None"}`. Decoding is lenient so an old
-//! page, a typo or a hostile message only ever produces a default look for its sender.
+//! `{"colour":"Blue","head":"Cap","face":"None","costume":"Scarf"}`. Decoding is lenient so an
+//! old page, a typo or a hostile message only ever produces a default look for its sender. The
+//! `gender` key of pages before feature 011 is read and ignored: the renderer picks the body
+//! silhouette from the slot by itself.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -39,10 +41,6 @@ options! {
     Colour { Blue, Black, Red, Purple, Green, Orange, Yellow, Pink, Teal, White }
 }
 options! {
-    /// The gender look: a cosmetic choice of hair and face details.
-    Gender { Male, Female }
-}
-options! {
     /// Something worn on the head.
     Head { None, Cap, TopHat, Crown, Headphones }
 }
@@ -50,30 +48,45 @@ options! {
     /// Something worn on the face.
     Face { None, Glasses, Sunglasses, Moustache, Mask }
 }
+options! {
+    /// Something worn on the body.
+    Costume { None, Scarf, Cape, BowTie, Medal }
+}
+
+// `options!` derives a fixed set of traits and takes no variant attributes, so `#[default]` cannot be
+// used on the generated enum.
+#[allow(clippy::derivable_impls)]
+impl Default for Costume {
+    fn default() -> Self {
+        Costume::None
+    }
+}
 
 /// A player's chosen appearance.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Look {
     pub colour: Colour,
-    pub gender: Gender,
     pub head: Head,
     pub face: Face,
+    /// Absent from hosts before feature 011 (means no costume).
+    #[serde(default)]
+    pub costume: Costume,
 }
 
 impl Look {
     /// The look a slot gets when nobody chose one: blue, black, red and purple characters.
     pub fn default_for(slot: usize) -> Look {
-        let (colour, gender) = match slot % 4 {
-            0 => (Colour::Blue, Gender::Male),
-            1 => (Colour::Black, Gender::Female),
-            2 => (Colour::Red, Gender::Male),
-            _ => (Colour::Purple, Gender::Female),
+        let colour = match slot % 4 {
+            0 => Colour::Blue,
+            1 => Colour::Black,
+            2 => Colour::Red,
+            _ => Colour::Purple,
         };
         Look {
             colour,
-            gender,
             head: Head::None,
             face: Face::None,
+            costume: Costume::None,
         }
     }
 
@@ -89,15 +102,15 @@ impl Look {
             colour: text("colour")
                 .and_then(Colour::from_name)
                 .unwrap_or(default.colour),
-            gender: text("gender")
-                .and_then(Gender::from_name)
-                .unwrap_or(default.gender),
             head: text("head")
                 .and_then(Head::from_name)
                 .unwrap_or(default.head),
             face: text("face")
                 .and_then(Face::from_name)
                 .unwrap_or(default.face),
+            costume: text("costume")
+                .and_then(Costume::from_name)
+                .unwrap_or(default.costume),
         }
     }
 }

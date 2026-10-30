@@ -69,7 +69,7 @@ fn us3_as1_join_assigns_a_free_slot() {
 fn us3_as2_everyone_sees_the_same_start() {
     let host = quick_host();
     let (clients, room) = join_room_all(&host, 3);
-    host.handle().add_room_bot(&room).unwrap();
+    // the seats nobody joined were filled with bots when the room was created (011)
     host.handle().start_room(&room).unwrap();
     let handles: Vec<_> = clients
         .into_iter()
@@ -131,7 +131,7 @@ fn the_host_returns_to_the_lobby_after_the_round() {
     let host = quick_host();
     let (mut clients, room) = join_room_all(&host, 1);
     let c = clients.pop().unwrap();
-    host.handle().add_room_bot(&room).unwrap();
+    // the seats nobody joined were filled with bots when the room was created (011)
     host.handle().start_room(&room).unwrap();
     let r = follow(&c);
     assert!(r.ended.is_some());
@@ -297,7 +297,7 @@ fn the_host_leaving_tells_everyone() {
     let host = host();
     let (mut clients, room) = join_room_all(&host, 1);
     let a = clients.pop().unwrap();
-    host.handle().add_room_bot(&room).unwrap();
+    // the seats nobody joined were filled with bots when the room was created (011)
     host.handle().start_room(&room).unwrap();
     wait_for(&a, |m| matches!(m, ServerMsg::Snapshot { .. })).unwrap();
     drop(host);
@@ -334,7 +334,7 @@ fn inputs_from_a_player_move_their_character() {
     });
     let (clients, room) = join_room_all(&host, 1);
     let a = &clients[0];
-    host.handle().add_room_bot(&room).unwrap();
+    // the seats nobody joined were filled with bots when the room was created (011)
     host.handle().start_room(&room).unwrap();
     let mut moved = false;
     let mut tick = 0;

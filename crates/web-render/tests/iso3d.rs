@@ -2,7 +2,7 @@
 
 use eksplode_re_web_render::commands::{Command, Kind};
 use eksplode_re_web_render::iso3d::*;
-use eksplode_re_web_render::look::{default_for, Face, Gender, Head, Look};
+use eksplode_re_web_render::look::{default_for, Costume, Face, Gender, Head, Look};
 use eksplode_re_web_render::sprites::{player_skin, Rgb};
 
 fn look(colour: usize, head: Head, face: Face) -> Look {
@@ -11,6 +11,7 @@ fn look(colour: usize, head: Head, face: Face) -> Look {
         gender: Gender::Male,
         head,
         face,
+        costume: Costume::None,
     }
 }
 
@@ -210,5 +211,29 @@ fn commands_are_ordered_back_to_front() {
     let list = portrait3d(&look(0, Head::Crown, Face::Glasses), (160.0, 226.0), 2.0);
     for pair in list.windows(2) {
         assert!(pair[0].layer <= pair[1].layer);
+    }
+}
+
+#[test]
+fn f11_us4_every_costume_changes_the_3d_character() {
+    let size = (200.0, 280.0);
+    let plain = portrait3d(&look(0, Head::None, Face::None), size, 0.0);
+    let mut seen = vec![plain.clone()];
+    for costume in [
+        Costume::Scarf,
+        Costume::Cape,
+        Costume::BowTie,
+        Costume::Medal,
+    ] {
+        let dressed = portrait3d(
+            &Look {
+                costume,
+                ..look(0, Head::None, Face::None)
+            },
+            size,
+            0.0,
+        );
+        assert!(!seen.contains(&dressed), "{costume:?}");
+        seen.push(dressed);
     }
 }

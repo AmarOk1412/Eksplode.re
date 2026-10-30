@@ -103,7 +103,8 @@ connected client a `Snapshot` of its own view, announce `Ended`, and return to t
 `HostHandle::connect` attaches an in-process client without TCP; the local terminal player and the
 WebSocket bridge use it.
 
-Looks (`look`): a player's colour, gender look and accessories, read leniently and resolved so
+Looks (`look`): a player's colour, head and face accessories and costume, read leniently (an old
+`gender` key is ignored) and resolved so
 that no two participants share a colour. Developer mode (`HostConfig.dev`): the owner may pause
 bots and change the live drop table; everything else is refused with `DevDisabled`.
 
@@ -143,7 +144,8 @@ The page itself is in `crates/web/assets`; see [WEB.md](WEB.md).
 
 [`crates/web-render`](../crates/web-render) holds every graphics decision as safe, natively
 testable Rust: `view` (fitting the board to the canvas on whole pixels), `sprites` (pixel-art
-characters, bomb and colour palette), `look` (colour, gender and accessory pixels), `iso3d` (the
+characters, bomb and colour palette), `look` (colour, accessory and costume pixels, plus the
+slot-derived body silhouette that is no longer a player choice), `iso3d` (the
 isometric cube character of the lobby cards), `depth` (draw order: layer, then row), `interp` (smooth
 motion between ticks), `commands` (the flat draw list and the character portraits). Only
 `ffi.rs` uses `unsafe` (allocate, free, expose the buffer) so the module can
@@ -177,9 +179,13 @@ decodes the JSON line, and `ratatui` draws the `Observation` as text.
 
 ## Lobby ownership and starting
 
-The owner is the lowest slot held by a person. Only the owner may send `Start`, `AddBot` and
-`RemoveBot`; anybody else gets `Error{NotOwner}` naming the owner, and the page or terminal shows
-it. With the headless server nobody sits at the host, so the first person to join is the owner.
+The owner is the lowest slot held by a person. Only the owner may send `Start`, `RemoveBot`,
+`RemovePlayer` and `SetRoom`; anybody else gets `Error{NotOwner}` naming the owner, and the page or
+terminal shows it. `AddBot` (the lobby's "+") is open to every member. With the headless server
+nobody sits at the host, so the first person to join is the owner. In v2 rooms the host keeps every
+empty seat filled with a bot before the match (`RoomRuntime::fill_bots`, `Lobby::fill_vacant_with_bots`);
+an owner's explicit removal leaves the seat empty. The core also counts per-match `kills`,
+`bombs_placed` and `eliminated_order` on each `Participant` for the scoreboard.
 
 ## Testing strategy
 

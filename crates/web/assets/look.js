@@ -1,10 +1,10 @@
-// Character looks: the options, the editor state and the storage. Presentation only: the server
+// Character looks (colour, head, face, costume): the options, the editor state and the storage. Presentation only: the server
 // validates every look and settles colour conflicts; the drawing is done by the WebAssembly module.
 
 export const COLOUR_NAMES = ["Blue", "Black", "Red", "Purple", "Green", "Orange", "Yellow", "Pink", "Teal", "White"];
-export const GENDERS = ["Male", "Female"];
 export const HEADS = ["None", "Cap", "TopHat", "Crown", "Headphones"];
 export const FACES = ["None", "Glasses", "Sunglasses", "Moustache", "Mask"];
+export const COSTUMES = ["None", "Scarf", "Cape", "BowTie", "Medal"];
 
 /** Swatch colours of the editor (the module draws the characters themselves). */
 export const COLOUR_CSS = {
@@ -23,36 +23,38 @@ export const COLOUR_CSS = {
 export const LOOK_KEY = "eksplode.re.look.v1";
 const LEGACY_LOOK_KEY = "bomberust.look.v1";
 
-/** The look of a slot nobody customised: blue, black, red and purple characters. */
+/** The look of a slot nobody customised: blue, black, red and purple characters. There is no
+ * gender choice (feature 011): the graphics module picks the body silhouette from the slot. */
 export function defaultLook(slot = 0) {
   const i = (((Number(slot) || 0) % 4) + 4) % 4;
-  return { colour: COLOUR_NAMES[i], gender: i % 2 === 0 ? "Male" : "Female", head: "None", face: "None" };
+  return { colour: COLOUR_NAMES[i], head: "None", face: "None", costume: "None" };
 }
 
 function pick(value, options, fallback) {
   return typeof value === "string" && options.includes(value) ? value : fallback;
 }
 
-/** A valid look from anything: bad fields fall back to the slot default one by one. */
+/** A valid look from anything: bad fields fall back to the slot default one by one; the `gender`
+ * of looks saved before feature 011 is dropped. */
 export function sanitizeLook(value, slot = 0) {
   const d = defaultLook(slot);
   if (value === null || typeof value !== "object" || Array.isArray(value)) return d;
   return {
     colour: pick(value.colour, COLOUR_NAMES, d.colour),
-    gender: pick(value.gender, GENDERS, d.gender),
     head: pick(value.head, HEADS, d.head),
     face: pick(value.face, FACES, d.face),
+    costume: pick(value.costume, COSTUMES, d.costume),
   };
 }
 
-const OPTIONS = { colour: COLOUR_NAMES, gender: GENDERS, head: HEADS, face: FACES };
+const OPTIONS = { colour: COLOUR_NAMES, head: HEADS, face: FACES, costume: COSTUMES };
 
 /** State of the editor: the look being edited; actions change one choice at a time. */
 export function editorReducer(look, action) {
   if (action.type === "random") {
     const rng = action.rng ?? Math.random;
     const choose = (list) => list[Math.min(list.length - 1, Math.floor(rng() * list.length))];
-    return { colour: choose(COLOUR_NAMES), gender: choose(GENDERS), head: choose(HEADS), face: choose(FACES) };
+    return { colour: choose(COLOUR_NAMES), head: choose(HEADS), face: choose(FACES), costume: choose(COSTUMES) };
   }
   const options = OPTIONS[action.type];
   if (!options || !options.includes(action.value)) return look;

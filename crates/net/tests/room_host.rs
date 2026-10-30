@@ -55,7 +55,8 @@ fn v2_players_choose_independent_rooms_without_implicit_admission() {
     assert_eq!(rooms.len(), 2);
     assert!(rooms
         .iter()
-        .all(|room| room["occupied"] == 1 && room.get("resume_proof").is_none()));
+        // capacity 4: the owner plus three auto-filled bots (FR-008)
+        .all(|room| room["occupied"] == 4 && room.get("resume_proof").is_none()));
     browser.join_room_v2("join", &first, "Cara");
     let joined = v2_reply(&mut browser, "Welcome");
     assert_eq!(joined["room_id"], first["room_id"]);
@@ -118,7 +119,8 @@ fn protected_room_admission_verifies_passwords_without_public_secrets() {
         assert!(!error.to_string().contains(password));
         member.send_value(&json!({"type":"ListRooms", "request_id":format!("directory-{index}"), "scope":"local"}));
         let directory = v2_reply(&mut member, "Rooms");
-        assert_eq!(directory["rooms"][0]["occupied"], 1);
+        // capacity 2: the owner plus one auto-filled bot (FR-008)
+        assert_eq!(directory["rooms"][0]["occupied"], 2);
         assert_eq!(directory["rooms"][0]["password_required"], true);
         assert!(!directory.to_string().contains(password));
         assert!(directory["rooms"][0].get("resume_proof").is_none());
@@ -688,7 +690,8 @@ fn v2_invalid_admissions_and_room_limits_do_not_mutate_existing_rooms() {
     outsider.send_value(&json!({"type":"ListRooms","request_id":"after","scope":"local"}));
     let directory = v2_reply(&mut outsider, "Rooms");
     assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
-    assert_eq!(directory["rooms"][0]["occupied"], 1);
+    // capacity 4: the owner plus three auto-filled bots (FR-008)
+    assert_eq!(directory["rooms"][0]["occupied"], 4);
 }
 
 #[test]
@@ -827,6 +830,22 @@ fn in_process_host_controls_require_the_selected_room_reference() {
         server_epoch: welcome["server_epoch"].as_str().unwrap().into(),
         room_id: welcome["room_id"].as_str().unwrap().into(),
     };
+    // FR-008: the room starts full, so free a seat over the wire before exercising the
+    // in-process `add_room_bot` control on it.
+    owner.send_value(
+        &json!({"type":"RemoveBot", "request_id":"free-a-seat", "room_id":welcome["room_id"]}),
+    );
+    loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|slot| slot["controller"] == "Empty")
+        {
+            break;
+        }
+    }
     host.handle().add_room_bot(&reference).unwrap();
     loop {
         let updated = v2_reply(&mut owner, "RoomUpdated");
@@ -834,7 +853,7 @@ fn in_process_host_controls_require_the_selected_room_reference() {
             .as_array()
             .unwrap()
             .iter()
-            .any(|slot| slot["controller"] == "Bot")
+            .all(|slot| slot["controller"] != "Empty")
         {
             break;
         }
@@ -1248,7 +1267,12 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
         )
         .unwrap();
     welcome_slot(&a);
-    for (missing, add_bot) in [(3, true), (2, true), (1, false)] {
+    // FR-008: the room starts full (the owner plus three auto-filled bots); removing a bot at a
+    // time (instead of the pre-011 add-a-bot-at-a-time) reproduces each understaffed count.
+    for missing in 1..=3u8 {
+        a.send(ClientMsg::RemoveBot).unwrap();
+        wait_for_game(&a, |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == usize::from(4 - missing)))
+            .unwrap();
         a.send(ClientMsg::Start).unwrap();
         let message = match wait_for_game(&a, is_error("ModeNeedsPlayers")) {
             Some(ServerMsg::Error { message, .. }) => message,
@@ -1259,11 +1283,6 @@ fn f4_us1_as5_a_start_with_too_few_participants_is_refused_with_the_missing_coun
             message.contains("bots"),
             "the message says bots can fill the slots: {message}"
         );
-        if add_bot {
-            a.send(ClientMsg::AddBot).unwrap();
-            wait_for_game(&a, |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() > 4 - missing as usize))
-                .unwrap();
-        }
     }
     // a second human and two bots make four
     let b = eksplode_re_net::Client::connect_unjoined(&host.addr().to_string()).unwrap();
@@ -1332,6 +1351,16 @@ fn a_chaser_room_starts_with_four_participants_and_one_chaser() {
     )
     .unwrap();
     welcome_slot(&a);
+    // FR-008: the room starts full; strip it back down to the owner alone to exercise the
+    // same "missing participants" messaging the pre-011 empty room used to start with.
+    for _ in 0..3 {
+        a.send(ClientMsg::RemoveBot).unwrap();
+    }
+    wait_for_game(
+        &a,
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 1),
+    )
+    .unwrap();
     a.send(ClientMsg::Start).unwrap();
     match wait_for_game(&a, is_error("ModeNeedsPlayers")) {
         Some(ServerMsg::Error { message, .. }) => assert!(
@@ -1492,6 +1521,76 @@ fn set_room_capacity_cannot_drop_below_occupied_slots() {
 }
 
 #[test]
+fn set_room_capacity_cannot_strand_a_human_beyond_the_new_window() {
+    // Regression test: shrinking capacity must never leave a connected human sitting at a
+    // slot index >= the new capacity, since admission only ever looks within that window
+    // (`admission_slot` takes the first `capacity` slots) and a stranded human is otherwise
+    // invisible to it, letting the room silently exceed its declared capacity.
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Owner", 4);
+    let mut b = Raw::connect(host.addr());
+    b.hello_v2().unwrap();
+    b.join_room_v2("b-join", &room, "B");
+    let b_admission = v2_reply(&mut b, "Welcome");
+    assert_eq!(b_admission["slot"], 1);
+    v2_reply(&mut owner, "RoomUpdated"); // owner's broadcast for B's join
+    let mut c = Raw::connect(host.addr());
+    c.hello_v2().unwrap();
+    c.join_room_v2("c-join", &room, "C");
+    let c_admission = v2_reply(&mut c, "Welcome");
+    assert_eq!(c_admission["slot"], 2);
+    v2_reply(&mut owner, "RoomUpdated"); // owner's broadcast for C's join
+    let mut d = Raw::connect(host.addr());
+    d.hello_v2().unwrap();
+    d.join_room_v2("d-join", &room, "D");
+    let d_admission = v2_reply(&mut d, "Welcome");
+    assert_eq!(d_admission["slot"], 3);
+    v2_reply(&mut owner, "RoomUpdated"); // owner's broadcast for D's join
+
+    // The owner kicks B and C; FR-008 leaves their seats empty (no bot refill), while D stays
+    // put in slot 3.
+    let b_id = b_admission["membership_id"].as_str().unwrap().to_string();
+    let c_id = c_admission["membership_id"].as_str().unwrap().to_string();
+    owner.send_value(&json!({"type":"RemovePlayer", "request_id":"kick-b",
+        "room_id":room["room_id"], "membership_id":b_id}));
+    loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"][1]["controller"] == "Empty" {
+            break;
+        }
+    }
+    owner.send_value(&json!({"type":"RemovePlayer", "request_id":"kick-c",
+        "room_id":room["room_id"], "membership_id":c_id}));
+    let after_kicks = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"][2]["controller"] == "Empty" {
+            break updated;
+        }
+    };
+    assert_eq!(after_kicks["lobby"]["slots"][1]["controller"], "Empty");
+    assert_eq!(after_kicks["lobby"]["slots"][2]["controller"], "Empty");
+    assert_eq!(after_kicks["lobby"]["slots"][3]["controller"], "Remote");
+
+    // Shrinking to capacity 2 would strand D (slot 3) outside the new window: reject it.
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"shrink-strands-d",
+        "room_id":room["room_id"], "expected_revision":after_kicks["revision"],
+        "settings":room["lobby"]["settings"], "capacity":2}));
+    assert_eq!(v2_reply(&mut owner, "Error")["code"], "CapacityConflict");
+
+    // Capacity 4 (D's own slot still fits) remains accepted.
+    owner.send_value(&json!({"type":"SetRoom", "request_id":"shrink-to-fit",
+        "room_id":room["room_id"], "expected_revision":after_kicks["revision"],
+        "settings":room["lobby"]["settings"], "capacity":4}));
+    let updated = loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["capacity"] == 4 {
+            break updated;
+        }
+    };
+    assert_eq!(updated["lobby"]["slots"][3]["controller"], "Remote");
+}
+
+#[test]
 fn v2_start_addbot_and_removebot_require_the_room_owner() {
     let host = host();
     let (mut owner, room) = v2_create(&host, "Owner", 4);
@@ -1503,18 +1602,34 @@ fn v2_start_addbot_and_removebot_require_the_room_owner() {
 
     member.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
     assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
-    member.send_value(&json!({"type":"AddBot", "request_id":"add-bot", "room_id":room["room_id"]}));
-    assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
     member.send_value(
         &json!({"type":"RemoveBot", "request_id":"remove-bot", "room_id":room["room_id"]}),
     );
     assert_eq!(v2_reply(&mut member, "Error")["code"], "NotOwner");
 
+    // AddBot is open to any member (FR-010), unlike Start/RemoveBot; the room starts full
+    // (FR-008), so a member's AddBot is refused as Full, not NotOwner.
+    member.send_value(
+        &json!({"type":"AddBot", "request_id":"add-bot-full", "room_id":room["room_id"]}),
+    );
+    assert_eq!(v2_reply(&mut member, "Error")["code"], "Full");
+
+    // The owner frees slot 2; the member (not the owner) can then fill it, proving AddBot needs
+    // no ownership once a seat is open.
     owner.send_value(
-        &json!({"type":"AddBot", "request_id":"owner-add-bot", "room_id":room["room_id"]}),
+        &json!({"type":"RemoveBot", "request_id":"owner-remove-bot", "room_id":room["room_id"], "slot":2}),
+    );
+    loop {
+        let updated = v2_reply(&mut owner, "RoomUpdated");
+        if updated["lobby"]["slots"][2]["controller"] == "Empty" {
+            break;
+        }
+    }
+    member.send_value(
+        &json!({"type":"AddBot", "request_id":"member-add-bot", "room_id":room["room_id"], "slot":2}),
     );
     let updated = loop {
-        let updated = v2_reply(&mut owner, "RoomUpdated");
+        let updated = v2_reply(&mut member, "RoomUpdated");
         if updated["lobby"]["slots"][2]["controller"] == "Bot" {
             break updated;
         }

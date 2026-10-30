@@ -29,7 +29,7 @@ fn no_path_is_needed_when_already_safe() {
 }
 
 #[test]
-fn bombs_blocks_and_players_are_obstacles() {
+fn bombs_block_but_players_do_not() {
     let rows = [
         "#######", "#.....#", "#.....#", "#.+.+.#", "#.....#", "#.....#", "#######",
     ];
@@ -39,10 +39,12 @@ fn bombs_blocks_and_players_are_obstacles() {
     assert_eq!(p[0], Dir::Down);
     assert_eq!(p.len(), 2);
 
-    let s2 = duel(&rows, (3, 3), (3, 4));
-    let mut s2 = s2;
+    // The enemy now stands on the only open escape tile; a living player is not an
+    // obstacle (see feature 010), so the bot must still find the same first step.
+    let mut s2 = duel(&rows, (3, 3), (3, 4));
     add_bomb(&mut s2, 1, 3, 2, 20);
-    assert_eq!(path(&s2, &|_| true), None, "enemy blocks the only way");
+    let p2 = path(&s2, &|_| true).expect("a living player is not an obstacle");
+    assert_eq!(p2[0], Dir::Down, "the enemy's tile is a valid first step");
 }
 
 #[test]

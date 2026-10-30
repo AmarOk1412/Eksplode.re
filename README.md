@@ -17,8 +17,12 @@ pixel-art view are all small, tested crates.
   last minute until one player or team is left; see [docs/GAMEPLAY.md](docs/GAMEPLAY.md).
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
   grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
-  animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. Players
-  choose colour, gender look and accessories in a character editor.
+  animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. The page
+  opens on a main menu (Create new game, Join a game, Options); Options has Customize, Sound and
+  Controls tabs, and Customize picks colour, head, face and costume (or randomizes them with the
+  icon on the preview). Empty lobby seats fill with bots: the owner removes a bot or kicks a
+  player with the cross on a seat, anybody puts a bot back with "+", and room settings and the
+  password live behind the gear icon.
 - **Terminal version** for local play on one keyboard, with a lobby screen.
 - **Network play:** an authoritative host, `join` by address, or a server that hosts the match
   and serves the web page.
@@ -52,21 +56,24 @@ capture PNGs).
 
 | Mode | Command | What it is |
 |------|---------|-----------|
-| Local | `cargo run -p eksplode-re-cli -- --players 2 --bots 2` | up to four people share one keyboard, bots fill the rest |
-| Local with a lobby | `cargo run -p eksplode-re-cli -- --lobby` | pick the slots on a lobby screen first |
-| Terminal host | `cargo run -p eksplode-re-cli -- host --bots 1` | host a match on port 7878 and play in it |
+| Terminal host | `cargo run -p eksplode-re-cli` | the default: host a match on port 7878 and play in it |
+| Terminal host (explicit) | `cargo run -p eksplode-re-cli -- host --bots 1` | same as above, named explicitly, with options |
+| Local | `cargo run -p eksplode-re-cli -- local --players 2 --bots 2` | up to four people share one keyboard, bots fill the rest; shows the lobby screen first |
+| Local, instant start | `cargo run -p eksplode-re-cli -- local --instant` | skip the lobby screen and start right away |
 | Terminal host with the page | `cargo run -p eksplode-re-cli -- host --web-port 8080` | the same match, joinable from browsers |
 | Server | `cargo run -p eksplode-re-web -- --bots 1` | headless host plus the web page; nobody has to sit at it |
 | Join | `cargo run -p eksplode-re-cli -- join 192.168.1.20` | a terminal player joins a host or server |
 
 ### Terminal options
 
-`eksplode-re-cli [OPTIONS]` plays on this machine:
+`eksplode-re-cli [OPTIONS]` with no subcommand defaults to `host` (see below) so a bare run is
+ready for others to join. `eksplode-re-cli local [OPTIONS]` plays on this machine only, no network:
 
 - `--players <N>` local human players, 0 to 4 (default 1);
 - `--bots <N>` bots, 0 to 4 (default: fill up to 4 participants);
 - `--seed <U64>` fixes the random generator;
-- `--lobby` shows the lobby screen first (Up/Down select, `h` human, `b` bot, Enter start);
+- `--lobby` shows the lobby screen first (Up/Down select, `h` human, `b` bot, Enter start) —
+  this is the default; `--instant` skips it and starts the match immediately instead;
 - `--mode <normal|team|chaser>`, `--size <small|medium|large>`, `--time <2|3|5|10>` (minutes) and
   `--friendly-fire <on|off>` set the room settings of the match (defaults: normal, small, 3, on);
 - `--p1-keys`, `--p2-keys`, `--p3-keys` and `--p4-keys` configure each local player's six keys in
@@ -76,7 +83,8 @@ capture PNGs).
 - `-h`, `--help` and `-V`, `--version`.
 
 `eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
-[--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]`:
+[--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]`
+(the `host` keyword is optional — this is also what a bare `eksplode-re-cli` runs):
 
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
   name (1 to 16 printable characters), `--seed <N>` fixed seed;
@@ -122,7 +130,7 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 
 On a touch-capable phone, including Firefox for Android, portrait play uses a joystick at the bottom left and bomb/power actions at the bottom right. Punch appears only while your player has the Punch power. If you rotate to landscape, the existing horizontal control layout remains in use. The game does not force an orientation change.
 
-After a round, the result screen shows the winner or mode outcome, final standings and each participant's available stats. It remains until Return to Lobby is selected.
+After a round, the scoreboard ranks the players by survival (the winner or last survivor first, then the others in reverse order of elimination; ties by kills, then slot) and shows only Player, Kills and Bombs placed. It remains until Return to Lobby is selected.
 
 Every browser screen is also keyboard/controller navigable: Tab and Shift+Tab move focus, arrows move between choices, Enter or Space activates, and Escape opens or backs out of the menu hub.
 | Terminal P1 | arrow keys | Space | Z |

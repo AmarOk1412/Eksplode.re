@@ -15,6 +15,7 @@ fn look(colour: usize, gender: Gender, head: Head, face: Face) -> Look {
         gender,
         head,
         face,
+        costume: Costume::None,
     }
 }
 
@@ -211,4 +212,67 @@ fn a_portrait_uses_the_given_look() {
     );
     assert_ne!(a, b);
     assert!(portrait_look(&base(), (0.0, 5.0), 0).is_empty());
+}
+
+// ---- 011 US4: the costume, and the gender silhouette kept internal ----
+
+const COSTUMES: [Costume; 4] = [
+    Costume::Scarf,
+    Costume::Cape,
+    Costume::BowTie,
+    Costume::Medal,
+];
+
+fn dressed(costume: Costume) -> Look {
+    Look { costume, ..base() }
+}
+
+#[test]
+fn f11_us4_the_costume_names_match_the_server() {
+    assert_eq!(COSTUME_NAMES, ["None", "Scarf", "Cape", "BowTie", "Medal"]);
+    for slot in 0..4 {
+        assert_eq!(default_for(slot).costume, Costume::None, "slot {slot}");
+    }
+}
+
+#[test]
+fn f11_us4_as5_a_missing_costume_or_gender_falls_back_to_the_slot_default() {
+    // the page no longer sends a gender: the silhouette still alternates with the slot
+    for slot in 0..4 {
+        let l = from_value(&json!({"colour":"Teal","head":"Cap"}), slot);
+        assert_eq!(l.gender, default_for(slot).gender, "slot {slot}");
+        assert_eq!(l.costume, Costume::None);
+    }
+    assert_eq!(default_for(0).gender, Gender::Male);
+    assert_eq!(default_for(1).gender, Gender::Female);
+    let l = from_value(&json!({"costume":"Cape","gender":"Female"}), 0);
+    assert_eq!((l.costume, l.gender), (Costume::Cape, Gender::Female));
+    assert_eq!(
+        from_value(&json!({"costume":"Toga"}), 2).costume,
+        Costume::None
+    );
+}
+
+#[test]
+fn f11_us4_every_costume_changes_the_picture_and_has_its_colours() {
+    let plain = grid(&base());
+    let mut seen = vec![plain.clone()];
+    for costume in COSTUMES {
+        let l = dressed(costume);
+        let g = grid(&l);
+        assert_ne!(g, plain, "{costume:?}");
+        assert!(!seen.contains(&g), "{costume:?} looks like another costume");
+        seen.push(g.clone());
+        let s = skin(&l);
+        for view in [View::Down, View::Up, View::Left, View::Right] {
+            for frame in [Frame::Idle, Frame::StepA, Frame::StepB] {
+                let g = grid_view(&l, view, frame);
+                assert_eq!(g.len(), GRID_ROWS);
+                assert!(g.iter().all(|r| r.chars().count() == 12), "{costume:?}");
+                for ch in g.iter().flat_map(|r| r.chars()).filter(|c| *c != '.') {
+                    assert!(colour_of(&l, &s, ch).is_some(), "{ch} in {costume:?}");
+                }
+            }
+        }
+    }
 }

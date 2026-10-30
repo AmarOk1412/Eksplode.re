@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
+use eksplode_re_net::look::{Colour, Costume, Face, Head, Look};
 use eksplode_re_net::protocol::v2::{Reply, Request, RequestId, RoomRef};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use eksplode_re_net::Client;
@@ -69,14 +69,14 @@ fn lobby_looks(client: &Client, pred: impl Fn(&[Look]) -> bool) -> Vec<Look> {
 #[test]
 fn a_chosen_look_is_in_the_welcome_and_in_every_lobby_broadcast() {
     let host = host();
-    let chosen = json!({"colour":"Green","gender":"Female","head":"Cap","face":"Glasses"});
+    let chosen = json!({"colour":"Green","head":"Cap","face":"Glasses","costume":"Scarf"});
     let (a, slot, room, looks) = admit(&host, None, "Ann", Some(chosen));
     assert_eq!(slot, 0);
     let expected = Look {
         colour: Colour::Green,
-        gender: Gender::Female,
         head: Head::Cap,
         face: Face::Glasses,
+        costume: Costume::Scarf,
     };
     assert_eq!(looks[0], expected);
     assert_eq!(looks.len(), 4);
@@ -86,6 +86,30 @@ fn a_chosen_look_is_in_the_welcome_and_in_every_lobby_broadcast() {
     let seen = lobby_looks(&a, |l| l[1] != Look::default_for(1) || l[0] == expected);
     assert_eq!(seen[0], expected, "Ann still has her look");
     assert_eq!(seen[1], Look::default_for(1), "Bob got his slot default");
+}
+
+#[test]
+fn f11_us4_a_legacy_set_look_with_a_gender_is_accepted_and_the_costume_is_broadcast() {
+    let host = host();
+    let (a, _, room, _) = admit(&host, None, "Ann", None);
+    let (b, _, _, _) = admit(&host, Some(&room), "Bob", None);
+    b.send(ClientMsg::SetLook {
+        look: json!({"colour":"Teal","gender":"Female","head":"Crown","face":"None","costume":"Cape"}),
+    })
+    .unwrap();
+    for client in [&a, &b] {
+        let looks = lobby_looks(client, |l| l[1].costume == Costume::Cape);
+        assert_eq!(
+            looks[1],
+            Look {
+                colour: Colour::Teal,
+                head: Head::Crown,
+                face: Face::None,
+                costume: Costume::Cape,
+            }
+        );
+    }
+    // the broadcast above is the acceptance: the old gender key is not an error
 }
 
 #[test]
@@ -206,10 +230,10 @@ fn a_freed_slot_frees_its_colour() {
     drop(b);
     wait_for_game(&a, |message| {
         matches!(message, ServerMsg::Lobby { lobby, .. }
-        if lobby.slots[1].controller == eksplode_re_core::Controller::Empty)
+        if lobby.slots[1].controller == eksplode_re_core::Controller::Bot)
     })
     .unwrap();
-    // Bob's colour is free again for the next joiner
+    // Bob's colour is free again for the next joiner, who takes over the bot in his seat
     let (_c, slot, _, looks) = admit(&host, Some(&room), "Cy", Some(json!({"colour":"Pink"})));
     assert_eq!(slot, 1);
     assert_eq!(looks[1].colour, Colour::Pink);

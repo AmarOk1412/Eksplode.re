@@ -367,13 +367,21 @@ pub mod v2 {
             request_id: RequestId,
             room_id: String,
         },
+        /// Any member: put a bot into the empty seat `slot` (the lobby's "+"). Without `slot`
+        /// (older clients, the terminal client) the first free seat is used.
         AddBot {
             request_id: RequestId,
             room_id: String,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            slot: Option<u8>,
         },
+        /// Owner only: remove the bot in seat `slot` (the lobby's cross); the seat stays empty.
+        /// Without `slot` (older clients, the terminal client) the highest bot seat is freed.
         RemoveBot {
             request_id: RequestId,
             room_id: String,
+            #[serde(default, skip_serializing_if = "Option::is_none")]
+            slot: Option<u8>,
         },
         SetReady {
             request_id: RequestId,
@@ -561,6 +569,12 @@ pub mod v2 {
         ServerFull,
         Unsupported,
         Unavailable,
+        /// A seat index outside the four seats of a room.
+        BadSlot,
+        /// `RemoveBot` named a seat that holds a human or nobody.
+        NotABot,
+        /// `AddBot` named a seat that is already taken.
+        SlotTaken,
     }
 
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

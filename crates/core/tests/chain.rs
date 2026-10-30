@@ -40,6 +40,20 @@ fn us1_as4_chain_settles_across_several_bombs() {
 }
 
 #[test]
+fn f10_us1_as3_blast_eliminates_both_players_sharing_a_tile() {
+    // Two players stand on the same tile (now allowed, see feature 010); a blast covering
+    // that tile must eliminate each of them independently, with no immunity from sharing it.
+    let starts = [Some((3, 3)), Some((3, 3)), None, None];
+    let mut s = state(&OPEN, starts);
+    add_bomb(&mut s, 0, 3, 4, 1);
+    let ev = step(&mut s, &idle());
+    assert!(!s.players[0].alive);
+    assert!(!s.players[1].alive);
+    assert!(ev.contains(&Event::PlayerEliminated { player: pid(0) }));
+    assert!(ev.contains(&Event::PlayerEliminated { player: pid(1) }));
+}
+
+#[test]
 fn bombs_outside_the_blast_are_untouched() {
     let mut s = state(&OPEN, two_safe());
     add_bomb(&mut s, 0, 3, 3, 1);
@@ -137,4 +151,66 @@ fn chain_flames_keep_the_owner_of_the_bomb_that_made_them() {
     assert_eq!(owners_at(&s, 4, 1), vec![1]);
     assert_eq!(owners_at(&s, 2, 1), vec![0, 1], "both bombs reach it");
     assert_eq!(owners_at(&s, 3, 1), vec![0, 1]);
+}
+
+// ---- 011 US5: kills and elimination order ----
+
+#[test]
+fn f11_us5_as1_a_kill_is_credited_to_the_bomb_owner_and_stamps_the_order() {
+    let mut s = state(&OPEN, [Some((5, 1)), Some((3, 3)), None, None]);
+    assert_eq!(s.players[1].eliminated_order, None);
+    add_bomb(&mut s, 0, 3, 4, 1);
+    step(&mut s, &idle());
+    assert!(!s.players[1].alive);
+    assert_eq!(s.players[1].eliminated_order, Some(1));
+    assert_eq!(s.players[0].kills, 1);
+    assert_eq!(s.players[0].eliminated_order, None, "the survivor has none");
+    assert_eq!(s.players[1].kills, 0);
+}
+
+#[test]
+fn f11_us5_a_self_elimination_credits_nobody() {
+    let mut s = state(&OPEN, [Some((3, 3)), Some((5, 1)), None, None]);
+    add_bomb(&mut s, 0, 3, 4, 1);
+    step(&mut s, &idle());
+    assert!(!s.players[0].alive);
+    assert_eq!(s.players[0].eliminated_order, Some(1));
+    assert_eq!(s.players[0].kills, 0);
+    assert_eq!(s.players[1].kills, 0);
+}
+
+#[test]
+fn f11_us5_as4_players_caught_in_one_tick_share_their_order_and_later_ones_come_after() {
+    // 0 and 1 share (3,3) and are caught by 2's bomb; 2 is caught later by 3's bomb
+    let starts = [Some((3, 3)), Some((3, 3)), Some((5, 1)), Some((1, 1))];
+    let mut s = state(&OPEN, starts);
+    add_bomb(&mut s, 2, 3, 4, 1);
+    add_bomb(&mut s, 3, 5, 2, 3);
+    step(&mut s, &idle());
+    assert_eq!(s.players[0].eliminated_order, Some(1));
+    assert_eq!(
+        s.players[1].eliminated_order,
+        Some(1),
+        "same tick, same order"
+    );
+    assert_eq!(s.players[2].kills, 2);
+    for _ in 0..3 {
+        step(&mut s, &idle());
+    }
+    assert!(!s.players[2].alive);
+    assert_eq!(s.players[2].eliminated_order, Some(2));
+    assert_eq!(s.players[3].kills, 1);
+    assert_eq!(s.players[3].eliminated_order, None);
+}
+
+#[test]
+fn f11_us5_every_bomb_whose_flame_reaches_the_victim_is_credited() {
+    // the bombs of 0 and 1 both light (3,3), where 2 stands
+    let starts = [Some((1, 1)), Some((5, 5)), Some((3, 3)), None];
+    let mut s = state(&OPEN, starts);
+    add_bomb(&mut s, 0, 3, 4, 1);
+    add_bomb(&mut s, 1, 4, 3, 1);
+    step(&mut s, &idle());
+    assert!(!s.players[2].alive);
+    assert_eq!((s.players[0].kills, s.players[1].kills), (1, 1));
 }

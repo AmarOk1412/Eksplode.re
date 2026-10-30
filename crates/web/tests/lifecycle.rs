@@ -99,7 +99,7 @@ fn the_banner_shows_the_addresses_and_how_to_stop() {
 }
 
 #[test]
-fn startup_bots_are_added_only_after_explicit_room_creation() {
+fn bots_fill_the_room_only_after_explicit_room_creation() {
     let s = server(|o| o.bots = 2);
     let directory: serde_json::Value =
         serde_json::from_slice(&get(s.http_addr(), "/rooms").body).unwrap();
@@ -110,10 +110,15 @@ fn startup_bots_are_added_only_after_explicit_room_creation() {
         .unwrap();
     match welcome {
         ServerMsg::Welcome { slot, lobby, .. } => {
-            assert_eq!(slot, 0, "creation admits the owner before startup bots");
-            assert_eq!(lobby.participants(), 3);
-            assert_eq!(lobby.slots[1].controller, eksplode_re_core::Controller::Bot);
-            assert_eq!(lobby.slots[2].controller, eksplode_re_core::Controller::Bot);
+            assert_eq!(slot, 0, "creation admits the owner before the bots");
+            // 011: every empty seat up to the capacity (4) gets a bot; `bots = 2` no longer limits it
+            assert_eq!(lobby.participants(), 4);
+            for seat in 1..4 {
+                assert_eq!(
+                    lobby.slots[seat].controller,
+                    eksplode_re_core::Controller::Bot
+                );
+            }
         }
         _ => panic!("expected Welcome"),
     }

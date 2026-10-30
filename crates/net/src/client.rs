@@ -178,10 +178,12 @@ impl Client {
                 ClientMsg::AddBot => Request::AddBot {
                     request_id,
                     room_id,
+                    slot: None,
                 },
                 ClientMsg::RemoveBot => Request::RemoveBot {
                     request_id,
                     room_id,
+                    slot: None,
                 },
                 ClientMsg::SetReady { ready } => Request::SetReady {
                     request_id,

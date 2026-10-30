@@ -394,8 +394,13 @@ fn us2_as4_a_fifth_participant_is_refused() {
     let (_t2, slot) = tcp(&s, &a.reference, "Bob");
     assert_eq!(slot, 3);
 
-    let lobby =
-        a.recv_until(|m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.participants() == 4));
+    // 011: the room starts bot-filled, so wait until all four seats are humans, not just occupied
+    let lobby = a.recv_until(|m| {
+        matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots.iter().all(|s| !matches!(
+            s.controller,
+            eksplode_re_core::Controller::Bot | eksplode_re_core::Controller::Empty
+        )))
+    });
     match lobby {
         Some(ServerMsg::Lobby { lobby, .. }) => {
             let names: Vec<&str> = lobby.slots.iter().map(|s| s.name.as_str()).collect();

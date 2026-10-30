@@ -867,3 +867,42 @@ fn f4_a_client_that_does_not_know_a_message_gets_an_error_not_a_panic() {
         settings: serde_json::json!({"mode": "team"}),
     });
 }
+
+#[test]
+fn f11_us5_match_statistics_ride_on_the_snapshot_and_default_for_old_hosts() {
+    let mut state = GameState::new(Config::default(), 7, [true, true, false, false]).unwrap();
+    state.players[0].kills = 2;
+    state.players[0].bombs_placed = 9;
+    state.players[1].eliminated_order = Some(1);
+    let me = PlayerId::new(0).unwrap();
+    let msg = ServerMsg::Snapshot {
+        tick: 4,
+        state: Box::new(state.observe(me)),
+        events: vec![],
+    };
+    roundtrip(msg.clone());
+    let mut value = serde_json::to_value(&msg).unwrap();
+    assert_eq!(value["state"]["players"][0]["kills"], 2);
+    assert_eq!(value["state"]["players"][0]["bombs_placed"], 9);
+    assert_eq!(value["state"]["players"][1]["eliminated_order"], 1);
+    assert!(value["state"]["players"][0]["eliminated_order"].is_null());
+    // an older host sends none of the three fields
+    for player in value["state"]["players"].as_array_mut().unwrap() {
+        let player = player.as_object_mut().unwrap();
+        for key in ["kills", "bombs_placed", "eliminated_order"] {
+            player.remove(key);
+        }
+    }
+    let ServerMsg::Snapshot { state, .. } = serde_json::from_value::<ServerMsg>(value).unwrap()
+    else {
+        panic!("not a snapshot");
+    };
+    assert_eq!(
+        (
+            state.players[0].kills,
+            state.players[0].bombs_placed,
+            state.players[1].eliminated_order
+        ),
+        (0, 0, None)
+    );
+}

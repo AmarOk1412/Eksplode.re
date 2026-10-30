@@ -140,7 +140,7 @@ test("roomLabel matches the one line of the terminal lobby", () => {
 
 test("f4_us1_as1_a_closed_room_shows_the_creation_menu_and_an_open_room_the_join_screen", () => {
   let s = initialState();
-  assert.equal(s.menu, "join", "the join screen is the fallback until the host answers");
+  assert.equal(s.menu, "main", "the main menu is the fallback until the host answers");
   const closed = reduce(s, { type: "RoomInfo", open: false, settings: { name: "", size: "small" }, humans: 0 });
   assert.equal(closed.stage, "idle");
   assert.equal(closed.menu, "room");
@@ -151,10 +151,10 @@ test("f4_us1_as1_a_closed_room_shows_the_creation_menu_and_an_open_room_the_join
   assert.equal(open.menu, "join");
   assert.equal(open.room.settings.name, "Friday");
   s = reduce(closed, { type: "retry" });
-  assert.equal(s.menu, "join");
+  assert.equal(s.menu, "main");
   const late = reduce({ ...s, stage: "lobby" }, { type: "RoomInfo", open: false, settings: {}, humans: 0 });
   assert.equal(late.stage, "lobby", "an answer that arrives after joining changes nothing");
-  assert.equal(late.menu, "join");
+  assert.equal(late.menu, "main");
   assert.equal(reduce(s, { type: "RoomInfo", open: "yes", settings: 5 }).room.open, false);
 });
 
@@ -188,4 +188,111 @@ test("f4_us1_as3_the_refusals_of_the_host_are_shown_as_notices", () => {
   assert.equal(s.notice, "the room can only change in the lobby");
   s = reduce(s, { type: "Error", code: "BadRoom", message: "the room settings must be an object" });
   assert.equal(s.notice, "the room settings must be an object");
+});
+
+// ---- 011 US1: Join a game opens the room list ----
+import { screens, MAIN_MENU_ACTIONS } from "../assets/app.js";
+import { listRoomsMessage } from "../assets/room.js";
+
+const helloV2 = { type: "Hello", version: 2, server_id: "alpha", server_epoch: "epoch", capabilities: ["rooms", "directory"] };
+
+test("f11_us1_as3_join_a_game_shows_the_room_list_with_refresh_and_new_room", () => {
+  const join = MAIN_MENU_ACTIONS.find((a) => a.label === "Join a game");
+  const state = reduce(reduce(initialState(), helloV2), join.event);
+  const visible = screens(state);
+  assert.equal(visible.directoryPanel, true);
+  assert.equal(visible.mainMenu, false);
+  assert.equal(visible.roomPanel, false);
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  const directory = /<section[^>]*id="directory-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(directory, /id="directory-refresh"[^>]*>Refresh</);
+  assert.match(directory, /id="directory-create"[^>]*>New room</);
+  const created = reduce(state, { type: "new-room" });
+  assert.equal(screens(created).roomPanel, true, "New room opens the creation form");
+  assert.equal(screens(reduce(state, { type: "show-main" })).mainMenu, true);
+});
+
+test("f11_us1_as4_refresh_requeries_the_rooms_without_leaving_the_list", () => {
+  assert.deepEqual(listRoomsMessage(), { type: "ListRooms", scope: "local" });
+  assert.deepEqual(roomProtocolMessage({}, listRoomsMessage(), "list-1"), { type: "ListRooms", scope: "local", request_id: "list-1" });
+  let state = reduce(reduce(initialState(), helloV2), { type: "show-directory" });
+  state = reduce(state, { type: "Rooms", rooms: [], sources: [] });
+  assert.equal(state.menu, "directory");
+  assert.equal(screens(state).directoryPanel, true, "an empty answer keeps the list (empty state) on screen");
+  const room = { server_id: "alpha", server_epoch: "epoch", room_id: "r", name: "Friday", mode: "normal", occupied: 1, capacity: 4, phase: "lobby" };
+  state = reduce(state, { type: "Rooms", rooms: [room], sources: [] });
+  assert.equal(screens(state).directoryPanel, true);
+  assert.equal(state.rooms.length, 1);
+});
+
+// ---- 011 US2: the configuration panel and the leave icon ----
+import { lobbyHeader } from "../assets/app.js";
+import { roomConfigDraft, roomConfigReducer, roomConfigMessage } from "../assets/room.js";
+
+const configLobby = (ownerSlot) => ({
+  owner_slot: ownerSlot,
+  slots: [{ controller: "Remote", name: "Ann" }, { controller: "Remote", name: "Bob" }, { controller: "Bot" }, { controller: "Empty" }],
+  settings: { name: "Friday", mode: "normal", size: "small", minutes: 3, friendly_fire: true },
+});
+const lobbySection = () => {
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  return {
+    html,
+    lobby: /<section[^>]*id="lobby-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "",
+    config: /<section[^>]*id="room-config"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "",
+  };
+};
+
+test("f11_us2_as5_as6_the_configuration_icon_is_for_the_owner_only", () => {
+  const owner = { stage: "lobby", slot: 0, lobby: configLobby(0), capacity: 4 };
+  assert.deepEqual(lobbyHeader(owner), { config: true, leave: true });
+  assert.deepEqual(lobbyHeader({ ...owner, slot: 1 }), { config: false, leave: true });
+  assert.deepEqual(lobbyHeader({ ...owner, stage: "playing" }).config, false);
+  const { lobby, config } = lobbySection();
+  const header = /<div class="lobby-header"[^>]*>([\s\S]*?)<\/div>/.exec(lobby)?.[1] ?? "";
+  assert.match(header, /id="room-config-open"[^>]*aria-label="Room settings"/);
+  assert.match(header, /id="leave-room"[^>]*aria-label="Leave room"/, "FR-013: leave sits beside the configuration icon");
+  for (const id of ["lobby-room-name", "lobby-capacity", "lobby-mode", "lobby-size", "lobby-minutes", "lobby-ff", "lobby-password"]) {
+    assert.match(config, new RegExp(`id="${id}"`), `${id} lives in the configuration panel`);
+    assert.doesNotMatch(lobby, new RegExp(`id="${id}"`), `${id} is not in the lobby body`);
+  }
+  assert.match(config, /id="room-config-save"/);
+  assert.match(config, /id="room-config-cancel"/);
+});
+
+test("f11_us2_as5_saving_the_configuration_sends_one_set_room", () => {
+  const state = { stage: "lobby", slot: 0, lobby: configLobby(0), capacity: 4, password_required: false };
+  let draft = roomConfigDraft(state);
+  assert.deepEqual(draft, { settings: { name: "Friday", mode: "normal", size: "small", minutes: 3, friendly_fire: true },
+    capacity: 4, password: "", removePassword: false });
+  draft = roomConfigReducer(draft, { type: "name", value: "Saturday" });
+  draft = roomConfigReducer(draft, { type: "size", value: "large" });
+  draft = roomConfigReducer(draft, { type: "capacity", value: "3" });
+  draft = roomConfigReducer(draft, { type: "password", value: "hunter22" });
+  assert.deepEqual(roomConfigMessage(draft), { type: "SetRoom",
+    settings: { name: "Saturday", mode: "normal", size: "large", minutes: 3, friendly_fire: true }, capacity: 3, password: "hunter22" });
+  const scoped = roomProtocolMessage({ room_id: "r", revision: 7, capacity: 4 }, roomConfigMessage(draft), "save");
+  assert.equal(scoped.expected_revision, 7);
+  assert.equal(scoped.capacity, 3);
+  // a team room needs four seats; no new password and no removal sends no password field
+  let team = roomConfigReducer(roomConfigReducer(roomConfigDraft(state), { type: "capacity", value: 2 }), { type: "mode", value: "team" });
+  assert.equal(team.capacity, 4);
+  assert.equal(Object.hasOwn(roomConfigMessage(team), "password"), false);
+  // removing protection sends an empty password
+  team = roomConfigReducer(team, { type: "removePassword", value: true });
+  assert.equal(roomConfigMessage(team).password, "");
+  // cancel: the draft is dropped and nothing is sent
+  assert.equal(roomConfigReducer(team, { type: "cancel" }), null);
+  assert.equal(roomConfigMessage(null), null);
+});
+
+test("f11_us2_edge_a_bot_filled_room_stays_joinable_until_four_humans_are_in", async () => {
+  const { roomJoinable } = await import("../assets/room.js");
+  const room = { phase: "lobby", capacity: 4, occupied: 4, bots: 3, connected_humans: 1, reserved_humans: 0 };
+  assert.equal(roomJoinable(room), true, "bots give their seat to a joining human");
+  assert.equal(roomJoinable({ ...room, bots: 0, connected_humans: 4 }), false);
+  assert.equal(roomJoinable({ ...room, bots: 1, connected_humans: 2, reserved_humans: 1 }), true);
+  assert.equal(roomJoinable({ ...room, phase: "running" }), false);
+  assert.equal(roomJoinable({ phase: "lobby", capacity: 2, occupied: 1 }), true, "an old host without bot counts");
+  assert.equal(roomJoinable({ phase: "lobby", capacity: 2, occupied: 2 }), false);
 });

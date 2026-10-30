@@ -89,3 +89,76 @@ fn last_bot_is_the_highest_bot_slot() {
     l.clear(2).unwrap();
     assert_eq!(l.last_bot(), Some(1));
 }
+
+// ---- 011 US2: slot-targeted bots and bot fill ----
+
+#[test]
+fn f11_us2_as2_remove_bot_at_clears_exactly_the_targeted_bot() {
+    let mut l = Lobby::from_counts(1, 3).unwrap();
+    assert_eq!(l.remove_bot_at(2), Ok(()));
+    assert_eq!(l.slots[2].controller, Controller::Empty);
+    assert_eq!(l.slots[1].controller, Controller::Bot, "other bots stay");
+    assert_eq!(l.slots[3].controller, Controller::Bot, "other bots stay");
+    assert_eq!(l.slots[0].controller, Controller::Local);
+}
+
+#[test]
+fn f11_us2_remove_bot_at_rejects_a_human_an_empty_or_a_missing_slot() {
+    let mut l = Lobby::from_counts(1, 1).unwrap();
+    assert_eq!(l.remove_bot_at(0), Err(LobbyError::NotABot(0)));
+    assert_eq!(l.slots[0].controller, Controller::Local, "the human stays");
+    assert_eq!(l.remove_bot_at(3), Err(LobbyError::NotABot(3)));
+    assert_eq!(l.remove_bot_at(4), Err(LobbyError::SlotOutOfRange(4)));
+    assert_eq!(l.participants(), 2);
+    assert!(LobbyError::NotABot(3).to_string().contains("not a bot"));
+}
+
+#[test]
+fn f11_us2_as4_add_bot_at_fills_exactly_the_named_empty_seat() {
+    let mut l = Lobby::new();
+    l.assign(0, Controller::Remote, "Ann").unwrap();
+    assert_eq!(l.add_bot_at(3), Ok(()));
+    assert_eq!(l.slots[3].controller, Controller::Bot);
+    assert_eq!(l.slots[3].name, "Bot 4");
+    assert_eq!(
+        l.slots[1].controller,
+        Controller::Empty,
+        "not the first free seat"
+    );
+    assert_eq!(l.add_bot_at(0), Err(LobbyError::SlotTaken(0)));
+    assert_eq!(l.add_bot_at(3), Err(LobbyError::SlotTaken(3)));
+    assert_eq!(l.add_bot_at(4), Err(LobbyError::SlotOutOfRange(4)));
+}
+
+#[test]
+fn f11_us2_as1_fill_vacant_with_bots_fills_every_empty_seat() {
+    let mut l = Lobby::new();
+    l.assign(1, Controller::Remote, "Ann").unwrap();
+    assert_eq!(l.fill_vacant_with_bots(), vec![0, 2, 3]);
+    assert_eq!(l.participants(), 4);
+    for i in [0, 2, 3] {
+        assert_eq!(l.slots[i].controller, Controller::Bot, "slot {i}");
+    }
+    assert_eq!(l.slots[1].controller, Controller::Remote);
+    let before = l.clone();
+    assert_eq!(
+        l.fill_vacant_with_bots(),
+        Vec::<usize>::new(),
+        "no-op when full"
+    );
+    assert_eq!(l, before);
+}
+
+#[test]
+fn f11_us2_fill_up_to_a_capacity_leaves_the_seats_past_it_empty() {
+    let mut l = Lobby::new();
+    l.assign(0, Controller::Remote, "Ann").unwrap();
+    assert_eq!(l.fill_vacant_with_bots_up_to(2), vec![1]);
+    assert_eq!(l.participants(), 2);
+    assert_eq!(l.slots[2].controller, Controller::Empty);
+    assert_eq!(
+        l.fill_vacant_with_bots_up_to(9),
+        vec![2, 3],
+        "past four is four"
+    );
+}

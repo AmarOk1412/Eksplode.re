@@ -83,6 +83,11 @@ export function setRoomMessage(room) {
   return { type: "SetRoom", settings: sanitizeRoom(room) };
 }
 
+/** The request that (re)fills the room list of the Join a game screen. */
+export function listRoomsMessage() {
+  return { type: "ListRooms", scope: "local" };
+}
+
 export function roomProtocolMessage(state, message, requestId) {
   if (["Join", "RoomQuery", "Leave"].includes(message.type)) return null;
   if (message.type === "Hello" || message.type === "Ping") return { ...message };
@@ -131,8 +136,61 @@ export function roomControls(state) {
     enabled,
     capacity: state.capacity ?? 4,
     occupied: state.lobby?.slots?.filter((slot) => slot.controller !== "Empty").length ?? 0,
+    humans: state.lobby?.slots?.filter((slot) => slot.controller === "Local" || slot.controller === "Remote").length ?? 0,
     passwordRequired: state.password_required === true,
     showFriendlyFire: settings.mode === "team",
     note: settings.mode === "chaser" ? "One chaser with bombs and hearts, three runners without bombs. Roles are drawn at the start." : "",
   };
+}
+
+/** Whether the room list lets a player join `room`: bots give their seat to a joining human, so
+ * only humans count against the capacity. */
+export function roomJoinable(room) {
+  if (room?.phase !== "lobby") return false;
+  const humans = Number.isInteger(room.connected_humans)
+    ? room.connected_humans + (room.reserved_humans ?? 0)
+    : (room.occupied ?? 0) - (room.bots ?? 0);
+  return humans < (room.capacity ?? 4);
+}
+
+const CAPACITIES = [1, 2, 3, 4];
+
+/** The draft edited in the configuration panel, from the current lobby. */
+export function roomConfigDraft(state) {
+  const controls = roomControls(state);
+  return { settings: controls.settings, capacity: controls.capacity, password: "", removePassword: false };
+}
+
+/** One change to the configuration draft; `cancel` drops it (nothing is sent). */
+export function roomConfigReducer(draft, action) {
+  if (!draft) return draft;
+  switch (action.type) {
+    case "cancel":
+      return null;
+    case "capacity": {
+      const capacity = Number(action.value);
+      if (!CAPACITIES.includes(capacity) || (draft.settings.mode !== "normal" && capacity !== 4)) return draft;
+      return { ...draft, capacity };
+    }
+    case "password":
+      return { ...draft, password: typeof action.value === "string" ? action.value : "", removePassword: false };
+    case "removePassword":
+      return { ...draft, removePassword: action.value === true, password: action.value === true ? "" : draft.password };
+    default: {
+      const settings = roomReducer(draft.settings, action);
+      if (settings === draft.settings) return draft;
+      // Team and Chaser need the four seats
+      return { ...draft, settings, capacity: settings.mode === "normal" ? draft.capacity : 4 };
+    }
+  }
+}
+
+/** The single `SetRoom` that saving the panel sends; a password only when one was typed (or an
+ * empty one to remove the protection). */
+export function roomConfigMessage(draft) {
+  if (!draft) return null;
+  const message = { type: "SetRoom", settings: sanitizeRoom(draft.settings), capacity: draft.capacity };
+  if (draft.password.length > 0) message.password = draft.password;
+  else if (draft.removePassword) message.password = "";
+  return message;
 }

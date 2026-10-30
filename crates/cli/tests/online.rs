@@ -163,9 +163,10 @@ fn v2_terminal_directory_creates_joins_and_leaves_explicit_rooms() {
     member.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut member, |online| online.stage == Stage::Directory));
     assert_eq!(member.slot, None);
+    // 011: a human leaving before the match gets their seat refilled with a bot
     assert!(pump_until(&mut owner, |online| online.lobby.slots[1]
         .controller
-        == Controller::Empty));
+        == Controller::Bot));
 }
 
 #[test]
@@ -330,8 +331,9 @@ fn terminal_owner_can_change_capacity_and_set_or_remove_a_room_password() {
         .rooms
         .first()
         .is_some_and(|room| room.capacity == 3)));
+    // 011: the seats are bot-filled, so shrinking to 3 keeps the owner and two bots
     assert!(pump_until(&mut owner, |online| screen(online)
-        .contains("Capacity: 1/3")));
+        .contains("Capacity: 3/3")));
 
     owner.handle_key(KeyCode::Char('p'));
     assert_eq!(owner.stage, Stage::Password);
@@ -395,13 +397,16 @@ fn clients_can_toggle_ready_and_the_host_sees_it() {
 fn the_host_adds_and_removes_bots_and_starts() {
     let host = host_with(open_game(1000));
     let mut h = hosting(host);
-    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
-    h.handle_key(KeyCode::Char('b'));
-    assert!(pump_until(&mut h, |o| o.lobby.slots[1].controller == Controller::Bot));
-    h.handle_key(KeyCode::Char('b'));
-    assert!(pump_until(&mut h, |o| o.lobby.slots[2].controller == Controller::Bot));
+    // 011: the room starts bot-filled, so remove bots (highest first) before adding one back
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)
+        && o.lobby.slots[3].controller == Controller::Bot));
+    h.handle_key(KeyCode::Char('x'));
+    assert!(pump_until(&mut h, |o| o.lobby.slots[3].controller == Controller::Empty));
     h.handle_key(KeyCode::Char('x'));
     assert!(pump_until(&mut h, |o| o.lobby.slots[2].controller == Controller::Empty));
+    h.handle_key(KeyCode::Char('b'));
+    assert!(pump_until(&mut h, |o| o.lobby.slots[2].controller == Controller::Bot));
+    assert_eq!(h.lobby.slots[3].controller, Controller::Empty);
     h.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut h, |o| o.stage == Stage::Playing
         && o.observation.is_some()));
@@ -416,11 +421,12 @@ fn only_the_host_can_start() {
     let mut a = joined_at(h.host_addr().unwrap(), "Ann");
     assert!(pump_until(&mut a, |o| o.slot == Some(1)));
     a.handle_key(KeyCode::Enter);
-    a.handle_key(KeyCode::Char('b'));
+    // 011: removing bots stays owner-only (adding is open to members but needs an empty seat)
+    a.handle_key(KeyCode::Char('x'));
     std::thread::sleep(Duration::from_millis(100));
     a.pump();
     assert_eq!(a.stage, Stage::Lobby);
-    assert_eq!(a.lobby.slots[2].controller, Controller::Empty);
+    assert_eq!(a.lobby.slots[3].controller, Controller::Bot);
 }
 
 #[test]
@@ -588,21 +594,29 @@ fn a_refused_command_is_shown_to_the_user() {
     assert!(pump_until(&mut h, |o| o.slot == Some(0)));
     let mut a = joined_at(h.host_addr().unwrap(), "Ann");
     assert!(pump_until(&mut a, |o| o.slot == Some(1)));
-    a.handle_key(KeyCode::Char('b'));
+    // 011: RemoveBot ('x') is still owner-only; AddBot ('b') is open to members but the
+    // bot-filled room has no empty seat, so it is refused as Full
+    a.handle_key(KeyCode::Char('x'));
     assert!(pump_until(&mut a, |o| o.notice.is_some()));
     assert!(screen(&a).contains("Only Hosty"), "{}", screen(&a));
-    assert_eq!(h.lobby.slots[2].controller, Controller::Empty);
+    a.handle_key(KeyCode::Char('b'));
+    assert!(pump_until(&mut a, |o| o.notice.is_some()));
+    assert!(screen(&a).contains("Full"), "{}", screen(&a));
+    assert!(pump_until(&mut h, |o| o.lobby.slots[1].name == "Ann"));
+    assert_eq!(h.lobby.slots[3].controller, Controller::Bot);
 }
 
 #[test]
 fn b_and_x_work_for_a_joined_owner() {
     let host = headless();
     let mut a = joined(&host, "Ann");
-    assert!(pump_until(&mut a, |o| o.slot == Some(0)));
-    a.handle_key(KeyCode::Char('b'));
-    assert!(pump_until(&mut a, |o| o.lobby.slots[1].controller == Controller::Bot));
+    // 011: the room starts bot-filled; 'x' frees the highest bot seat and 'b' refills it
+    assert!(pump_until(&mut a, |o| o.slot == Some(0)
+        && o.lobby.slots[3].controller == Controller::Bot));
     a.handle_key(KeyCode::Char('x'));
-    assert!(pump_until(&mut a, |o| o.lobby.slots[1].controller == Controller::Empty));
+    assert!(pump_until(&mut a, |o| o.lobby.slots[3].controller == Controller::Empty));
+    a.handle_key(KeyCode::Char('b'));
+    assert!(pump_until(&mut a, |o| o.lobby.slots[3].controller == Controller::Bot));
 }
 
 #[test]
@@ -775,8 +789,10 @@ fn us3_as3_a_rejection_is_remembered_so_the_notice_can_stay_visible() {
     firsts[3].handle_key(KeyCode::Enter);
     assert!(pump_until(&mut firsts[3], |online| online.stage == Stage::Directory));
     late.refresh_rooms();
+    // 011: the leaver's seat is refilled with a bot, which a joining human then replaces
     assert!(pump_until(&mut late, |online| online.rooms.len() == 1
-        && online.rooms[0].occupied == 3));
+        && online.rooms[0].occupied == 4
+        && online.rooms[0].connected_humans == 3));
     late.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut late, |online| online.slot == Some(3)));
     assert!(
@@ -1010,4 +1026,23 @@ fn f4_us4_as9_the_chaser_lobby_says_the_roles_are_drawn_at_the_start() {
     assert!(s.contains("Chaser"), "{s}");
     assert!(s.contains("roles are drawn at the start"), "{s}");
     assert!(!s.contains("[team"), "{s}");
+}
+
+#[test]
+fn f11_the_room_list_counts_humans_and_shows_the_bots_apart() {
+    // 011: a new room is bot-filled, so occupied seats alone would read as a full room
+    let host = host_with(open_game(1000));
+    let mut owner = hosting(host);
+    assert!(pump_until(&mut owner, |online| online.stage
+        == Stage::Lobby
+        && online.slot == Some(0)));
+    let mut browser = Online::directory(
+        Client::connect_unjoined(&owner.host_addr().unwrap().to_string()).unwrap(),
+        "Observer".into(),
+        KeyBindings::default_for_slot(0),
+    );
+    assert!(pump_until(&mut browser, |online| online.stage == Stage::Directory));
+    browser.refresh_rooms();
+    assert!(pump_until(&mut browser, |online| screen(online)
+        .contains("1/4 +3 bots")));
 }

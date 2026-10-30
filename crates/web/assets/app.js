@@ -34,8 +34,8 @@ import {
 import {
   COLOUR_CSS,
   COLOUR_NAMES,
+  COSTUMES,
   FACES,
-  GENDERS,
   HEADS,
   defaultLook,
   editorReducer,
@@ -64,6 +64,11 @@ import {
   sanitizeRoom,
   saveRoom,
   setRoomMessage,
+  listRoomsMessage,
+  roomConfigDraft,
+  roomConfigMessage,
+  roomConfigReducer,
+  roomJoinable,
 } from "./room.js";
 
 const DIRECTION_ACTIONS = { up: "Up", down: "Down", left: "Left", right: "Right" };
@@ -127,8 +132,8 @@ export class KeyTracker {
 export function initialState() {
   return {
     stage: "idle",
-    // "room" shows the room creation menu, "join" the name and look screen
-    menu: "join",
+    // "main" is the main menu, "room" the room creation form, "directory"/"join" the room list
+    menu: "main",
     room: null,
     slot: null,
     lobby: null,
@@ -150,6 +155,8 @@ export function initialState() {
     rooms: [],
     sources: [],
     selectedRoom: null,
+    // who holds which seat (`RoomUpdated.memberships`), to kick a human from the lobby
+    memberships: [],
   };
 }
 
@@ -219,7 +226,7 @@ export function reduce(state, event) {
         return { ...state, stage: "closed", notice: "This server needs a compatible room protocol version." };
       }
       return { ...state, protocol: 2, server_id: event.server_id, server_epoch: event.server_epoch,
-        stage: "directory", menu: "directory", notice: "" };
+        stage: "directory", notice: "" };
     case "Rooms":
       return { ...state, rooms: Array.isArray(event.rooms) ? event.rooms : [], sources: event.sources ?? [],
         stage: state.room_id ? state.stage : "directory" };
@@ -231,7 +238,10 @@ export function reduce(state, event) {
       return { ...state, menu: "room", selectedRoom: null, password_required: false,
         room: { open: false, settings: sanitizeRoom(null), humans: 0 } };
     case "show-directory":
-      return { ...state, stage: "directory", menu: "directory", selectedRoom: null, room: null, notice: "" };
+      return { ...state, stage: state.stage === "idle" || state.stage === "connecting" ? state.stage : "directory",
+        menu: "directory", selectedRoom: null, room: null, notice: "" };
+    case "show-main":
+      return { ...state, menu: "main", selectedRoom: null, room: null, notice: "" };
     case "LeftRoom":
     case "Removed":
     case "RoomClosed":
@@ -275,6 +285,7 @@ export function reduce(state, event) {
       const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
       const lobby = Object.hasOwn(event, "owner_slot") ? { ...event.lobby, owner_slot: event.owner_slot } : event.lobby;
       return { ...state, stage, lobby, looks: looksOf(event, state.looks),
+        memberships: Array.isArray(event.memberships) ? event.memberships : state.memberships,
         revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity,
         password_required: event.password_required ?? state.password_required };
     }
@@ -300,6 +311,62 @@ export function reduce(state, event) {
     default:
       return state;
   }
+}
+
+/** The three actions of the main menu, in order; each one is an event for `reduce` (Options is
+ * handled by the page, which opens the Options screen). */
+export const MAIN_MENU_ACTIONS = [
+  { id: "menu-create", label: "Create new game", event: { type: "new-room" } },
+  { id: "menu-join", label: "Join a game", event: { type: "show-directory" } },
+  { id: "menu-options", label: "Options", event: { type: "open-options", tab: "customize" } },
+];
+
+/** The tabs of the Options screen, in order, with the ids of their tab button and panel. */
+export const OPTIONS_TABS = [
+  { id: "customize", label: "Customize", tab: "tab-customize", panel: "options-customize" },
+  { id: "sound", label: "Sound", tab: "tab-sound", panel: "sound-panel" },
+  { id: "controls", label: "Controls", tab: "tab-controls", panel: "controls-panel" },
+];
+
+/** The pause menu entries that open Options, and the tab each one lands on. */
+export const HUB_OPTIONS_TABS = { "hub-sound": "sound", "hub-controls": "controls" };
+
+/** State of the Options screen: `null` while closed, otherwise the active tab. The panels are
+ * only hidden and shown, so whatever is being edited in one survives a switch to another. */
+export function optionsReducer(options, action) {
+  const valid = (tab) => OPTIONS_TABS.some((t) => t.id === tab);
+  switch (action.type) {
+    case "open":
+      return { tab: valid(action.tab) ? action.tab : OPTIONS_TABS[0].id };
+    case "tab":
+      return options && valid(action.tab) && action.tab !== options.tab ? { ...options, tab: action.tab } : options;
+    case "close":
+      return null;
+    default:
+      return options;
+  }
+}
+
+/** Which Options tab panel is visible. */
+export function optionsView(options) {
+  return Object.fromEntries(OPTIONS_TABS.map((t) => [t.id, options?.tab === t.id]));
+}
+
+/** Which top-level screen is visible for `state` (pure, so the menu flow is testable). */
+export function screens(state) {
+  const inRoom = ["lobby", "playing", "results"].includes(state.stage);
+  const closed = state.stage === "closed";
+  const roomPanel = !inRoom && !closed && state.menu === "room" && !state.room_id;
+  const directoryPanel = !inRoom && !closed && (state.menu === "directory" || state.menu === "join");
+  return {
+    mainMenu: !inRoom && !roomPanel && !directoryPanel,
+    roomPanel,
+    directoryPanel,
+    joinPanel: directoryPanel,
+    lobbyPanel: state.stage === "lobby",
+    gamePanel: state.stage === "playing",
+    resultsPanel: state.stage === "results",
+  };
 }
 
 /** Lowest slot held by a human: the only one that may start the match. */
@@ -358,11 +425,29 @@ export function devMessages() {
   };
 }
 
-/** The lobby as cards, one per slot: banner, name caption and the owner/you/ready marks. */
-export function lobbyCards(lobby, you) {
+/**
+ * The lobby as cards, one per slot: banner, name caption and the owner/you/ready marks, plus the
+ * seat controls: `remove` is the message of the owner's cross (kick a human, remove a bot), `add`
+ * the message of the "+" on an empty seat (anybody), `closed` an empty seat past the capacity.
+ * `context` carries the room capacity and the memberships (to name the human to kick).
+ */
+export function lobbyCards(lobby, you, context = {}) {
   const owner = lobbyOwner(lobby);
+  const youOwn = owner !== null && owner === you;
+  const capacity = Number.isInteger(context.capacity) ? context.capacity : 4;
+  const occupied = (lobby?.slots ?? []).filter((s) => s.controller !== "Empty").length;
   return (lobby?.slots ?? []).map((slot, i) => {
     const empty = slot.controller === "Empty";
+    const closed = empty && i >= capacity;
+    let remove = null;
+    if (youOwn && !empty && i !== you) {
+      if (slot.controller === "Bot") remove = { type: "RemoveBot", slot: i };
+      else {
+        const member = (context.memberships ?? []).find((m) => m.slot === i);
+        if (member?.membership_id) remove = { type: "RemovePlayer", membership_id: member.membership_id };
+      }
+    }
+    const add = empty && !closed && occupied < capacity ? { type: "AddBot", slot: i } : null;
     const name = empty ? "empty" : slot.controller === "Bot" ? "bot" : slot.name || `player ${i + 1}`;
     const team = lobby?.settings?.mode === "team" ? TEAM_LETTERS[i >> 1] : null;
     const marks = [i === you ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : "", team ? `team ${team}` : ""].filter(Boolean);
@@ -370,12 +455,31 @@ export function lobbyCards(lobby, you) {
       slot: i,
       team,
       empty,
-      banner: empty ? "EMPTY" : `PLAYER ${i + 1}`,
+      banner: closed ? "CLOSED" : empty ? "EMPTY" : `PLAYER ${i + 1}`,
       name,
       marks,
       caption: marks.length ? `${name} (${marks.join(", ")})` : name,
+      remove,
+      add,
+      closed,
     };
   });
+}
+
+/** The lobby action row: exactly Ready (everybody) then Start (shown to the owner only). */
+export function lobbyActions(state) {
+  const owner = lobbyOwner(state.lobby);
+  const isOwner = owner !== null && owner === state.slot;
+  const mine = state.lobby?.slots?.[state.slot]?.ready === true;
+  return [
+    { id: "ready", label: "Ready", visible: true, pressed: mine, message: { type: "SetReady", ready: !mine } },
+    { id: "start", label: "Start", visible: isOwner, message: { type: "Start" } },
+  ];
+}
+
+/** The lobby header icons: room configuration for the owner only, leave for everybody. */
+export function lobbyHeader(state) {
+  return { config: roomControls(state).enabled, leave: true };
 }
 
 /** Calls `paint(seconds)` on every animation frame while it is active, and not a frame longer. */
@@ -448,43 +552,47 @@ export function hudRows(state) {
   return rows;
 }
 
-/** Final participant standings and stats retained from the last game snapshot. */
+/** Whether `player` (in slot `i`) is on the winning side of `outcome`: the winner, the winning
+ * team (fallen members included), the chaser when the chaser wins, the surviving runners when
+ * the runners win; nobody in a draw. */
+function onWinningSide(outcome, i, player) {
+  if (outcome && typeof outcome === "object" && "Winner" in outcome) return outcome.Winner === i;
+  if (outcome && typeof outcome === "object" && "TeamWin" in outcome) return player.team === outcome.TeamWin;
+  if (outcome === "ChaserWins") return player.role === "Chaser";
+  if (outcome === "RunnersWin") return player.role === "Runner" && player.alive === true;
+  return false;
+}
+
+const count = (value) => (Number.isInteger(value) && value >= 0 ? value : 0);
+const order = (value) => (Number.isInteger(value) && value > 0 ? value : null);
+
+/**
+ * The scoreboard: one row per participant with only name, kills and bombs placed, ranked by
+ * survival (FR-017): the winning side first, then whoever was still alive, then the others in
+ * reverse elimination order (the core's `eliminated_order`); ties by kills, then by slot.
+ */
 export function resultRows(state) {
   const result = state.result;
   const players = result?.observation?.players;
   const slots = result?.lobby?.slots;
   if (!Array.isArray(players) || !Array.isArray(slots)) return [];
-  const outcome = result.outcome;
-  const winningTeam = outcome && typeof outcome === "object" && "TeamWin" in outcome ? outcome.TeamWin : null;
-  const winner = outcome && typeof outcome === "object" && "Winner" in outcome ? outcome.Winner : null;
-  const chaserWins = outcome === "ChaserWins";
-  const runnersWin = outcome === "RunnersWin";
-  const base = result.observation.config?.base_move_cooldown ?? 4;
-  const hz = result.observation.config?.tick_hz > 0 ? result.observation.config.tick_hz : 20;
-
-  return slots.flatMap((slot, i) => {
+  const ranked = slots.flatMap((slot, i) => {
     const player = players[i];
     if (slot.controller === "Empty" || !player) return [];
-    let standing;
-    if (outcome === "Draw") standing = "Draw";
-    else if (winner !== null) standing = i === winner ? "Winner" : player.alive ? "Survived" : "Eliminated";
-    else if (winningTeam !== null) standing = player.team === winningTeam ? "Winner" : player.alive ? "Survived" : "Eliminated";
-    else if (chaserWins) standing = player.role === "Chaser" ? "Winner" : player.alive ? "Survived" : "Eliminated";
-    else if (runnersWin) standing = player.role === "Runner" && player.alive ? "Winner" : player.role === "Chaser" ? "Defeated" : "Eliminated";
-    else standing = player.alive ? "Survived" : "Eliminated";
-
     return [{
       slot: i,
-      label: slotName(result.lobby, i),
-      standing,
-      team: typeof player.team === "number" ? TEAM_LETTERS[player.team] ?? null : null,
-      role: player.role === "Chaser" ? "Chaser" : player.role === "Runner" ? "Runner" : null,
-      bombs: `${player.bombs_active}/${player.bombs_max}`,
-      range: player.range,
-      speed: base + 1 - player.move_cooldown,
-      effects: effectsOf(player, hz),
+      winner: onWinningSide(result.outcome, i, player),
+      eliminated: order(player.eliminated_order),
+      row: { slot: i, label: slotName(result.lobby, i), kills: count(player.kills), bombsPlaced: count(player.bombs_placed) },
     }];
   });
+  ranked.sort((a, b) =>
+    Number(b.winner) - Number(a.winner) ||
+    Number(a.eliminated !== null) - Number(b.eliminated !== null) ||
+    (b.eliminated ?? 0) - (a.eliminated ?? 0) ||
+    b.row.kills - a.row.kills ||
+    a.slot - b.slot);
+  return ranked.map((entry) => entry.row);
 }
 
 /** Short names of what is active on a player: the punch and the malus with the seconds left. */
@@ -621,6 +729,11 @@ function start() {
   const $ = (id) => document.getElementById(id);
   const el = {
     notice: $("notice"),
+    mainMenu: $("main-menu"),
+    menuCreate: $("menu-create"),
+    menuJoin: $("menu-join"),
+    menuOptions: $("menu-options"),
+    directoryBack: $("directory-back"),
     directoryPanel: $("directory-panel"),
     directoryRooms: $("directory-rooms"),
     directoryStatus: $("directory-status"),
@@ -658,8 +771,12 @@ function start() {
     lobbyFf: $("lobby-ff"),
     lobbyPasswordStatus: $("lobby-password-status"),
     lobbyPassword: $("lobby-password"),
-    lobbyPasswordSet: $("lobby-password-set"),
     lobbyPasswordRemove: $("lobby-password-remove"),
+    lobbyPasswordRemoveLabel: $("lobby-password-remove-label"),
+    roomConfig: $("room-config"),
+    roomConfigOpen: $("room-config-open"),
+    roomConfigSave: $("room-config-save"),
+    roomConfigCancel: $("room-config-cancel"),
     lobbyPanel: $("lobby-panel"),
     gamePanel: $("game-panel"),
     name: $("name"),
@@ -667,8 +784,6 @@ function start() {
     retry: $("retry"),
     slots: $("slots"),
     start: $("start"),
-    addBot: $("add-bot"),
-    removeBot: $("remove-bot"),
     ready: $("ready"),
     canvas: $("view"),
     touchControls: $("touch-controls"),
@@ -686,31 +801,28 @@ function start() {
     editor: $("editor"),
     preview: $("preview"),
     swatches: $("swatches"),
-    gender: $("gender"),
     head: $("head"),
     face: $("face"),
+    costume: $("costume"),
     randomLook: $("random-look"),
-    doneLook: $("done-look"),
-    changeLook: $("change-look"),
     soundButton: $("sound-button"),
-    soundPanel: $("sound-panel"),
+    optionsPanel: $("options-panel"),
+    optionsClose: $("options-close"),
+    optionsTabs: OPTIONS_TABS.map((t) => ({ ...t, button: $(t.tab), root: $(t.panel) })),
     hubSound: $("hub-sound"),
     hubControls: $("hub-controls"),
     hubDev: $("hub-dev"),
     hubResume: $("hub-resume"),
     controlsButton: $("controls-button"),
-    controlsPanel: $("controls-panel"),
     controlsStatus: $("controls-status"),
     controlBindings: [...document.querySelectorAll("[data-bind-action]")],
     controlsReset: $("controls-reset"),
-    controlsClose: $("controls-close"),
     controllerSelect: $("controller-select"),
     controllerStatus: $("controller-status"),
     musicVolume: $("music-volume"),
     effectsVolume: $("effects-volume"),
     mute: $("mute"),
     testSound: $("test-sound"),
-    closeSound: $("close-sound"),
     devPanel: $("dev-panel"),
     devHint: $("dev-hint"),
     devPause: $("dev-pause"),
@@ -750,6 +862,8 @@ function start() {
   let oskState = null;
   let oskTarget = null;
   let oskAccepted = false;
+  let configDraft = null;
+  let options = null;
   const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
 
   function touchDevice() {
@@ -1010,22 +1124,20 @@ function start() {
 
   function navigationRoot() {
     if (navigationLayers.top) return navigationLayers.top.root;
-    if (!el.controlsPanel.hidden) return el.controlsPanel;
-    if (!el.soundPanel.hidden) return el.soundPanel;
-    for (const root of [el.roomPanel, el.directoryPanel, el.joinPanel, el.editor, el.lobbyPanel, el.resultsPanel, el.gamePanel, el.devPanel]) {
+    for (const root of [el.mainMenu, el.roomPanel, el.directoryPanel, el.joinPanel, el.lobbyPanel, el.resultsPanel, el.gamePanel, el.devPanel]) {
       if (root && !root.hidden) return root;
     }
     return null;
   }
 
   function hasNavigationLayer() {
-    return navigationLayers.top !== null || !el.soundPanel.hidden || !el.controlsPanel.hidden ||
+    return navigationLayers.top !== null ||
       Boolean(el.hub && !el.hub.hidden) || Boolean(el.osk && !el.osk.hidden);
   }
 
   function syncLayerInert() {
     const root = navigationLayers.top?.root ??
-      (!el.controlsPanel.hidden ? el.controlsPanel : !el.soundPanel.hidden ? el.soundPanel : !el.resultsPanel.hidden ? el.resultsPanel : null);
+      (!el.resultsPanel.hidden ? el.resultsPanel : null);
     if (!el.app) return;
     for (const child of el.app.children) child.inert = Boolean(root && child !== root);
   }
@@ -1128,6 +1240,11 @@ function start() {
       oskState = null;
       oskTarget = null;
     }
+    if (closed.closed.id === "room-config") configDraft = null;
+    if (closed.closed.id === "options") {
+      options = optionsReducer(options, { type: "close" });
+      stopCapture();
+    }
     if (closed.closed.id !== "dev") closed.closed.root.hidden = true;
     else el.devPanel.classList.remove("navigation-layer");
     if (navigationLayers.top?.id === "hub") navigationLayers.top.root.hidden = false;
@@ -1144,8 +1261,7 @@ function start() {
     } else if (state.stage !== "playing") {
       focusFirst();
     }
-    el.soundButton.setAttribute("aria-expanded", String(navigationLayers.has("sound")));
-    el.controlsButton.setAttribute("aria-expanded", String(navigationLayers.has("controls")));
+    syncOptionsButtons();
     return true;
   }
 
@@ -1157,9 +1273,6 @@ function start() {
     }
     if (input.back) {
       if (navigationLayers.top) closeNavigationLayer();
-      else if (state.stage === "lobby" && editing) el.doneLook.click();
-      else if (!el.controlsPanel.hidden) el.controlsClose.click();
-      else if (!el.soundPanel.hidden) el.closeSound.click();
       else openMenuHub();
       return;
     }
@@ -1189,24 +1302,18 @@ function start() {
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
     const resultsVisible = state.stage === "results";
-    const roomMenu = ["idle", "directory", "joining"].includes(state.stage) && state.menu === "room" && !state.room_id;
-    el.roomPanel.hidden = !roomMenu;
-    el.directoryPanel.hidden = inLobby || playing || resultsVisible || roomMenu;
-    el.joinPanel.hidden = inLobby || playing || resultsVisible || roomMenu;
-    el.lobbyPanel.hidden = !inLobby;
-    el.gamePanel.hidden = !playing;
-    el.resultsPanel.hidden = !resultsVisible;
+    const visible = screens(state);
+    el.mainMenu.hidden = !visible.mainMenu;
+    el.roomPanel.hidden = !visible.roomPanel;
+    el.directoryPanel.hidden = !visible.directoryPanel;
+    el.joinPanel.hidden = !visible.joinPanel;
+    el.lobbyPanel.hidden = !visible.lobbyPanel;
+    el.gamePanel.hidden = !visible.gamePanel;
+    el.resultsPanel.hidden = !visible.resultsPanel;
     el.resultsTitle.textContent = state.notice || "Round complete";
     el.resultsRows.replaceChildren(...resultRows(state).map((row) => {
       const tr = document.createElement("tr");
-      const values = [
-        `${row.label}${row.team ? ` (Team ${row.team})` : ""}${row.role ? ` (${row.role})` : ""}`,
-        row.standing,
-        row.bombs,
-        String(row.range),
-        String(row.speed),
-        row.effects.length > 0 ? row.effects.join(", ") : "None",
-      ];
+      const values = [row.label, String(row.kills), String(row.bombsPlaced)];
       tr.append(...values.map((value) => {
         const td = document.createElement("td");
         td.textContent = value;
@@ -1216,10 +1323,7 @@ function start() {
     }));
     syncTouchControls();
     if (!playing) el.banner.hidden = true;
-    el.editor.hidden = roomMenu || resultsVisible || (!(!inLobby && !playing) && !(inLobby && editing));
     renderRoom();
-    el.doneLook.hidden = !inLobby;
-    if (!el.editor.hidden) renderEditor();
     el.join.hidden = state.stage === "closed";
     el.retry.hidden = state.stage !== "closed";
     el.join.disabled = state.protocol !== 2 || !state.selectedRoom || state.stage === "joining";
@@ -1229,14 +1333,18 @@ function start() {
     el.hubLeave.hidden = !state.room_id;
     renderDirectory();
 
-    const owner = lobbyOwner(state.lobby);
-    const isOwner = owner !== null && owner === state.slot;
-    el.start.disabled = !isOwner;
-    el.addBot.disabled = !isOwner;
-    el.removeBot.disabled = !isOwner;
+    const [readyAction, startAction] = lobbyActions(state);
+    el.ready.setAttribute("aria-pressed", String(readyAction.pressed));
+    el.start.hidden = !startAction.visible;
+    const header = lobbyHeader(state);
+    el.roomConfigOpen.hidden = !header.config;
+    // ownership moved (or the match started) while the panel was open: close it, edits are dropped
+    if (!header.config && navigationLayers.has("room-config")) {
+      while (navigationLayers.has("room-config")) closeNavigationLayer();
+    }
     lobbyCanvases = [];
     el.slots.replaceChildren(
-      ...lobbyCards(state.lobby, state.slot).map((c) => {
+      ...lobbyCards(state.lobby, state.slot, { capacity: state.capacity, memberships: state.memberships }).map((c) => {
         const li = document.createElement("li");
         li.className = "slot";
         const card = document.createElement("div");
@@ -1259,6 +1367,33 @@ function start() {
         banner.className = "banner";
         banner.textContent = c.banner;
         card.append(banner);
+        if (c.remove) {
+          const cross = document.createElement("button");
+          cross.type = "button";
+          cross.className = "seat-control seat-remove";
+          cross.dataset.navKey = `seat-remove-${c.slot}`;
+          cross.textContent = "\u00d7";
+          const what = c.remove.type === "RemoveBot" ? `Remove the bot from seat ${c.slot + 1}` : `Kick ${c.name} from the room`;
+          cross.setAttribute("aria-label", what);
+          cross.title = what;
+          const message = c.remove;
+          cross.addEventListener("click", () => send(message));
+          card.append(cross);
+        }
+        if (c.add) {
+          const plus = document.createElement("button");
+          plus.type = "button";
+          plus.className = "seat-control seat-add";
+          plus.dataset.navKey = `seat-add-${c.slot}`;
+          plus.textContent = "+";
+          const what = `Add a bot to seat ${c.slot + 1}`;
+          plus.setAttribute("aria-label", what);
+          plus.title = what;
+          const message = c.add;
+          plus.addEventListener("click", () => send(message));
+          card.append(plus);
+        }
+        if (c.closed) card.classList.add("closed");
         li.append(card);
         if (!c.empty) lobbyCanvases.push([portrait, c.slot]);
         const caption = document.createElement("span");
@@ -1273,7 +1408,7 @@ function start() {
     paintLobby(0);
     animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion());
     el.timer.textContent = timerText(state.observation);
-    if (renderer && !logoPainted && !el.joinPanel.hidden) {
+    if (renderer && !logoPainted && !el.mainMenu.hidden) {
       paintPortrait(el.logo, 0, 0);
       logoPainted = true;
     }
@@ -1376,7 +1511,7 @@ function start() {
     if (state.protocol !== 2 || state.room_id || state.stage === "closed") return;
     directoryPages = [];
     directoryRestarted = false;
-    directoryRequest = send({ type: "ListRooms", scope: "local" });
+    directoryRequest = send(listRoomsMessage());
     updateUi();
   }
 
@@ -1396,11 +1531,13 @@ function start() {
       select.dataset.navKey = `room-${room.server_epoch}-${room.room_id}`;
       select.title = `${room.server_id} / ${room.room_id}`;
       select.setAttribute("aria-pressed", String(state.selectedRoom?.room_id === room.room_id));
-      select.disabled = room.phase !== "lobby" || room.occupied >= room.capacity;
+      select.disabled = !roomJoinable(room);
       const name = document.createElement("strong");
       name.textContent = room.name;
       const detail = document.createElement("span");
-      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${room.occupied}/${room.capacity} - ${room.phase}${room.password_required ? " - password" : ""} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
+      const humans = Number.isInteger(room.connected_humans) ? room.connected_humans + (room.reserved_humans ?? 0) : room.occupied;
+      const bots = room.bots > 0 ? ` + ${room.bots} bot${room.bots === 1 ? "" : "s"}` : "";
+      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${humans}/${room.capacity} players${bots} - ${room.phase}${room.password_required ? " - password" : ""} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
       select.append(name, detail);
       select.addEventListener("click", () => dispatch({ type: "select-room", room }));
       item.append(select);
@@ -1500,25 +1637,7 @@ function start() {
     const controls = roomControls(state);
     el.roomSummary.textContent = state.stage === "lobby" ? controls.summary : "";
     el.roomNote.textContent = state.stage === "lobby" ? controls.note : "";
-    const s = controls.settings;
-    if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
-    el.lobbyCapacity.value = String(controls.capacity);
-    for (const option of el.lobbyCapacity.options) {
-      option.disabled = Number(option.value) < controls.occupied ||
-        (s.mode !== "normal" && Number(option.value) !== 4);
-    }
-    el.lobbyMode.value = s.mode;
-    el.lobbySize.value = s.size;
-    el.lobbyMinutes.value = String(s.minutes);
-    el.lobbyFf.checked = s.friendly_fire;
-    el.lobbyFfLabel.hidden = !controls.showFriendlyFire;
-    for (const control of [el.lobbyName, el.lobbyCapacity, el.lobbyMode, el.lobbySize, el.lobbyMinutes, el.lobbyFf]) {
-      control.disabled = !controls.enabled;
-    }
-    el.lobbyPasswordStatus.textContent = controls.passwordRequired ? "Password required" : "No password";
-    el.lobbyPassword.disabled = !controls.enabled;
-    el.lobbyPasswordSet.disabled = !controls.enabled || el.lobbyPassword.value.length === 0;
-    el.lobbyPasswordRemove.disabled = !controls.enabled || !controls.passwordRequired;
+    renderRoomConfig();
     const room = state.room;
     el.joinRoom.hidden = !(room && room.open);
     el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}${state.selectedRoom ? ` / ${state.selectedRoom.room_id}` : ""}` : "";
@@ -1530,26 +1649,35 @@ function start() {
     if (["idle", "directory"].includes(state.stage) && state.menu === "room") renderRoomMenu();
   }
 
+  // ---- the configuration panel: a local draft (`configDraft`), sent as one SetRoom on Save ----
+
+  function renderRoomConfig() {
+    if (!configDraft) return;
+    const controls = roomControls(state);
+    const s = configDraft.settings;
+    if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
+    el.lobbyCapacity.value = String(configDraft.capacity);
+    for (const option of el.lobbyCapacity.options) {
+      option.disabled = Number(option.value) < controls.humans || (s.mode !== "normal" && Number(option.value) !== 4);
+    }
+    el.lobbyMode.value = s.mode;
+    el.lobbySize.value = s.size;
+    el.lobbyMinutes.value = String(s.minutes);
+    el.lobbyFf.checked = s.friendly_fire;
+    el.lobbyFfLabel.hidden = s.mode !== "team";
+    el.lobbyPasswordStatus.textContent = controls.passwordRequired ? "Password required" : "No password";
+    if (document.activeElement !== el.lobbyPassword) el.lobbyPassword.value = configDraft.password;
+    el.lobbyPasswordRemoveLabel.hidden = !controls.passwordRequired;
+    el.lobbyPasswordRemove.checked = configDraft.removePassword;
+  }
+
+  function editRoomConfig(action) {
+    configDraft = roomConfigReducer(configDraft, action);
+    renderRoomConfig();
+  }
+
   const roomControlsSummary = (settings) => roomControls({ stage: "lobby", slot: null, lobby: { slots: [], settings } }).summary;
 
-  function changeRoom(field, value) {
-    if (state.stage !== "lobby") return;
-    const settings = sanitizeRoom(state.lobby?.settings);
-    let capacity = state.capacity;
-    if (field === "capacity") {
-      capacity = Number(value);
-    } else {
-      settings[field] = value;
-      if (settings.mode !== "normal" && capacity !== 4) capacity = 4;
-    }
-    send({ ...setRoomMessage(settings), capacity });
-  }
-  function changeRoomPassword(password) {
-    if (state.stage !== "lobby" || !roomControls(state).enabled) return;
-    send({ type: "SetRoom", settings: sanitizeRoom(state.lobby?.settings), capacity: state.capacity, password });
-    el.lobbyPassword.value = "";
-    updateUi();
-  }
   el.roomName.addEventListener("input", () => {
     roomDraft = roomReducer(roomDraft, { type: "name", value: el.roomName.value });
   });
@@ -1560,27 +1688,49 @@ function start() {
   el.roomMinutes.addEventListener("change", () => editRoom({ type: "minutes", value: el.roomMinutes.value }));
   el.roomFf.addEventListener("change", () => editRoom({ type: "friendly_fire", value: el.roomFf.checked }));
   el.roomCreate.addEventListener("click", createSelectedRoom);
-  el.roomBack.addEventListener("click", () => { dispatch({ type: "show-directory" }); refreshDirectory(); });
+  el.roomBack.addEventListener("click", () => dispatch({ type: "show-main" }));
   el.directoryCreate.addEventListener("click", () => dispatch({ type: "new-room" }));
+  el.directoryBack.addEventListener("click", () => dispatch({ type: "show-main" }));
+  el.menuCreate.addEventListener("click", () => dispatch(MAIN_MENU_ACTIONS[0].event));
+  el.menuJoin.addEventListener("click", () => {
+    dispatch(MAIN_MENU_ACTIONS[1].event);
+    refreshDirectory();
+  });
   el.directoryRefresh.addEventListener("click", refreshDirectory);
   for (const opener of [el.leaveRoom, el.hubLeave]) {
     opener.addEventListener("click", () => openNavigationLayer("leave", el.leavePanel, opener));
   }
   el.leaveCancel.addEventListener("click", closeNavigationLayer);
   el.leaveConfirm.addEventListener("click", () => { closeNavigationLayer(); send({ type: "LeaveRoom" }); });
-  el.lobbyName.addEventListener("change", () => changeRoom("name", el.lobbyName.value));
-  el.lobbyCapacity.addEventListener("change", () => changeRoom("capacity", el.lobbyCapacity.value));
-  el.lobbyMode.addEventListener("change", () => changeRoom("mode", el.lobbyMode.value));
-  el.lobbySize.addEventListener("change", () => changeRoom("size", el.lobbySize.value));
-  el.lobbyMinutes.addEventListener("change", () => changeRoom("minutes", Number(el.lobbyMinutes.value)));
-  el.lobbyFf.addEventListener("change", () => changeRoom("friendly_fire", el.lobbyFf.checked));
+  el.roomConfigOpen.addEventListener("click", () => {
+    if (!lobbyHeader(state).config) return;
+    configDraft = roomConfigDraft(state);
+    el.lobbyPassword.value = "";
+    renderRoomConfig();
+    openNavigationLayer("room-config", el.roomConfig, el.roomConfigOpen);
+  });
+  el.lobbyName.addEventListener("input", () => editRoomConfig({ type: "name", value: el.lobbyName.value }));
+  el.lobbyCapacity.addEventListener("change", () => editRoomConfig({ type: "capacity", value: el.lobbyCapacity.value }));
+  el.lobbyMode.addEventListener("change", () => editRoomConfig({ type: "mode", value: el.lobbyMode.value }));
+  el.lobbySize.addEventListener("change", () => editRoomConfig({ type: "size", value: el.lobbySize.value }));
+  el.lobbyMinutes.addEventListener("change", () => editRoomConfig({ type: "minutes", value: el.lobbyMinutes.value }));
+  el.lobbyFf.addEventListener("change", () => editRoomConfig({ type: "friendly_fire", value: el.lobbyFf.checked }));
   el.lobbyPassword.addEventListener("input", () => {
-    el.lobbyPasswordSet.disabled = !roomControls(state).enabled || el.lobbyPassword.value.length === 0;
+    configDraft = roomConfigReducer(configDraft, { type: "password", value: el.lobbyPassword.value });
+    el.lobbyPasswordRemove.checked = false;
   });
-  el.lobbyPasswordSet.addEventListener("click", () => {
-    if (el.lobbyPassword.value.length > 0) changeRoomPassword(el.lobbyPassword.value);
+  el.lobbyPasswordRemove.addEventListener("change", () => editRoomConfig({ type: "removePassword", value: el.lobbyPasswordRemove.checked }));
+  el.roomConfigSave.addEventListener("click", () => {
+    const message = roomConfigMessage(configDraft);
+    if (message && lobbyHeader(state).config) send(message);
+    el.lobbyPassword.value = "";
+    closeNavigationLayer();
   });
-  el.lobbyPasswordRemove.addEventListener("click", () => changeRoomPassword(""));
+  el.roomConfigCancel.addEventListener("click", () => {
+    configDraft = roomConfigReducer(configDraft, { type: "cancel" });
+    el.lobbyPassword.value = "";
+    closeNavigationLayer();
+  });
 
   el.join.addEventListener("click", joinSelectedRoom);
   el.name.addEventListener("keydown", (e) => {
@@ -1593,17 +1743,12 @@ function start() {
     connect();
   });
     el.start.addEventListener("click", () => {
-      send({ type: "Start" });
+      send(lobbyActions(state)[1].message);
     });
     el.returnToLobby.addEventListener("click", () => {
       dispatch({ type: "return-to-lobby" });
     });
-  el.addBot.addEventListener("click", () => send({ type: "AddBot" }));
-  el.removeBot.addEventListener("click", () => send({ type: "RemoveBot" }));
-  el.ready.addEventListener("click", () => {
-    const mine = state.lobby?.slots[state.slot]?.ready ?? false;
-    send({ type: "SetReady", ready: !mine });
-  });
+  el.ready.addEventListener("click", () => send(lobbyActions(state)[0].message));
 
   // ---- the character editor: the draft is saved on this device and used by the next Join ----
 
@@ -1614,20 +1759,66 @@ function start() {
   el.musicVolume.value = String(Math.round(audio.settings.music * 100));
   el.effectsVolume.value = String(Math.round(audio.settings.effects * 100));
   el.mute.checked = audio.settings.muted;
+  // ---- the Options screen: one dialog with the Customize, Sound and Controls tabs ----
+  function syncOptionsButtons() {
+    const view = optionsView(navigationLayers.has("options") ? options : null);
+    el.soundButton.setAttribute("aria-expanded", String(view.sound));
+    el.controlsButton.setAttribute("aria-expanded", String(view.controls));
+  }
+
+  function renderOptions() {
+    const view = optionsView(options);
+    for (const tab of el.optionsTabs) {
+      tab.root.hidden = !view[tab.id];
+      tab.button.setAttribute("aria-selected", String(view[tab.id]));
+      tab.button.tabIndex = view[tab.id] ? 0 : -1;
+    }
+    if (view.controls) renderControllerPanel();
+    if (view.customize) renderEditor();
+    syncOptionsButtons();
+  }
+
+  /** Opens Options on `tab` (or switches to it when Options is already open). */
+  function openOptions(tab, opener = document.activeElement) {
+    if (navigationLayers.has("options")) {
+      selectOptionsTab(tab);
+      return true;
+    }
+    options = optionsReducer(options, { type: "open", tab });
+    renderOptions();
+    const opened = openNavigationLayer("options", el.optionsPanel, opener);
+    el.optionsTabs.find((t) => t.id === options?.tab)?.button.focus();
+    return opened;
+  }
+
+  function selectOptionsTab(tab) {
+    const next = optionsReducer(options, { type: "tab", tab });
+    if (next === options) return;
+    if (options?.tab === "controls") stopCapture();
+    options = next;
+    renderOptions();
+  }
+
+  function closeOptions() {
+    while (navigationLayers.top && navigationLayers.has("options")) closeNavigationLayer();
+  }
+
+  for (const tab of el.optionsTabs) {
+    tab.button.addEventListener("click", () => selectOptionsTab(tab.id));
+    tab.button.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const index = el.optionsTabs.indexOf(tab);
+      const next = el.optionsTabs[(index + (e.key === "ArrowRight" ? 1 : el.optionsTabs.length - 1)) % el.optionsTabs.length];
+      selectOptionsTab(next.id);
+      next.button.focus();
+    });
+  }
+  el.optionsClose.addEventListener("click", closeOptions);
   el.soundButton.addEventListener("click", () => {
-    if (navigationLayers.top?.id === "sound") closeNavigationLayer();
-    else if (!navigationLayers.has("sound")) {
-      openNavigationLayer("sound", el.soundPanel, el.soundButton);
-      el.soundButton.setAttribute("aria-expanded", "true");
-    }
-  });
-  el.closeSound.addEventListener("click", () => {
-    if (navigationLayers.top?.id === "sound") closeNavigationLayer();
-    else {
-      el.soundPanel.hidden = true;
-      el.soundButton.setAttribute("aria-expanded", "false");
-      syncLayerInert();
-    }
+    if (navigationLayers.top?.id === "options" && options?.tab === "sound") closeOptions();
+    else openOptions("sound", el.soundButton);
   });
   el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
@@ -1701,17 +1892,11 @@ function start() {
     }
   }
 
-  function closeControls() {
+  /** Leaving the Controls tab (or Options) cancels a key capture and an armed reset. */
+  function stopCapture() {
     capturingAction = null;
     cancelReset();
     for (const button of el.controlBindings) button.removeAttribute("aria-pressed");
-    if (navigationLayers.top?.id === "controls") {
-      closeNavigationLayer();
-      return;
-    }
-    el.controlsPanel.hidden = true;
-    el.controlsButton.setAttribute("aria-expanded", "false");
-    syncLayerInert();
   }
 
   function setKeyboardBindings(bindings) {
@@ -1724,25 +1909,18 @@ function start() {
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
   el.controlsButton.addEventListener("click", () => {
-    if (navigationLayers.top?.id === "controls") closeControls();
-    else if (!navigationLayers.has("controls")) {
-      openNavigationLayer("controls", el.controlsPanel, el.controlsButton);
-      el.controlsButton.setAttribute("aria-expanded", "true");
-      renderControllerPanel();
-    }
+    if (navigationLayers.top?.id === "options" && options?.tab === "controls") closeOptions();
+    else openOptions("controls", el.controlsButton);
   });
-  el.hubSound.addEventListener("click", () => openNavigationLayer("sound", el.soundPanel, el.hubSound));
-  el.hubControls.addEventListener("click", () => {
-    if (openNavigationLayer("controls", el.controlsPanel, el.hubControls)) {
-      el.controlsButton.setAttribute("aria-expanded", "true");
-      renderControllerPanel();
-    }
-  });
+  for (const [id, tab] of Object.entries(HUB_OPTIONS_TABS)) {
+    const entry = id === "hub-sound" ? el.hubSound : el.hubControls;
+    entry.addEventListener("click", () => openOptions(tab, entry));
+  }
+  el.menuOptions.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[2].event.tab, el.menuOptions));
   el.hubDev.addEventListener("click", () => {
     if (openNavigationLayer("dev", el.devPanel, el.hubDev)) el.devPanel.classList.add("navigation-layer");
   });
   el.hubResume.addEventListener("click", closeNavigationLayer);
-  el.controlsClose.addEventListener("click", closeControls);
   el.controllerSelect.addEventListener("change", () => {
     const index = Number(el.controllerSelect.value);
     gamepads.select(index);
@@ -1784,7 +1962,6 @@ function start() {
   document.addEventListener("visibilitychange", () => audio.setHidden(document.hidden));
 
   let draft = loadLook(storage, 0);
-  let editing = false;
 
   function fillSelect(select, options) {
     select.replaceChildren(
@@ -1796,9 +1973,9 @@ function start() {
       }),
     );
   }
-  fillSelect(el.gender, GENDERS);
   fillSelect(el.head, HEADS);
   fillSelect(el.face, FACES);
+  fillSelect(el.costume, COSTUMES);
   el.swatches.replaceChildren(
     ...COLOUR_NAMES.map((name) => {
       const b = document.createElement("button");
@@ -1821,19 +1998,16 @@ function start() {
   }
 
   function renderEditor() {
-    el.gender.value = draft.gender;
     el.head.value = draft.head;
     el.face.value = draft.face;
+    el.costume.value = draft.costume;
     for (const b of el.swatches.children) b.classList.toggle("selected", b.dataset.colour === draft.colour);
     paintPreview();
   }
 
-  function focusEditor() {
-    (el.swatches.querySelector(".swatch.selected") ?? focusTargets(el.editor)[0])?.focus();
-  }
-
   function paintPreview() {
-    if (!renderer || el.editor.hidden) return;
+    // the preview is drawn only while the Customize tab of Options shows it
+    if (!renderer || el.optionsPanel.hidden || el.optionsTabs[0].root.hidden) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = el.preview.getBoundingClientRect();
     const w = Math.max(16, Math.round((rect.width || 160) * dpr));
@@ -1843,20 +2017,11 @@ function start() {
     paintCommands(el.preview.getContext("2d"), previewCommands(renderer, draft, w, h, 0, state.looks));
   }
 
-  el.gender.addEventListener("change", () => editLook({ type: "gender", value: el.gender.value }));
   el.head.addEventListener("change", () => editLook({ type: "head", value: el.head.value }));
   el.face.addEventListener("change", () => editLook({ type: "face", value: el.face.value }));
+  el.costume.addEventListener("change", () => editLook({ type: "costume", value: el.costume.value }));
+  // the small icon on the preview's corner randomizes colour, head, face and costume together
   el.randomLook.addEventListener("click", () => editLook({ type: "random" }));
-  el.changeLook.addEventListener("click", () => {
-    editing = !editing;
-    updateUi();
-    if (editing) focusEditor();
-  });
-  el.doneLook.addEventListener("click", () => {
-    editing = false;
-    updateUi();
-    el.changeLook.focus();
-  });
 
   window.addEventListener("keydown", (e) => {
     if (capturingAction) {
@@ -1885,9 +2050,6 @@ function start() {
     if (e.key === "Escape") {
       e.preventDefault();
       if (navigationLayers.top) closeNavigationLayer();
-      else if (state.stage === "lobby" && editing) el.doneLook.click();
-      else if (!el.controlsPanel.hidden) el.controlsClose.click();
-      else if (!el.soundPanel.hidden) el.closeSound.click();
       else openMenuHub();
       return;
     }
@@ -1909,7 +2071,7 @@ function start() {
       if ((direction === "left" || direction === "right") && e.target.matches(".swatch, #room-modes button")) next?.click();
       return;
     }
-    if (navigationLayers.top || !el.controlsPanel.hidden || !el.soundPanel.hidden) {
+    if (navigationLayers.top) {
       if (keys.isBound(e.code) && !e.target.matches?.("input, select, textarea")) e.preventDefault();
       return;
     }
@@ -2036,7 +2198,7 @@ function start() {
   loadGraphics();
   connect();
   setInterval(() => {
-    if (state.stage === "directory" && state.menu !== "room" && directoryRequest === null) refreshDirectory();
+    if (state.stage === "directory" && screens(state).directoryPanel && directoryRequest === null) refreshDirectory();
   }, 5000);
   requestAnimationFrame(draw);
 }

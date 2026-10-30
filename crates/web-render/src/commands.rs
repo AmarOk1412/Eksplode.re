@@ -6,7 +6,7 @@ use crate::depth::{draw_list, Item, Sprite};
 use crate::interp::Interp;
 use crate::look::{default_for, runs_of, runs_view, Frame, Look, GRID_ROWS, OVERHEAD};
 use crate::sprites::{
-    bomb_colour, hex, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
+    bomb_colour, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
     BRICK_LINE, CROWN_GOLD, FLAME_CORE, FLAME_MID, FLAME_OUTER, HEART_RED, ICON_BONUS_FILL,
     ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER,
     TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WARNING_FRAME,
@@ -74,19 +74,6 @@ fn quad(color: [f32; 4], p: [(f32, f32); 4], layer: f32) -> Command {
         points: p,
         size: 0.0,
         text: 0.0,
-        layer,
-    }
-}
-
-fn text(color: [f32; 4], at: (f32, f32), size: f32, ch: char, layer: f32) -> Command {
-    let mut points = [(0.0, 0.0); 4];
-    points[0] = at;
-    Command {
-        kind: Kind::Text,
-        color,
-        points,
-        size,
-        text: f32::from(ch as u8),
         layer,
     }
 }
@@ -241,37 +228,22 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
         }
         Sprite::PowerUp(kind) => {
             // bonuses have a white frame, maluses a dark red one
-            let (frame, color, letter) = match kind {
-                PowerUpKind::ExtraBomb => (WHITE, hex(0x3b4cc0), 'B'),
-                PowerUpKind::Speed => (WHITE, hex(0x2fa84f), 'R'),
-                PowerUpKind::Range => (WHITE, hex(0xe8661a), 'F'),
-                PowerUpKind::Punch => (WHITE, hex(0x8a3fc7), 'P'),
-                PowerUpKind::Kick => (WHITE, hex(0xa0642c), 'K'),
-                PowerUpKind::Slow => (MALUS_FRAME, hex(0x4a78d0), 'S'),
-                PowerUpKind::HyperSpeed => (MALUS_FRAME, hex(0xc9a60a), 'H'),
-                PowerUpKind::SmallBomb => (MALUS_FRAME, hex(0xc03030), 's'),
-            };
+            let frame = if kind.is_malus() { MALUS_FRAME } else { WHITE };
             let dy = it.lift;
             pen.rect(frame, tx + 0.2, ty + 0.2 + dy, tx + 0.8, ty + 0.8 + dy);
-            // a pixel picture on a dark tile; a letter on a bright one when it would be too small
-            let ps = (0.48 * view.scale / ICON_SIZE as f32).floor();
-            if ps >= 2.0 {
-                let fill = if kind.is_malus() {
-                    ICON_MALUS_FILL
-                } else {
-                    ICON_BONUS_FILL
-                };
-                pen.rect(fill, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
-                let list = runs(&icon(kind), ICON_SIZE, |c| icon_colour(kind, c));
-                let (px, py) = view.project(cx, cy + dy);
-                let half = ICON_SIZE as f32 * ps / 2.0;
-                pen.sprite(&list, ps, (px - half).round(), (py - half).round());
+            let fill = if kind.is_malus() {
+                ICON_MALUS_FILL
             } else {
-                pen.rect(color, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
-                let at = view.project(cx, cy + dy);
-                pen.out
-                    .push(text([1.0; 4], at, 0.4 * view.scale, letter, it.key()));
-            }
+                ICON_BONUS_FILL
+            };
+            pen.rect(fill, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
+            // always a pixel picture, never a letter, even on a tiny board (matches Sprite::Bomb's
+            // own minimum-size clamp just below)
+            let ps = (0.48 * view.scale / ICON_SIZE as f32).floor().max(1.0);
+            let list = runs(&icon(kind), ICON_SIZE, |c| icon_colour(kind, c));
+            let (px, py) = view.project(cx, cy + dy);
+            let half = ICON_SIZE as f32 * ps / 2.0;
+            pen.sprite(&list, ps, (px - half).round(), (py - half).round());
         }
         Sprite::Bomb { ticks_left, flying } => {
             let pulse = 0.5 * (1.0 + (ticks_left as f32 * 0.8).sin());

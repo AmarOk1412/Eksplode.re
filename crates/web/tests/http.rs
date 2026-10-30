@@ -33,7 +33,10 @@ fn room_directory_is_read_only_secret_free_and_works_at_the_player_connection_li
         assert!(!body.contains(welcome["resume_proof"].as_str().unwrap()));
         let directory: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(directory["rooms"].as_array().unwrap().len(), 1);
-        assert_eq!(directory["rooms"][0]["occupied"], 1);
+        // 011: the new room is bot-filled, and `occupied` counts the bots too
+        assert_eq!(directory["rooms"][0]["occupied"], 4);
+        assert_eq!(directory["rooms"][0]["bots"], 3);
+        assert_eq!(directory["rooms"][0]["connected_humans"], 1);
     }
     for path in [
         "/rooms?scope=invalid",
@@ -180,15 +183,28 @@ fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
     ] {
         assert!(html.contains(id), "missing {id}");
     }
-    for id in ["sound-panel", "controls-panel"] {
+    let tag = |id: &str| {
         let start = html.find(&format!("id=\"{id}\"")).unwrap();
-        let panel = &html[start..html[start..].find('>').unwrap() + start];
+        html[start..html[start..].find('>').unwrap() + start].to_string()
+    };
+    // 011: Sound and Controls are tabs of the one Options dialog
+    let options = tag("options-panel");
+    assert!(
+        options.contains("role=\"dialog\""),
+        "Options needs dialog semantics"
+    );
+    assert!(
+        options.contains("aria-labelledby="),
+        "Options needs an accessible label"
+    );
+    for id in ["options-customize", "sound-panel", "controls-panel"] {
+        let panel = tag(id);
         assert!(
-            panel.contains("role=\"dialog\""),
-            "{id} needs dialog semantics"
+            panel.contains("role=\"tabpanel\""),
+            "{id} needs tabpanel semantics"
         );
         assert!(
-            panel.contains("aria-label="),
+            panel.contains("aria-labelledby="),
             "{id} needs an accessible label"
         );
     }
@@ -205,10 +221,15 @@ fn the_on_screen_keyboard_is_a_focusable_dialog_and_lobby_controls_exist() {
         "name",
         "join",
         "start",
-        "add-bot",
-        "change-look",
+        "ready",
+        // 011: per-seat controls and the header icons replace Add bot / Remove bot / Change look
+        "room-config-open",
+        "leave-room",
     ] {
         assert!(html.contains(id), "missing {id}");
+    }
+    for id in ["add-bot", "remove-bot", "change-look"] {
+        assert!(!html.contains(&format!("id=\"{id}\"")), "{id} is gone");
     }
     assert!(html.contains("role=\"dialog\""));
     assert!(html.contains("aria-label=\"On-screen keyboard\""));

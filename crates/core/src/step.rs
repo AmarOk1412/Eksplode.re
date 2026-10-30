@@ -14,13 +14,14 @@ use crate::team;
 ///
 /// Order: cooldowns, flame and fuse timers, malus timers, moves (rotating priority), bomb
 /// flights (hops and landings), slides (kicked bombs), punches, bomb placement, detonation with chain reactions (drops
-/// are decided for destroyed blocks), eliminations, end-of-round check. Does nothing once the
-/// round has ended.
+/// are decided for destroyed blocks), eliminations (with kills credited and the elimination order
+/// stamped), end-of-round check. Does nothing once the round has ended.
 pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<Event> {
     let mut events = Vec::new();
     if state.phase != Phase::Playing {
         return events;
     }
+    let was_alive: [bool; MAX_PLAYERS] = std::array::from_fn(|i| state.players[i].alive);
 
     if state.tick == 0 && chaser::applies(state) {
         for p in state.players.iter().filter(|p| p.alive) {
@@ -66,6 +67,7 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
     closing::advance(state, &mut events);
     chaser::spawn_bonus(state, &mut events);
     eliminate(state, &mut events);
+    stamp_eliminations(state, &was_alive);
 
     state.tick += 1;
     if let Some(outcome) = outcome(state) {
@@ -112,8 +114,7 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
         || state
             .bombs
             .iter()
-            .any(|b| b.pos == to && b.flight.is_none())
-        || state.players.iter().any(|o| o.alive && o.pos == to);
+            .any(|b| b.pos == to && b.flight.is_none());
     if blocked {
         kick::start(state, i, to, dir, events);
         return;
@@ -160,10 +161,17 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
 fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
     for i in 0..MAX_PLAYERS {
         let p = &state.players[i];
-        let burning = state
+        let mut burning = false;
+        // the slots whose bombs lit a flame that hurts `p` on its tile
+        let mut owners = 0u8;
+        for f in state
             .flames
             .iter()
-            .any(|f| f.pos == p.pos && team::hurts(&state.config, &state.players, f, p));
+            .filter(|f| f.pos == p.pos && team::hurts(&state.config, &state.players, f, p))
+        {
+            burning = true;
+            owners |= f.owners;
+        }
         if p.alive && burning {
             if p.role == Role::Chaser && p.hearts > 1 {
                 // a heart per explosion, then a moment of protection
@@ -184,6 +192,28 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
             events.push(Event::PlayerEliminated { player: p.id });
             state.players[i].alive = false;
             state.players[i].malus = None;
+            for (j, killer) in state.players.iter_mut().enumerate() {
+                if j != i && owners & (1 << j) != 0 {
+                    killer.kills = killer.kills.saturating_add(1);
+                }
+            }
+        }
+    }
+}
+
+/// Gives every participant eliminated during this tick (by a blast or a landing block) the next
+/// elimination number; those eliminated in the same tick share it.
+fn stamp_eliminations(state: &mut GameState, was_alive: &[bool; MAX_PLAYERS]) {
+    let next = state
+        .players
+        .iter()
+        .filter_map(|p| p.eliminated_order)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    for (i, p) in state.players.iter_mut().enumerate() {
+        if was_alive[i] && !p.alive && p.eliminated_order.is_none() {
+            p.eliminated_order = Some(next);
         }
     }
 }

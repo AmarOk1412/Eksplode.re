@@ -123,13 +123,16 @@ input { width: min(270px, 100%); text-align: center; }
 
 button { cursor: pointer; }
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, [role="radio"]:focus-visible, [tabindex="0"]:focus-visible {
-  outline: 3px solid #d43b32;
+  /* 011 US6: the accent blue of the palette instead of red; same width and offset */
+  outline: 3px solid var(--slot0);
   outline-offset: 3px;
   box-shadow: 0 0 0 1px #fff;
 }
 #view:focus-visible { outline: none; box-shadow: none; }
 button:hover:not(:disabled), button:focus-visible { background: var(--ink); color: #fff; }
 .menu button { width: min(270px, 100%); font-size: 1.6rem; }
+.main-menu .menu-actions { display: grid; gap: 12px; justify-items: center; width: 100%; margin-top: 8px; }
+.main-menu .menu-actions button { width: min(320px, 100%); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: center; }
@@ -627,4 +630,105 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   .touch-device #touch-bomb { right: 0; bottom: 0; width: 76px; height: 76px; background: rgba(232, 188, 54, 0.94); }
   .touch-device #touch-punch { right: 82px; bottom: 38px; width: 68px; height: 68px; background: rgba(218, 91, 61, 0.94); font-size: 0.78rem; }
   .touch-device .touch-controls button:active, .touch-device .touch-controls button.is-active { background: var(--ink); color: #fff; }
+}
+
+/* ---- 011: lobby header icons, seat controls, configuration panel ---- */
+.lobby-header {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  grid-template-areas: "title config leave" "summary summary summary";
+  align-items: center;
+  gap: 4px 8px;
+}
+.lobby-header h2 { grid-area: title; margin: 0; }
+.lobby-header .room-summary { grid-area: summary; margin: 0; }
+.lobby-header #room-config-open { grid-area: config; }
+.lobby-header #leave-room { grid-area: leave; }
+.icon-button {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  font-size: 1.4rem;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+}
+.seat-control {
+  position: absolute;
+  z-index: 1;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+.seat-remove {
+  top: 6px;
+  right: 6px;
+  width: 30px;
+  height: 30px;
+  font-size: 1.2rem;
+}
+.seat-add {
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -52px 0 0 -32px;
+  font-size: 2.4rem;
+}
+.card.closed { opacity: 0.45; }
+.lobby-actions button { min-width: 140px; }
+.lobby-actions #ready[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.room-config { width: min(520px, 100%); display: grid; gap: 12px; }
+.room-config .room-controls, .room-config .room-password-controls { display: grid; gap: 6px; justify-items: start; }
+.room-config select { font: inherit; font-size: 1rem; padding: 4px 8px; border: 3px solid var(--ink); background: #fff; color: var(--ink); border-radius: 0; }
+
+/* ---- 011: the tabbed Options screen ---- */
+.options {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 4;
+  transform: translate(-50%, -50%);
+  width: min(600px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+}
+.options-tabs { display: flex; gap: 0; border-bottom: 3px solid var(--ink); }
+.options-tabs [role="tab"] {
+  flex: 1;
+  border-bottom: 0;
+  font-size: 1.05rem;
+  padding: 6px 10px;
+}
+.options-tabs [role="tab"] + [role="tab"] { border-left: 0; }
+.options-tabs [role="tab"][aria-selected="true"] { background: var(--ink); color: #fff; }
+.options .options-tab { width: 100%; }
+.options .options-tab h2 { display: none; }
+.options .controls-panel {
+  position: static;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  padding: 0;
+  box-shadow: none;
+}
+.options .sound { width: 100%; }
+
+/* ---- 011: the Customize tab and the randomize icon on the preview ---- */
+.options .editor { width: 100%; }
+.preview-wrap { position: relative; width: 160px; height: 226px; }
+.randomize-icon {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.3rem;
+  line-height: 1;
+  display: grid;
+  place-items: center;
 }

@@ -99,13 +99,20 @@ fn the_fifth_join_is_refused_as_full() {
 }
 
 #[test]
-fn bots_take_slots_and_count_toward_the_limit() {
+fn bots_fill_the_seats_and_humans_replace_them_up_to_the_limit() {
+    // 011 FR-008: a new room starts full of bots; every joining human takes a bot seat
     let host = host();
     let (_owner, room) = create(&host, "Ann");
-    host.handle().add_room_bot(&room).unwrap();
-    host.handle().add_room_bot(&room).unwrap();
-    let b = join(&host, &room, "Bob");
-    assert_eq!(welcome_slot(&b), 3);
+    assert!(
+        host.handle().add_room_bot(&room).is_err(),
+        "no empty seat is left"
+    );
+    let mut humans = Vec::new();
+    for (name, seat) in [("Bob", 1), ("Cy", 2), ("Di", 3)] {
+        let client = join(&host, &room, name);
+        assert_eq!(welcome_slot(&client), seat);
+        humans.push(client);
+    }
     let mut raw = Raw::connect(host.addr());
     assert!(raw.hello_v2().is_some());
     raw.join_room_v2("late", &serde_json::to_value(&room).unwrap(), "late");
@@ -116,7 +123,6 @@ fn bots_take_slots_and_count_toward_the_limit() {
 fn joining_during_a_match_is_refused() {
     let host = host();
     let (a, room) = create(&host, "Ann");
-    host.handle().add_room_bot(&room).unwrap();
     host.handle().start_room(&room).unwrap();
     assert!(wait_for(&a, |m| matches!(m, ServerMsg::Start { .. })).is_some());
     let mut raw = Raw::connect(host.addr());
@@ -126,7 +132,7 @@ fn joining_during_a_match_is_refused() {
 }
 
 #[test]
-fn ready_flags_are_shared_and_leaving_frees_the_slot() {
+fn ready_flags_are_shared_and_leaving_gives_the_seat_to_a_bot() {
     let host = host();
     let (a, room) = create(&host, "Ann");
     let b = join(&host, &room, "Bob");
@@ -139,9 +145,10 @@ fn ready_flags_are_shared_and_leaving_frees_the_slot() {
     assert!(seen.is_some());
 
     b.send(ClientMsg::Leave).unwrap();
+    // 011 FR-008: a seat left before the match is refilled with a bot
     let freed = wait_for(
         &a,
-        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Empty),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Bot),
     );
     assert!(freed.is_some());
 }
@@ -207,16 +214,17 @@ fn error_code(client: &Client) -> Option<String> {
 fn the_owner_can_start_and_add_or_remove_bots() {
     let host = host();
     let (owner, _room) = create(&host, "Ann");
-    owner.send(ClientMsg::AddBot).unwrap();
-    let lobby = wait_for(
-        &owner,
-        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Bot),
-    );
-    assert!(lobby.is_some());
+    // without a seat, RemoveBot frees the highest bot and AddBot fills the first free seat
     owner.send(ClientMsg::RemoveBot).unwrap();
     let lobby = wait_for(
         &owner,
-        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[1].controller == Controller::Empty),
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[3].controller == Controller::Empty),
+    );
+    assert!(lobby.is_some());
+    owner.send(ClientMsg::AddBot).unwrap();
+    let lobby = wait_for(
+        &owner,
+        |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[3].controller == Controller::Bot),
     );
     assert!(lobby.is_some());
     owner.send(ClientMsg::Start).unwrap();
@@ -229,10 +237,13 @@ fn a_non_owner_gets_notowner_and_nothing_changes() {
     let (owner, room) = create(&host, "Ann");
     let other = join(&host, &room, "Bob");
     welcome_slot(&other);
-    for msg in [ClientMsg::Start, ClientMsg::AddBot, ClientMsg::RemoveBot] {
+    for msg in [ClientMsg::Start, ClientMsg::RemoveBot] {
         other.send(msg.clone()).unwrap();
         assert_eq!(error_code(&other).as_deref(), Some("NotOwner"), "{msg:?}");
     }
+    // 011 FR-010: adding a bot is open to everybody; here the seats are simply all taken
+    other.send(ClientMsg::AddBot).unwrap();
+    assert_eq!(error_code(&other).as_deref(), Some("Full"));
     // the owner never saw a Start
     owner.send(ClientMsg::Ping { nonce: 1 }).unwrap();
     let seen = wait_for(&owner, |m| {
@@ -257,9 +268,7 @@ fn start_and_bot_commands_are_refused_during_a_match() {
 fn adding_a_bot_to_a_full_lobby_is_refused() {
     let host = host();
     let (owner, _room) = create(&host, "Ann");
-    for _ in 0..3 {
-        owner.send(ClientMsg::AddBot).unwrap();
-    }
+    // the three other seats were filled with bots when the room was created
     owner.send(ClientMsg::AddBot).unwrap();
     assert_eq!(error_code(&owner).as_deref(), Some("Full"));
 }
@@ -273,8 +282,8 @@ fn ownership_moves_when_the_owner_leaves() {
     second.send(ClientMsg::Start).unwrap();
     assert_eq!(error_code(&second).as_deref(), Some("NotOwner"));
     first.send(ClientMsg::Leave).unwrap();
-    // wait until the lobby shows slot 0 as empty
-    assert!(wait_for(&second, |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[0].controller == Controller::Empty))
+    // wait until the lobby shows slot 0 handed to a bot
+    assert!(wait_for(&second, |m| matches!(m, ServerMsg::Lobby { lobby, .. } if lobby.slots[0].controller == Controller::Bot))
         .is_some());
     second.send(ClientMsg::Start).unwrap();
     assert!(wait_for(&second, |m| matches!(m, ServerMsg::Start { .. })).is_some());

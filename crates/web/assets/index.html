@@ -11,54 +11,92 @@
     <header>
       <h1>Eksplode.re</h1>
       <p id="notice" role="status" aria-live="polite">Loading...</p>
-      <button id="sound-button" class="sound-button" type="button" aria-label="Sound settings" aria-controls="sound-panel" aria-expanded="false">&#9835;</button>
-      <button id="controls-button" class="controls-button" type="button" aria-label="Controls settings" aria-controls="controls-panel" aria-expanded="false" title="Controls">&#9000;</button>
+      <button id="sound-button" class="sound-button" type="button" aria-label="Sound settings" aria-controls="options-panel" aria-expanded="false">&#9835;</button>
+      <button id="controls-button" class="controls-button" type="button" aria-label="Controls settings" aria-controls="options-panel" aria-expanded="false" title="Controls">&#9000;</button>
     </header>
 
     <section id="menu-hub" class="dialog menu-hub" role="dialog" aria-modal="true" aria-labelledby="menu-hub-title" hidden>
       <h2 id="menu-hub-title">Menu</h2>
-      <button id="hub-sound" type="button">Sound</button>
-      <button id="hub-controls" type="button">Controls</button>
+      <button id="hub-sound" type="button" aria-controls="options-panel">Sound</button>
+      <button id="hub-controls" type="button" aria-controls="options-panel">Controls</button>
       <button id="hub-dev" type="button" hidden>Developer</button>
       <button id="hub-resume" type="button">Resume</button>
       <button id="hub-leave" type="button" hidden>Leave room</button>
     </section>
 
-    <section id="sound-panel" class="dialog sound" role="dialog" aria-modal="true" aria-label="Sound settings" hidden>
-      <h2>Sound</h2>
-      <label for="music-volume">Music</label>
-      <input id="music-volume" type="range" min="0" max="100" step="1">
-      <label for="effects-volume">Effects</label>
-      <input id="effects-volume" type="range" min="0" max="100" step="1">
-      <label class="check"><input id="mute" type="checkbox"> Mute</label>
+    <section id="options-panel" class="dialog options" role="dialog" aria-modal="true" aria-labelledby="options-title" hidden>
+      <h2 id="options-title">Options</h2>
+      <div class="options-tabs" role="tablist" aria-label="Options">
+        <button id="tab-customize" type="button" role="tab" aria-selected="true" aria-controls="options-customize">Customize</button>
+        <button id="tab-sound" type="button" role="tab" aria-selected="false" aria-controls="sound-panel">Sound</button>
+        <button id="tab-controls" type="button" role="tab" aria-selected="false" aria-controls="controls-panel">Controls</button>
+      </div>
+      <section id="options-customize" class="options-tab customize" role="tabpanel" aria-labelledby="tab-customize">
+        <div id="editor" class="editor" role="group" aria-label="Character editor">
+          <div class="preview-wrap">
+            <canvas id="preview" class="preview" aria-label="Preview of your character"></canvas>
+            <button id="random-look" class="randomize-icon" type="button" aria-label="Randomize" title="Randomize">&#9860;</button>
+          </div>
+          <div class="pickers">
+            <h3>Your character</h3>
+            <div id="swatches" class="swatches" role="group" aria-label="Colour"></div>
+            <label for="head">Head</label>
+            <select id="head"></select>
+            <label for="face">Face</label>
+            <select id="face"></select>
+            <label for="costume">Costume</label>
+            <select id="costume"></select>
+          </div>
+        </div>
+      </section>
+      <section id="sound-panel" class="options-tab sound" role="tabpanel" aria-labelledby="tab-sound" hidden>
+        <h2>Sound</h2>
+        <label for="music-volume">Music</label>
+        <input id="music-volume" type="range" min="0" max="100" step="1">
+        <label for="effects-volume">Effects</label>
+        <input id="effects-volume" type="range" min="0" max="100" step="1">
+        <label class="check"><input id="mute" type="checkbox"> Mute</label>
+        <div class="buttons">
+          <button id="test-sound" type="button">Test sound</button>
+        </div>
+      </section>
+      <section id="controls-panel" class="options-tab controls-panel" role="tabpanel" aria-labelledby="tab-controls" hidden>
+        <h2>Controls</h2>
+        <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
+        <div class="control-bindings" role="group" aria-label="Keyboard bindings">
+          <div class="control-binding"><span>Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
+          <div class="control-binding"><span>Move down</span><button type="button" data-bind-action="down">Down: ArrowDown / S</button></div>
+          <div class="control-binding"><span>Move left</span><button type="button" data-bind-action="left">Left: ArrowLeft / A</button></div>
+          <div class="control-binding"><span>Move right</span><button type="button" data-bind-action="right">Right: ArrowRight / D</button></div>
+          <div class="control-binding"><span>Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
+          <div class="control-binding"><span>Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
+        </div>
+        <div class="controller-settings">
+          <h3>Game controller</h3>
+          <label for="controller-select">Connected controller</label>
+          <select id="controller-select" aria-label="Select a connected controller" disabled></select>
+          <p id="controller-mapping" class="hint">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
+          <p id="controller-status" class="hint" role="status" aria-live="polite">Focus this page and press a controller button or move a stick to connect.</p>
+        </div>
+        <div class="buttons">
+          <button id="controls-reset" type="button">Restore defaults</button>
+        </div>
+      </section>
       <div class="buttons">
-        <button id="test-sound" type="button">Test sound</button>
-        <button id="close-sound" type="button">Close</button>
+        <button id="options-close" type="button">Close</button>
       </div>
     </section>
 
-    <section id="controls-panel" class="dialog controls-panel" role="dialog" aria-modal="true" aria-label="Controls settings" hidden>
-      <h2>Controls</h2>
-      <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
-      <div class="control-bindings" role="group" aria-label="Keyboard bindings">
-        <div class="control-binding"><span>Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
-        <div class="control-binding"><span>Move down</span><button type="button" data-bind-action="down">Down: ArrowDown / S</button></div>
-        <div class="control-binding"><span>Move left</span><button type="button" data-bind-action="left">Left: ArrowLeft / A</button></div>
-        <div class="control-binding"><span>Move right</span><button type="button" data-bind-action="right">Right: ArrowRight / D</button></div>
-        <div class="control-binding"><span>Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
-        <div class="control-binding"><span>Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
+    <section id="main-menu" class="menu main-menu" aria-label="Main menu">
+      <canvas id="logo" aria-hidden="true"></canvas>
+      <label for="name">Your name</label>
+      <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
+      <div class="menu-actions" role="group" aria-label="Main menu actions">
+        <button id="menu-create" type="button">Create new game</button>
+        <button id="menu-join" type="button">Join a game</button>
+        <button id="menu-options" type="button">Options</button>
       </div>
-      <div class="controller-settings">
-        <h3>Game controller</h3>
-        <label for="controller-select">Connected controller</label>
-        <select id="controller-select" aria-label="Select a connected controller" disabled></select>
-        <p id="controller-mapping" class="hint">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
-        <p id="controller-status" class="hint" role="status" aria-live="polite">Focus this page and press a controller button or move a stick to connect.</p>
-      </div>
-      <div class="buttons">
-        <button id="controls-reset" type="button">Restore defaults</button>
-        <button id="controls-close" type="button">Close</button>
-      </div>
+      <button id="retry" type="button" hidden>Retry</button>
     </section>
 
     <section id="room-panel" class="menu room" aria-label="Create a room" hidden>
@@ -80,23 +118,20 @@
       <button id="room-back" type="button">Back</button>
     </section>
 
-    <section id="directory-panel" class="directory" aria-label="Rooms" hidden>
+    <section id="directory-panel" class="directory" aria-label="Join a game" hidden>
       <h2>Rooms</h2>
       <div class="buttons">
         <button id="directory-refresh" type="button">Refresh</button>
         <button id="directory-create" type="button">New room</button>
+        <button id="directory-back" type="button">Back</button>
       </div>
       <p id="directory-status" role="status" aria-live="polite"></p>
       <ul id="directory-rooms" class="directory-rooms" aria-label="Available rooms"></ul>
     <section id="join-panel" class="menu">
-      <canvas id="logo" aria-hidden="true"></canvas>
       <p id="join-room" class="hint" hidden></p>
-      <label for="name">Your name</label>
-      <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
       <label id="join-password-label" for="join-password" hidden>Room password</label>
       <input id="join-password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" hidden>
       <button id="join" type="button">Join room</button>
-      <button id="retry" type="button" hidden>Retry</button>
     </section>
     </section>
 
@@ -105,28 +140,25 @@
       <div class="buttons"><button id="leave-cancel" type="button">Cancel</button><button id="leave-confirm" type="button">Leave room</button></div>
     </section>
 
-    <section id="editor" class="dialog editor" aria-label="Character editor" hidden>
-      <canvas id="preview" class="preview" aria-label="Preview of your character"></canvas>
-      <div class="pickers">
-        <h2>Your character</h2>
-        <div id="swatches" class="swatches" role="group" aria-label="Colour"></div>
-        <label for="gender">Look</label>
-        <select id="gender"></select>
-        <label for="head">Head</label>
-        <select id="head"></select>
-        <label for="face">Face</label>
-        <select id="face"></select>
-        <div class="buttons">
-          <button id="random-look" type="button">Random</button>
-          <button id="done-look" type="button" hidden>Done</button>
-        </div>
+    <section id="lobby-panel" class="dialog lobby" hidden>
+      <div class="lobby-header">
+        <h2>Lobby</h2>
+        <p id="room-summary" class="room-summary" aria-live="polite"></p>
+        <button id="room-config-open" class="icon-button" type="button" aria-label="Room settings" title="Room settings" aria-controls="room-config" hidden>&#9881;</button>
+        <button id="leave-room" class="icon-button" type="button" aria-label="Leave room" title="Leave room">&#10006;</button>
       </div>
+      <p id="room-note" class="hint"></p>
+      <ul id="slots" class="cards"></ul>
+      <div class="buttons lobby-actions" role="group" aria-label="Lobby actions">
+        <button id="ready" type="button" aria-pressed="false">Ready</button>
+        <button id="start" type="button" hidden>Start</button>
+      </div>
+      <p class="hint">The first human player is the owner: only the owner changes the room settings, removes bots or players and starts the match. Anybody can put a bot into an empty seat with +.
+Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>
     </section>
 
-    <section id="lobby-panel" class="dialog" hidden>
-      <h2>Lobby</h2>
-      <p id="room-summary" class="room-summary" aria-live="polite"></p>
-      <p id="room-note" class="hint"></p>
+    <section id="room-config" class="dialog room-config" role="dialog" aria-modal="true" aria-labelledby="room-config-title" hidden>
+      <h2 id="room-config-title">Room settings</h2>
       <div id="room-controls" class="room-controls" role="group" aria-label="Room settings">
         <label for="lobby-room-name">Name</label>
         <input id="lobby-room-name" maxlength="24" autocomplete="off" spellcheck="false">
@@ -144,20 +176,12 @@
         <p id="lobby-password-status" class="hint" aria-live="polite"></p>
         <label for="lobby-password">New password</label>
         <input id="lobby-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-        <button id="lobby-password-set" type="button">Set password</button>
-        <button id="lobby-password-remove" type="button">Remove protection</button>
+        <label id="lobby-password-remove-label" class="check" hidden><input id="lobby-password-remove" type="checkbox"> Remove protection</label>
       </div>
-      <ul id="slots" class="cards"></ul>
       <div class="buttons">
-        <button id="start" type="button">Start (Enter)</button>
-        <button id="add-bot" type="button">Add bot</button>
-        <button id="remove-bot" type="button">Remove bot</button>
-        <button id="ready" type="button">Ready</button>
-        <button id="change-look" type="button">Change look</button>
-        <button id="leave-room" type="button">Leave room</button>
+        <button id="room-config-cancel" type="button">Cancel</button>
+        <button id="room-config-save" type="button">Save</button>
       </div>
-      <p class="hint">The first human player is the owner: only the owner changes the room settings and starts the match.
-Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>
     </section>
 
     <section id="game-panel" hidden>
@@ -182,7 +206,7 @@ Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a b
       <div class="results-table-wrap" role="region" aria-label="Final standings" tabindex="0">
         <table class="results-table">
           <thead>
-            <tr><th scope="col">Player</th><th scope="col">Result</th><th scope="col">Bombs</th><th scope="col">Range</th><th scope="col">Speed</th><th scope="col">Powers</th></tr>
+            <tr><th scope="col">Player</th><th scope="col">Kills</th><th scope="col">Bombs placed</th></tr>
           </thead>
           <tbody id="results-rows"></tbody>
         </table>

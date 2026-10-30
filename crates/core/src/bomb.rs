@@ -30,6 +30,7 @@ pub(crate) fn place(state: &mut GameState, i: usize, events: &mut Vec<Event>) {
     });
     state.bombs.push(bomb);
     state.players[i].bombs_active += 1;
+    state.players[i].bombs_placed = state.players[i].bombs_placed.saturating_add(1);
 }
 
 /// Explodes every bomb whose fuse ran out, plus every bomb its flames reach.

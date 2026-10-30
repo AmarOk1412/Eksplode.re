@@ -252,7 +252,10 @@
       "team": null,
       "role": "Normal",
       "hearts": 1,
-      "shield_left": 0
+      "shield_left": 0,
+      "kills": 0,
+      "bombs_placed": 0,
+      "eliminated_order": null
     },
     {
       "id": 1,
@@ -273,7 +276,10 @@
       "team": null,
       "role": "Normal",
       "hearts": 1,
-      "shield_left": 0
+      "shield_left": 0,
+      "kills": 0,
+      "bombs_placed": 0,
+      "eliminated_order": null
     },
     {
       "id": 2,
@@ -294,7 +300,10 @@
       "team": null,
       "role": "Normal",
       "hearts": 1,
-      "shield_left": 0
+      "shield_left": 0,
+      "kills": 0,
+      "bombs_placed": 0,
+      "eliminated_order": null
     },
     {
       "id": 3,
@@ -315,7 +324,10 @@
       "team": null,
       "role": "Normal",
       "hearts": 1,
-      "shield_left": 0
+      "shield_left": 0,
+      "kills": 0,
+      "bombs_placed": 0,
+      "eliminated_order": null
     }
   ],
   "bombs": [],

@@ -137,7 +137,7 @@ fn flames_fill_their_tile_in_three_layers() {
 }
 
 #[test]
-fn powerups_fall_back_to_their_letter_on_a_tiny_board() {
+fn powerups_stay_pixel_art_on_a_tiny_board() {
     let mut s = small(&OPEN, (1, 1), (5, 5));
     for (i, kind) in PowerUpKind::ALL.iter().enumerate() {
         powerup(&mut s, 1 + (i as u8 % 5), 2 + (i as u8 / 5), *kind);
@@ -145,10 +145,11 @@ fn powerups_fall_back_to_their_letter_on_a_tiny_board() {
     let o = obs(&s);
     let mut interp = Interp::default();
     interp.update(&o);
-    let t = texts(&build(&o, &interp, 1.0, (130.0, 130.0)));
-    for letter in ['B', 'R', 'F', 'P', 'K', 'S', 'H', 's'] {
-        assert!(t.contains(&letter), "{letter}");
-    }
+    let list = build(&o, &interp, 1.0, (130.0, 130.0));
+    assert!(
+        texts(&list).is_empty(),
+        "no power-up ever falls back to a letter"
+    );
 }
 
 fn icon(kind: PowerUpKind) -> Vec<Command> {

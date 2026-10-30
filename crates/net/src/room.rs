@@ -16,7 +16,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use eksplode_re_bots::{Bot, DefaultBot};
 use eksplode_re_core::{
     step, BoardSize, Config, Controller, DropTable, Event, GameState, Lobby, Mode, Phase, PlayerId,
-    PlayerInput, RoomSettings,
+    PlayerInput, RoomSettings, MAX_PLAYERS,
 };
 use serde_json::Value;
 use subtle::ConstantTimeEq;
@@ -997,10 +997,21 @@ impl RoomRuntime {
                 replies.extend(self.fanout(self.updated()));
                 return Ok(replies);
             }
-            Request::AddBot { .. } => {
-                self.owner(connection_id)?;
+            Request::AddBot { slot: target, .. } => {
+                // Any member may fill an empty seat (the lobby's "+"); removing stays owner-only.
                 if self.phase != RoomPhase::Lobby {
                     return Err(ErrorCode::InMatch);
+                }
+                if let Some(target) = target.map(usize::from) {
+                    if target >= MAX_PLAYERS {
+                        return Err(ErrorCode::BadSlot);
+                    }
+                    if self.lobby.slots[target].controller != Controller::Empty {
+                        return Err(ErrorCode::SlotTaken);
+                    }
+                    if target >= usize::from(self.capacity) {
+                        return Err(ErrorCode::Full);
+                    }
                 }
                 if self.lobby.participants() >= usize::from(self.capacity) {
                     return Err(ErrorCode::Full);
@@ -1008,29 +1019,46 @@ impl RoomRuntime {
                 self.revision
                     .advance()
                     .map_err(|_| ErrorCode::Unavailable)?;
-                let bot = self.lobby.add_bot().map_err(|_| ErrorCode::Full)?;
-                let wanted = Look::default_for(bot);
-                let taken: Vec<_> = self
-                    .lobby
-                    .slots
-                    .iter()
-                    .enumerate()
-                    .filter(|(index, item)| *index != bot && item.controller != Controller::Empty)
-                    .map(|(index, _)| self.looks[index].colour)
-                    .collect();
-                let (colour, _) = resolve_colour(wanted.colour, &taken);
-                self.looks[bot] = Look { colour, ..wanted };
+                let bot = match target.map(usize::from) {
+                    Some(target) => {
+                        self.lobby
+                            .add_bot_at(target)
+                            .map_err(|_| ErrorCode::SlotTaken)?;
+                        target
+                    }
+                    None => self.lobby.add_bot().map_err(|_| ErrorCode::Full)?,
+                };
+                self.seat_bot_look(bot);
             }
-            Request::RemoveBot { .. } => {
+            Request::RemoveBot { slot: target, .. } => {
                 self.owner(connection_id)?;
                 if self.phase != RoomPhase::Lobby {
                     return Err(ErrorCode::InMatch);
                 }
-                if let Some(bot) = self.lobby.last_bot() {
-                    self.revision
-                        .advance()
-                        .map_err(|_| ErrorCode::Unavailable)?;
-                    self.lobby.clear(bot).map_err(|_| ErrorCode::BadRoom)?;
+                match target.map(usize::from) {
+                    Some(target) => {
+                        if target >= MAX_PLAYERS {
+                            return Err(ErrorCode::BadSlot);
+                        }
+                        if self.lobby.slots[target].controller != Controller::Bot {
+                            return Err(ErrorCode::NotABot);
+                        }
+                        self.revision
+                            .advance()
+                            .map_err(|_| ErrorCode::Unavailable)?;
+                        // an explicit removal leaves the seat empty (it shows "+"), no refill
+                        self.lobby
+                            .remove_bot_at(target)
+                            .map_err(|_| ErrorCode::NotABot)?;
+                    }
+                    None => {
+                        if let Some(bot) = self.lobby.last_bot() {
+                            self.revision
+                                .advance()
+                                .map_err(|_| ErrorCode::Unavailable)?;
+                            self.lobby.clear(bot).map_err(|_| ErrorCode::BadRoom)?;
+                        }
+                    }
                 }
             }
             Request::RemovePlayer { membership_id, .. } => {
@@ -1043,7 +1071,8 @@ impl RoomRuntime {
                     .get(&membership_id)
                     .and_then(|member| member.connection_id)
                     .ok_or(ErrorCode::NotInRoom)?;
-                self.remove_connection(target_connection);
+                // an explicit kick leaves the seat empty (it shows "+"), no refill
+                self.vacate_connection(target_connection, false);
                 let mut replies = self.fanout(self.updated());
                 replies.push((
                     target_connection,
@@ -1107,9 +1136,6 @@ impl RoomRuntime {
                 {
                     return Err(ErrorCode::Unsupported);
                 }
-                if usize::from(capacity) < self.lobby.participants() {
-                    return Err(ErrorCode::CapacityConflict);
-                }
                 let mut settings: RoomSettings =
                     serde_json::from_value(settings).map_err(|_| ErrorCode::BadRoom)?;
                 if settings.name.chars().any(char::is_control) {
@@ -1127,11 +1153,22 @@ impl RoomRuntime {
                     self.dev,
                     self.fixed_seed,
                 )?;
+                // `capacity` is validated to `1..=4` by the dry run above. Bots are never
+                // stranded (they are simply removed), but humans are never moved by a resize
+                // (see `resize_bots`), so a human sitting at or beyond the new capacity's window
+                // would otherwise become invisible to `admission_slot` (which only looks at the
+                // first `capacity` slots), letting the room silently exceed its declared capacity.
+                let strands_a_human = self.lobby.slots[usize::from(capacity)..]
+                    .iter()
+                    .any(|slot| matches!(slot.controller, Controller::Local | Controller::Remote));
+                if strands_a_human {
+                    return Err(ErrorCode::CapacityConflict);
+                }
                 self.revision
                     .advance()
                     .map_err(|_| ErrorCode::Unavailable)?;
                 self.lobby.settings = settings;
-                self.capacity = capacity;
+                self.resize_bots(capacity);
                 if password.is_some() {
                     self.password = None;
                 }
@@ -1242,6 +1279,8 @@ impl RoomRuntime {
         replies
     }
 
+    /// The seat a joining human gets: the first empty seat within the capacity, otherwise the
+    /// lowest bot seat (bots only keep seats warm; a human always replaces one).
     pub(crate) fn admission_slot(&self, name: &str) -> Result<usize, ErrorCode> {
         if !crate::protocol::valid_name(name) {
             return Err(ErrorCode::BadName);
@@ -1249,12 +1288,68 @@ impl RoomRuntime {
         if self.phase != RoomPhase::Lobby {
             return Err(ErrorCode::InMatch);
         }
-        self.lobby
+        let seats = || self.lobby.slots.iter().take(usize::from(self.capacity));
+        seats()
+            .position(|slot| slot.controller == Controller::Empty)
+            .or_else(|| seats().position(|slot| slot.controller == Controller::Bot))
+            .ok_or(ErrorCode::Full)
+    }
+
+    /// Gives the bot in `bot` its slot default look, with a colour nobody else wears.
+    fn seat_bot_look(&mut self, bot: usize) {
+        let wanted = Look::default_for(bot);
+        let taken: Vec<_> = self
+            .lobby
             .slots
             .iter()
-            .take(usize::from(self.capacity))
-            .position(|slot| slot.controller == Controller::Empty)
-            .ok_or(ErrorCode::Full)
+            .enumerate()
+            .filter(|(index, item)| *index != bot && item.controller != Controller::Empty)
+            .map(|(index, _)| self.looks[index].colour)
+            .collect();
+        let (colour, _) = resolve_colour(wanted.colour, &taken);
+        self.looks[bot] = Look { colour, ..wanted };
+    }
+
+    /// Before a match: puts a bot into every empty seat within the capacity (room creation).
+    /// Returns whether a seat changed; the caller advances the revision with its own change.
+    pub fn fill_bots(&mut self) -> bool {
+        if self.phase != RoomPhase::Lobby {
+            return false;
+        }
+        let filled = self
+            .lobby
+            .fill_vacant_with_bots_up_to(usize::from(self.capacity));
+        for bot in &filled {
+            self.seat_bot_look(*bot);
+        }
+        !filled.is_empty()
+    }
+
+    /// A new capacity before a match: bots past it (highest seats first) leave, and the seats it
+    /// newly opens are filled with bots. Humans are never moved.
+    fn resize_bots(&mut self, capacity: u8) {
+        let old = usize::from(self.capacity);
+        let new = usize::from(capacity);
+        self.capacity = capacity;
+        for slot in (new..MAX_PLAYERS).rev() {
+            let _ = self.lobby.remove_bot_at(slot);
+        }
+        while self.lobby.participants() > new {
+            match self.lobby.last_bot() {
+                Some(bot) => {
+                    let _ = self.lobby.remove_bot_at(bot);
+                }
+                None => break,
+            }
+        }
+        for slot in old..new.min(MAX_PLAYERS) {
+            if self.lobby.slots[slot].controller == Controller::Empty
+                && self.lobby.participants() < new
+                && self.lobby.add_bot_at(slot).is_ok()
+            {
+                self.seat_bot_look(slot);
+            }
+        }
     }
 
     pub fn admit(
@@ -1279,6 +1374,9 @@ impl RoomRuntime {
         } else {
             Controller::Remote
         };
+        if self.lobby.slots[slot].controller == Controller::Bot {
+            let _ = self.lobby.remove_bot_at(slot);
+        }
         if self.lobby.assign(slot, controller, name).is_err() {
             self.members.remove(&membership_id);
             return Err(ErrorCode::BadRoom);
@@ -1393,7 +1491,15 @@ impl RoomRuntime {
         }
     }
 
+    /// A human leaves (or is disconnected). During a match a bot takes over their player; in the
+    /// lobby a bot takes their seat, so the room stays ready to play.
     pub fn remove_connection(&mut self, connection_id: u64) {
+        self.vacate_connection(connection_id, true);
+    }
+
+    /// Removes a human; `refill` puts a bot into the seat they leave in the lobby (an owner's
+    /// explicit kick passes `false` so the seat shows "+").
+    fn vacate_connection(&mut self, connection_id: u64, refill: bool) {
         let membership = self
             .members
             .values()
@@ -1409,6 +1515,13 @@ impl RoomRuntime {
                     ));
                 } else {
                     let _ = self.lobby.clear(slot);
+                    if refill
+                        && slot < usize::from(self.capacity)
+                        && self.lobby.participants() < usize::from(self.capacity)
+                        && self.lobby.add_bot_at(slot).is_ok()
+                    {
+                        self.seat_bot_look(slot);
+                    }
                 }
                 let _ = self.revision.advance();
             }

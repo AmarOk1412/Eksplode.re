@@ -114,6 +114,18 @@ pub struct Participant {
     /// Ticks of protection left after a heart was lost.
     #[cfg_attr(feature = "serde", serde(default))]
     pub shield_left: u32,
+    /// Other participants this one eliminated this match: one per victim whose deadly flame was
+    /// lit by one of this participant's bombs (eliminating oneself counts for nobody).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub kills: u32,
+    /// Bombs this participant placed this match, whatever became of them.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub bombs_placed: u32,
+    /// When this participant was eliminated: 1 for the first elimination of the match, 2 for the
+    /// next, and so on; participants eliminated in the same tick share their number. `None` while
+    /// alive (and for whoever is still alive at the end).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub eliminated_order: Option<u32>,
 }
 
 #[cfg(feature = "serde")]
@@ -450,6 +462,9 @@ impl GameState {
                 _ => 1,
             },
             shield_left: 0,
+            kills: 0,
+            bombs_placed: 0,
+            eliminated_order: None,
         });
         Ok(GameState {
             bonus_in: config.bonus_every_ticks,

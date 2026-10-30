@@ -1,7 +1,9 @@
-//! A player's look as the renderer understands it: colour, gender look and accessories.
+//! A player's look as the renderer understands it: colour, accessories and costume.
 //!
 //! This mirrors the look of the server (`eksplode_re_net::look`): the names are the wire names, and
 //! reading a look from JSON is as lenient as the host's, so a bad entry only ever gives a default.
+//! The body silhouette (`gender`) is no longer a player choice (feature 011): the page and the
+//! host do not send it, so it falls back to the slot default, alternating between the slots.
 
 use eksplode_re_core::Dir;
 use serde_json::Value;
@@ -14,6 +16,7 @@ pub const COLOUR_NAMES: [&str; 10] = [
 pub const GENDER_NAMES: [&str; 2] = ["Male", "Female"];
 pub const HEAD_NAMES: [&str; 5] = ["None", "Cap", "TopHat", "Crown", "Headphones"];
 pub const FACE_NAMES: [&str; 5] = ["None", "Glasses", "Sunglasses", "Moustache", "Mask"];
+pub const COSTUME_NAMES: [&str; 5] = ["None", "Scarf", "Cape", "BowTie", "Medal"];
 
 /// Rows of the character plus the empty rows above the head that hats may use.
 pub const GRID_ROWS: usize = 15;
@@ -31,6 +34,11 @@ pub const FRAME: Rgb = [0.102, 0.102, 0.102];
 pub const SUNGLASSES: Rgb = [0.039, 0.039, 0.039];
 pub const MOUSTACHE: Rgb = [0.353, 0.227, 0.118];
 pub const MASK: Rgb = [0.659, 0.831, 0.933];
+pub const SCARF: Rgb = [0.851, 0.192, 0.192];
+pub const CAPE: Rgb = [0.42, 0.13, 0.55];
+pub const BOWTIE: Rgb = [0.11, 0.11, 0.24];
+pub const RIBBON: Rgb = [0.18, 0.4, 0.78];
+pub const MEDAL: Rgb = [0.83, 0.62, 0.17];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Gender {
@@ -56,7 +64,24 @@ pub enum Face {
     Mask,
 }
 
+/// Something worn on the body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Costume {
+    None,
+    Scarf,
+    Cape,
+    BowTie,
+    Medal,
+}
+
 const GENDERS: [Gender; 2] = [Gender::Male, Gender::Female];
+const COSTUMES: [Costume; 5] = [
+    Costume::None,
+    Costume::Scarf,
+    Costume::Cape,
+    Costume::BowTie,
+    Costume::Medal,
+];
 const HEADS: [Head; 5] = [
     Head::None,
     Head::Cap,
@@ -76,9 +101,11 @@ const FACES: [Face; 5] = [
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Look {
     pub colour: usize,
+    /// The body silhouette; not a player choice, see the module documentation.
     pub gender: Gender,
     pub head: Head,
     pub face: Face,
+    pub costume: Costume,
 }
 
 /// The look of a slot nobody customised: blue, black, red and purple characters.
@@ -92,6 +119,7 @@ pub fn default_for(slot: usize) -> Look {
         },
         head: Head::None,
         face: Face::None,
+        costume: Costume::None,
     }
 }
 
@@ -110,6 +138,7 @@ pub fn from_value(value: &Value, slot: usize) -> Look {
         gender: find(&GENDER_NAMES, "gender").map_or(default.gender, |i| GENDERS[i]),
         head: find(&HEAD_NAMES, "head").map_or(default.head, |i| HEADS[i]),
         face: find(&FACE_NAMES, "face").map_or(default.face, |i| FACES[i]),
+        costume: find(&COSTUME_NAMES, "costume").map_or(default.costume, |i| COSTUMES[i]),
     }
 }
 
@@ -297,6 +326,7 @@ pub fn grid_view(look: &Look, view: View, frame: Frame) -> Vec<String> {
             _ => {}
         }
     }
+    costume_into(&mut g, look.costume, view);
     match look.head {
         Head::None => {}
         Head::Cap => {
@@ -376,6 +406,63 @@ pub fn grid_view(look: &Look, view: View, frame: Frame) -> Vec<String> {
     g.into_iter().map(|row| row.into_iter().collect()).collect()
 }
 
+/// The costume on the body rows (9 to 13 of the grid): `r` scarf, `v` cape, `w` bow tie, `i`
+/// ribbon and `d` medal. The bow tie and the medal are worn in front, so they are not seen from
+/// behind; the cape hangs behind, so the front only shows its edges.
+fn costume_into(g: &mut [Vec<char>], costume: Costume, view: View) {
+    match (costume, view) {
+        (Costume::None, _) => {}
+        (Costume::Scarf, View::Left) => {
+            put(g, 9, 3..=8, 'r');
+            put(g, 10, 8..=9, 'r');
+            put(g, 11, 9..=9, 'r');
+        }
+        (Costume::Scarf, View::Up) => {
+            put(g, 9, 3..=8, 'r');
+            put(g, 10, 4..=4, 'r');
+        }
+        (Costume::Scarf, _) => {
+            put(g, 9, 3..=8, 'r');
+            put(g, 10, 7..=7, 'r');
+            put(g, 11, 7..=7, 'r');
+        }
+        (Costume::Cape, View::Left) => {
+            for row in 9..=13 {
+                put(g, row, 9..=9, 'v');
+            }
+            put(g, 9, 8..=8, 'v');
+        }
+        (Costume::Cape, View::Up) => {
+            for row in 9..=12 {
+                put(g, row, 2..=9, 'v');
+            }
+        }
+        (Costume::Cape, _) => {
+            put(g, 9, 2..=2, 'v');
+            put(g, 9, 9..=9, 'v');
+            for row in 12..=13 {
+                put(g, row, 1..=1, 'v');
+                put(g, row, 10..=10, 'v');
+            }
+        }
+        (Costume::BowTie | Costume::Medal, View::Up) => {}
+        (Costume::BowTie, View::Left) => put(g, 9, 3..=3, 'w'),
+        (Costume::BowTie, _) => {
+            put(g, 9, 4..=7, 'w');
+            put(g, 10, 4..=4, 'w');
+            put(g, 10, 7..=7, 'w');
+        }
+        (Costume::Medal, View::Left) => {
+            put(g, 9, 3..=3, 'i');
+            put(g, 10, 3..=3, 'd');
+        }
+        (Costume::Medal, _) => {
+            put(g, 9, 5..=6, 'i');
+            put(g, 10, 5..=6, 'd');
+        }
+    }
+}
+
 /// The picture of a look as characters, seen from the front and standing.
 pub fn grid(look: &Look) -> Vec<String> {
     grid_view(look, View::Down, Frame::Idle)
@@ -399,6 +486,11 @@ pub fn colour_of(look: &Look, skin: &Skin, ch: char) -> Option<Rgb> {
         's' => SUNGLASSES,
         'm' => MOUSTACHE,
         'x' => MASK,
+        'r' => SCARF,
+        'v' => CAPE,
+        'w' => BOWTIE,
+        'i' => RIBBON,
+        'd' => MEDAL,
         _ => {
             let _ = look;
             return None;

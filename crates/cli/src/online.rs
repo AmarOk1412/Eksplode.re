@@ -398,10 +398,12 @@ impl Online {
             ClientMsg::AddBot => Request::AddBot {
                 request_id,
                 room_id,
+                slot: None,
             },
             ClientMsg::RemoveBot => Request::RemoveBot {
                 request_id,
                 room_id,
+                slot: None,
             },
             ClientMsg::SetReady { ready } => Request::SetReady {
                 request_id,
@@ -682,8 +684,22 @@ impl Online {
                     self.notice = Some("Team and Chaser rooms require four players".into());
                     return;
                 }
-                let occupied = self.lobby.participants().min(4) as u8;
-                let capacity = if self.capacity > occupied {
+                // bots only fill seats (011): the host drops them when the capacity shrinks,
+                // so only humans set the smallest capacity
+                let humans = self
+                    .lobby
+                    .slots
+                    .iter()
+                    .filter(|slot| {
+                        matches!(
+                            slot.controller,
+                            eksplode_re_core::Controller::Local
+                                | eksplode_re_core::Controller::Remote
+                        )
+                    })
+                    .count()
+                    .min(4) as u8;
+                let capacity = if self.capacity > humans.max(1) {
                     self.capacity - 1
                 } else {
                     4
@@ -827,13 +843,21 @@ fn render_directory(frame: &mut Frame, online: &Online) {
         } else {
             " "
         };
+        // bots only keep seats warm (011): count the humans, show the bots apart
+        let humans = room.connected_humans.saturating_add(room.reserved_humans);
+        let bots = match room.bots {
+            0 => String::new(),
+            1 => " +1 bot".to_string(),
+            n => format!(" +{n} bots"),
+        };
         let label = format!(
-            "{selected} {} [{}] | {} | {}/{} | {:?} | {} | {}",
+            "{selected} {} [{}] | {} | {}/{}{} | {:?} | {} | {}",
             room.settings.name,
             room.reference.room_id.chars().take(8).collect::<String>(),
             room.settings.mode.label(),
-            room.occupied,
+            humans,
             room.capacity,
+            bots,
             room.phase,
             if room.password_required {
                 "password required"

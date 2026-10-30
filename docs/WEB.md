@@ -10,10 +10,21 @@ cargo run -p eksplode-re-web -- --bind 127.0.0.1 --bots 1
 # Terminal client: eksplode-re-cli join 127.0.0.1:7878
 ```
 
-Open the address in a browser and choose Create room or select an existing room before joining.
-Creating a room makes you its owner; Enter (or the Start button) begins that room's match, and
-the Add bot and Remove bot buttons fill its other slots. Each room has independent settings,
-players, bots and simulation. Opening the directory alone never takes a player slot.
+Open the address in a browser: the main menu offers **Create new game** (the room creation
+form), **Join a game** (the room list with Refresh and New room) and **Options**. Creating a room
+makes you its owner, and every other seat (up to the room's capacity) starts with a bot; a joining
+player takes a bot's seat, and a seat left before the match gets a bot again (so `--bots` no
+longer changes how a new room starts). Each room has
+independent settings, players, bots and simulation. Opening the room list alone never takes a
+player slot.
+
+**Lobby.** The header shows the room summary, a gear icon (owner only) that opens the room
+settings panel (name, mode, board size, round time, maximum players, friendly fire and password,
+saved together with one `SetRoom`; Cancel or Escape drops the edits) and a leave icon. On each seat
+the owner sees a small cross: it removes that bot (`RemoveBot{slot}`) or kicks that player
+(`RemovePlayer`), and the seat then stays empty. Every empty seat within the capacity shows "+",
+usable by anybody, which puts a bot there (`AddBot{slot}`). The action row is exactly Ready (all)
+and Start (owner only; Enter also starts).
 
 The lobby shows one tall card per slot: a cubic isometric character that bobs and turns every
 few seconds (`eksplode_re_portrait3d` in the WebAssembly module), a coloured `PLAYER n` banner, the
@@ -154,11 +165,18 @@ disabled for other members and during a match. Confirmed leave returns to the di
 last human's explicit departure closes that room without affecting others. Passwords, reconnect
 and remote discovery are not available yet; see [PROTOCOL.md](PROTOCOL.md#rooms).
 
-**Character editor.** On the join screen (and from "Change look" in the lobby) the player picks a
-colour, a gender look, a head accessory and a face accessory with a live preview drawn by the
-WebAssembly module. The choice is saved on the device (`localStorage`, key `eksplode.re.look.v1`),
-sent with `Join`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
-[PROTOCOL.md](PROTOCOL.md#looks)). During a match the editor is locked.
+**Options.** One dialog with three tabs, Customize, Sound and Controls, opened from the main
+menu (on Customize), from the header's sound and keyboard icons and from the pause menu's Sound and
+Controls entries (on the matching tab). Closing it returns to where it was opened, including a paused
+match. Switching tabs only hides and shows the panels, so nothing being edited is lost.
+
+**Customize.** The player picks a colour, a head accessory, a face accessory and a costume
+(Scarf, Cape, Bow tie or Medal) with a live preview drawn by the WebAssembly module; the small
+icon on the preview's bottom-right corner randomizes all four. There is no gender choice: the
+module draws the body silhouette from the slot. The choice is saved on the device (`localStorage`,
+key `eksplode.re.look.v1`; a look saved with a `gender` loads without it), sent with `CreateRoom`
+or `JoinRoom`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
+[PROTOCOL.md](PROTOCOL.md#looks)). During a match the look cannot change.
 
 ## Mouse-free navigation
 
@@ -195,11 +213,16 @@ be used together on multi-touch devices. Releasing or cancelling a touch, changi
 hiding the page or opening a navigation panel clears held input. Keyboard and controller behavior is
 unchanged.
 
-When a round ends, the result view shows the winner, draw or mode-specific outcome and final
-standings with each participant's available stats. It remains visible after the lobby update until
-Return to Lobby is selected; the button then reveals the latest lobby state.
+When a round ends, the result view shows the winner, draw or mode-specific outcome and a
+scoreboard with exactly three columns, Player, Kills and Bombs placed. Rows are ranked by survival:
+the winning side (or the survivors) first, then the others from the most recently eliminated to the
+first; ties go to more kills, then to the lower slot. Kills, bombs placed and the elimination order
+are counted by the game core and sent in every snapshot. The view remains visible after the lobby
+update until Return to Lobby is selected; the button then reveals the latest lobby state.
 
-**Control settings.** The keyboard icon in the page header opens the controls panel. Select one of
+Focused controls show a blue (`--slot0`) outline instead of the former red one.
+
+**Control settings.** The keyboard icon in the page header opens Options on the Controls tab. Select one of
 the six actions and press a key to replace its current assignment; a conflicting or reserved key
 is rejected without changing the existing mapping. The defaults remain arrows plus WASD, Space
 plus E, and Z plus Q. Valid keyboard bindings are stored on this device under

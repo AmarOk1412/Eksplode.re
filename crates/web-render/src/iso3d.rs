@@ -8,8 +8,8 @@
 
 use crate::commands::{Command, Kind};
 use crate::look::{
-    skin, Face, Gender, Head, Look, CAP, CROWN, CUP, FRAME, HAT, HAT_BAND, HEADBAND, MASK,
-    MOUSTACHE, SUNGLASSES,
+    skin, Costume, Face, Gender, Head, Look, BOWTIE, CAP, CAPE, CROWN, CUP, FRAME, HAT, HAT_BAND,
+    HEADBAND, MASK, MEDAL, MOUSTACHE, RIBBON, SCARF, SUNGLASSES,
 };
 use crate::sprites::{mix, Rgb};
 
@@ -199,10 +199,28 @@ fn character(look: &Look, swap: bool) -> Scene {
     s.cube((-0.25, 0.35), (-0.38, -0.05), (0.0, 0.25), sk.shoes);
     s.cube((-0.15, 0.15), (-0.72, -0.45), (0.45, 1.0), sk.arms);
     s.cube((-0.25, 0.35), (0.05, 0.38), (0.0, 0.25), sk.shoes);
+    if look.costume == Costume::Cape {
+        // behind the body (the back is negative x), wider so that its edges show
+        s.cube((-0.54, -0.43), (-0.5, 0.5), (0.18, 1.02), CAPE);
+    }
     s.cube((-0.42, 0.42), (-0.42, 0.42), (0.25, 1.0), sk.body);
     s.cube((-0.44, 0.44), (-0.44, 0.44), (0.3, 0.45), sk.belt);
     s.cube((0.43, 0.5), (-0.1, 0.1), (0.31, 0.44), sk.buckle);
     s.cube((-0.15, 0.15), (0.45, 0.72), (0.45, 1.0), sk.arms);
+    match look.costume {
+        Costume::None | Costume::Cape => {}
+        Costume::Scarf => {
+            s.cube((-0.46, 0.46), (-0.46, 0.46), (0.88, 1.02), SCARF);
+            s.cube((0.42, 0.5), (0.1, 0.26), (0.58, 0.88), SCARF);
+        }
+        Costume::BowTie => {
+            s.cube((0.42, 0.5), (-0.17, 0.17), (0.84, 0.97), BOWTIE);
+        }
+        Costume::Medal => {
+            s.cube((0.42, 0.47), (-0.05, 0.05), (0.74, 0.98), RIBBON);
+            s.cube((0.42, 0.5), (-0.1, 0.1), (0.6, 0.74), MEDAL);
+        }
+    }
 
     let female = look.gender == Gender::Female;
     let hair = mix(sk.helmet, [0.0; 3], 0.35);

@@ -10,16 +10,18 @@ use ratatui::crossterm::event::KeyCode;
 
 pub const USAGE: &str = "\
 Usage:
-  eksplode-re-cli [OPTIONS]                          play on this machine
+  eksplode-re-cli [OPTIONS]                          host a game (default; see Host options)
   eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
                      [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
     eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS] [--room-id ID]
+    eksplode-re-cli local [OPTIONS]                    play on this machine only, no network
 
-Local options:
+Local options (`eksplode-re-cli local ...`):
   --players <N>   number of local human players, 0-4 (default 1)
   --bots <N>      number of bots, 0-4 (default: fill up to 4 participants)
   --seed <U64>    RNG seed (default: from the system time)
-  --lobby         choose the slots on a lobby screen before the game starts
+  --lobby         choose the slots on a lobby screen before the game starts (default)
+  --instant       skip the lobby screen and start the match immediately
   --mode <MODE>   normal, team or chaser (default normal); team and chaser need 4 participants
   --size <SIZE>   small, medium or large board (default small)
   --time <MIN>    round time in minutes: 2, 3, 5 or 10 (default 3)
@@ -182,7 +184,11 @@ where
             it.next();
             parse_join(it)
         }
-        _ => parse_local(it),
+        Some("local") => {
+            it.next();
+            parse_local(it)
+        }
+        _ => parse_host(it),
     }
 }
 
@@ -190,7 +196,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
     let mut players = 1;
     let mut bots = None;
     let mut seed = None;
-    let mut lobby = false;
+    let mut lobby = true;
     let mut room = RoomSettings::default();
     let mut key_bindings = default_key_bindings();
     while let Some(arg) = it.next() {
@@ -200,6 +206,7 @@ fn parse_local(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErr
             "--players" => players = count(&arg, it.next(), 4)?,
             "--bots" => bots = Some(count(&arg, it.next(), 4)?),
             "--lobby" => lobby = true,
+            "--instant" => lobby = false,
             "--seed" => seed = Some(number(&arg, it.next())?),
             _ if key_slot(&arg).is_some() => {
                 let slot = key_slot(&arg).unwrap_or_default();
@@ -256,6 +263,7 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
+            "-V" | "--version" => return Ok(Command::Version),
             "--port" => opts.port = number(&arg, it.next())?,
             "--bots" => opts.bots = count(&arg, it.next(), 3)?,
             "--name" => opts.name = name(&arg, it.next())?,
@@ -305,6 +313,7 @@ fn parse_join(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
+            "-V" | "--version" => return Ok(Command::Version),
             "--name" => player = name(&arg, it.next())?,
             "--keys" => key_bindings = parse_key_bindings(&arg, it.next())?,
             "--room-id" => {

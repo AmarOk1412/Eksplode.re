@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use eksplode_re_net::look::{Colour, Face, Gender, Head};
+use eksplode_re_net::look::{Colour, Costume, Face, Head};
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -45,11 +45,6 @@ fn the_look_options_of_the_server_the_renderer_the_page_and_the_docs_agree() {
             eksplode_re_web_render::look::COLOUR_NAMES.to_vec(),
         ),
         (
-            "GENDERS",
-            names(Gender::ALL, Gender::name),
-            eksplode_re_web_render::look::GENDER_NAMES.to_vec(),
-        ),
-        (
             "HEADS",
             names(Head::ALL, Head::name),
             eksplode_re_web_render::look::HEAD_NAMES.to_vec(),
@@ -58,6 +53,11 @@ fn the_look_options_of_the_server_the_renderer_the_page_and_the_docs_agree() {
             "FACES",
             names(Face::ALL, Face::name),
             eksplode_re_web_render::look::FACE_NAMES.to_vec(),
+        ),
+        (
+            "COSTUMES",
+            names(Costume::ALL, Costume::name),
+            eksplode_re_web_render::look::COSTUME_NAMES.to_vec(),
         ),
     ];
     for (js_name, server, render) in lists {

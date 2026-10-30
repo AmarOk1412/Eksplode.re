@@ -41,6 +41,36 @@ trusted endpoint metadata, never credentials.
   deadline includes queue time; timeout means outcome unknown, not permission to retry under
   a new ID. Up to eight private outcomes per connection are retained for 60 seconds.
 
+### Lobby seats and bots
+
+Before a match every empty seat within the room's capacity holds a bot: `CreateRoom` fills them
+right after seating the creator, a joining human takes the first empty seat (otherwise the lowest
+bot seat; the bot leaves), and a seat a human leaves (`LeaveRoom` or a disconnect) gets a bot
+again. A seat the owner empties on purpose stays empty until a player joins or somebody uses "+".
+`RoomSummary.occupied` counts bots; clients decide whether a room can be joined from
+`connected_humans + reserved_humans`.
+
+| Request | Who | Effect |
+|---------|-----|--------|
+| `AddBot {request_id, room_id, slot?}` | any member | a bot into the empty seat `slot`; without `slot`, the first free seat |
+| `RemoveBot {request_id, room_id, slot?}` | owner only | removes the bot in seat `slot`, which stays empty; without `slot`, the highest bot seat |
+
+`slot` is the 0-based seat index; the web page always sends it, the terminal client (`b`/`x`) does
+not. Refusals use typed codes: `BadSlot` (index outside the four seats), `NotABot` (`RemoveBot` on a
+human or empty seat), `SlotTaken` (`AddBot` on a taken seat), `Full` (the seat is past the capacity,
+or the room is at capacity), `NotOwner`, `InMatch`. `SetRoom` capacity changes keep humans
+(`CapacityConflict` counts only humans): bots past the new capacity leave, and newly opened seats get
+bots.
+
+### Match statistics
+
+Each player of an `Observation` also carries `kills` (other players eliminated by a flame one of its
+bombs lit; eliminating yourself counts for nobody, a landing block is nobody's kill),
+`bombs_placed` (every successful placement, whatever became of the bomb) and `eliminated_order`
+(`1` for the first elimination of the match, the next number for the next one, shared by players
+eliminated in the same tick; `null` while alive). All three are optional for older peers (`0`, `0`,
+`null`). The web scoreboard ranks players with them.
+
 Password protection, `RemovePlayer` and `ResumeRoom`/`AckResume` are reserved in the v2 schema
 but not implemented yet; they are not advertised as available. Known-server aggregation also
 remains future work. Version-1 `Join` is rejected with `Rejected { reason: "BadVersion" }`
@@ -163,21 +193,23 @@ Old clients never send `RoomQuery` or `SetRoom` and ignore the new fields.
 
 ## Looks
 
-A look is a JSON object `{"colour":"Blue","gender":"Male","head":"Cap","face":"None"}`. The host
+A look is a JSON object `{"colour":"Blue","head":"Cap","face":"None","costume":"Scarf"}`. The host
 reads it leniently: a missing, wrongly typed or unknown field becomes the default of the sender's
 slot for that field, and a value that is not an object gives the full default, so a look never
 causes `Malformed`. The four participants of a match always have different colours: when the
 requested colour is taken, the sender gets the next free colour in palette order (wrapping) and an
 `Error{LookAdjusted}` notice. A bot or a terminal player gets the default look of its slot (blue,
 black, red and purple characters). `Welcome` and `Lobby` carry the look of every slot; old hosts send
-none and old clients ignore the field.
+none and old clients ignore the field. There is no gender choice any more: the `gender` key that
+older pages send is read and ignored (never an error), and the graphics module picks the body
+silhouette from the slot. A look without `costume` (an older page or host) means `None`.
 
 | Field | Values |
 |-------|--------|
 | `colour` | `Blue`, `Black`, `Red`, `Purple`, `Green`, `Orange`, `Yellow`, `Pink`, `Teal`, `White` |
-| `gender` | `Male`, `Female` |
 | `head` | `None`, `Cap`, `TopHat`, `Crown`, `Headphones` |
 | `face` | `None`, `Glasses`, `Sunglasses`, `Moustache`, `Mask` |
+| `costume` | `None`, `Scarf`, `Cape`, `BowTie`, `Medal` |
 
 ## Error codes
 

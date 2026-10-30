@@ -140,9 +140,9 @@ test("us3_as1_round_result_keeps_final_standings_until_return_to_lobby", () => {
     bombs_max: 1 + i,
     range: 2 + i,
     move_cooldown: 4,
-    has_punch: i === 1,
-    has_kick: false,
-    malus: null,
+    kills: i,
+    bombs_placed: 3 + i,
+    eliminated_order: i === 1 ? null : 1,
   }));
   const slots = lobby("Remote", "Remote");
   slots.slots[0].name = "Ann";
@@ -154,12 +154,11 @@ test("us3_as1_round_result_keeps_final_standings_until_return_to_lobby", () => {
   ]);
   assert.equal(started.stage, "results");
   assert.equal(started.notice, "Player 2 won");
-  assert.deepEqual(resultRows(started).map(({ label, standing }) => [label, standing]), [
-    ["Ann", "Eliminated"],
-    ["Bea", "Winner"],
+  // 011: the winner first, then by elimination; only name, kills and bombs placed
+  assert.deepEqual(resultRows(started).map(({ label, kills, bombsPlaced }) => [label, kills, bombsPlaced]), [
+    ["Bea", 1, 4],
+    ["Ann", 0, 3],
   ]);
-  assert.equal(resultRows(started)[1].range, 3);
-  assert.deepEqual(resultRows(started)[1].effects, ["punch"]);
 
   const updated = reduce(started, { type: "Lobby", lobby: slots });
   assert.equal(updated.stage, "results", "the server lobby update must not hide the result");
@@ -167,21 +166,76 @@ test("us3_as1_round_result_keeps_final_standings_until_return_to_lobby", () => {
   assert.equal(reduce(updated, { type: "return-to-lobby" }).result, null);
 });
 
-test("us3_as2_results_describe_draw_team_and_chaser_outcomes", () => {
+test("us3_as2_sc004_the_winner_is_first_for_draw_team_and_chaser_outcomes", () => {
   const slots = lobby("Remote", "Remote", "Remote", "Remote");
   const players = [
-    { alive: true, team: 0, role: "Normal" },
-    { alive: false, team: 0, role: "Normal" },
-    { alive: true, team: 1, role: "Normal" },
-    { alive: false, team: 1, role: "Normal" },
+    { alive: true, team: 0, role: "Normal", eliminated_order: null },
+    { alive: false, team: 0, role: "Normal", eliminated_order: 2 },
+    { alive: false, team: 1, role: "Normal", eliminated_order: 1 },
+    { alive: false, team: 1, role: "Normal", eliminated_order: 3 },
   ];
   const start = { ...initialState(), stage: "playing", slot: 0, lobby: slots, observation: { players, config: {} } };
-  assert.deepEqual(resultRows(reduce(start, { type: "Ended", outcome: "Draw" })).map((row) => row.standing), ["Draw", "Draw", "Draw", "Draw"]);
-  assert.deepEqual(resultRows(reduce(start, { type: "Ended", outcome: { TeamWin: 1 } })).map((row) => row.standing), ["Survived", "Eliminated", "Winner", "Winner"]);
-  const chaserPlayers = players.map((player, index) => ({ ...player, role: index === 0 ? "Chaser" : "Runner" }));
-  const chaserStart = { ...start, observation: { players: chaserPlayers, config: {} } };
-  assert.equal(resultRows(reduce(chaserStart, { type: "Ended", outcome: "ChaserWins" }))[0].standing, "Winner");
-  assert.equal(resultRows(reduce(chaserStart, { type: "Ended", outcome: "RunnersWin" }))[2].standing, "Winner");
+  const order = (state) => resultRows(state).map((row) => row.slot);
+  // Team A won although its second member fell before the last member of team B
+  assert.deepEqual(order(reduce(start, { type: "Ended", outcome: { TeamWin: 0 } })), [0, 1, 3, 2]);
+  const chaserPlayers = [
+    { alive: false, role: "Chaser", eliminated_order: 2 },
+    { alive: true, role: "Runner", eliminated_order: null },
+    { alive: false, role: "Runner", eliminated_order: 1 },
+    { alive: true, role: "Runner", eliminated_order: null },
+  ];
+  const chaser = { ...start, observation: { players: chaserPlayers, config: {} } };
+  assert.deepEqual(order(reduce(chaser, { type: "Ended", outcome: "RunnersWin" })), [1, 3, 0, 2]);
+  const hunted = chaserPlayers.map((p, i) => (i === 0 ? { ...p, alive: true, eliminated_order: null } : { ...p, alive: false, eliminated_order: i }));
+  assert.deepEqual(order(reduce({ ...start, observation: { players: hunted, config: {} } }, { type: "Ended", outcome: "ChaserWins" }))[0], 0);
+});
+
+// ---- 011 US5: the ranked scoreboard ----
+
+test("f11_us5_as2_the_scoreboard_has_exactly_player_kills_and_bombs_placed", () => {
+  const head = /<section[^>]*id="results-panel"[^>]*>[\s\S]*?<thead>([\s\S]*?)<\/thead>/.exec(indexHtml())?.[1] ?? "";
+  assert.deepEqual([...head.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1].trim()), ["Player", "Kills", "Bombs placed"]);
+  const state = {
+    ...initialState(),
+    stage: "results",
+    result: { outcome: "Draw", lobby: lobby("Remote", "Bot"), observation: { players: [{ alive: true, kills: 1, bombs_placed: 2 }, { alive: true }], config: {} } },
+  };
+  for (const row of resultRows(state)) assert.deepEqual(Object.keys(row), ["slot", "label", "kills", "bombsPlaced"]);
+  assert.deepEqual(resultRows(state).map((r) => [r.label, r.kills, r.bombsPlaced]), [["p0", 1, 2], ["Bot 2", 0, 0]],
+    "an older host without the statistics shows zeros");
+});
+
+test("f11_us5_as1_the_last_alive_comes_first_then_the_reverse_elimination_order", () => {
+  const slots = lobby("Remote", "Remote", "Bot", "Bot");
+  const players = [
+    { alive: false, kills: 0, bombs_placed: 4, eliminated_order: 1 },
+    { alive: true, kills: 2, bombs_placed: 9, eliminated_order: null },
+    { alive: false, kills: 1, bombs_placed: 5, eliminated_order: 3 },
+    { alive: false, kills: 0, bombs_placed: 1, eliminated_order: 2 },
+  ];
+  const state = { ...initialState(), stage: "playing", slot: 0, lobby: slots, observation: { players, config: {} } };
+  const ended = reduce(state, { type: "Ended", outcome: { Winner: 1 } });
+  assert.deepEqual(resultRows(ended).map((r) => r.slot), [1, 2, 3, 0]);
+  const skipped = { ...ended, result: { ...ended.result, lobby: lobby("Remote", "Remote", "Empty", "Bot") } };
+  assert.deepEqual(resultRows(skipped).map((r) => r.slot), [1, 3, 0], "empty seats are not listed");
+});
+
+test("f11_us5_as3_as4_ties_break_by_kills_then_by_slot", () => {
+  const slots = lobby("Remote", "Remote", "Remote", "Remote");
+  // a draw: everybody alive, then two eliminated in the same tick
+  const draw = [
+    { alive: true, kills: 0 }, { alive: true, kills: 3 }, { alive: true, kills: 0 }, { alive: true, kills: 1 },
+  ];
+  const result = (players, outcome) => resultRows({ ...initialState(), result: { outcome, lobby: slots, observation: { players, config: {} } } }).map((r) => r.slot);
+  assert.deepEqual(result(draw, "Draw"), [1, 3, 0, 2]);
+  const sameTick = [
+    { alive: false, kills: 0, eliminated_order: 1 },
+    { alive: false, kills: 1, eliminated_order: 1 },
+    { alive: false, kills: 0, eliminated_order: 1 },
+    { alive: false, kills: 0, eliminated_order: 1 },
+  ];
+  assert.deepEqual(result(sameTick, "Draw"), [1, 0, 2, 3]);
+  assert.deepEqual(result(sameTick, "Draw"), result(sameTick, "Draw"), "deterministic");
 });
 
 test("a lobby message during play does not leave the game", () => {
@@ -369,4 +423,107 @@ test("f4_us4_dev_panel_says_the_drop_sliders_have_no_effect_in_chaser_mode", () 
   const normal = devPanel({ ...state, lobby: { ...lobby, settings: { mode: "normal" } } });
   assert.equal(normal.noDropEffect, false);
   assert.doesNotMatch(normal.hint, /no effect/i);
+});
+
+// ---- 011 US1: the main menu ----
+import { readFileSync as readAsset } from "node:fs";
+import { screens, MAIN_MENU_ACTIONS } from "../assets/app.js";
+
+const hello = { type: "Hello", version: 2, server_id: "alpha", server_epoch: "epoch", capabilities: ["rooms", "directory"] };
+const indexHtml = () => readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
+const section = (html, id) => new RegExp(`<section[^>]*id="${id}"[^>]*>([\\s\\S]*?)</section>`).exec(html)?.[1] ?? "";
+
+test("f11_us1_as1_the_client_opens_on_a_main_menu_with_exactly_three_actions", () => {
+  for (const state of [initialState(), reduce(initialState(), hello)]) {
+    assert.equal(state.menu, "main");
+    const visible = screens(state);
+    assert.equal(visible.mainMenu, true);
+    assert.equal(visible.roomPanel, false, "no room creation form until Create new game");
+    assert.equal(visible.directoryPanel, false);
+    assert.equal(visible.lobbyPanel, false);
+  }
+  assert.deepEqual(MAIN_MENU_ACTIONS.map((a) => a.label), ["Create new game", "Join a game", "Options"]);
+  const menu = section(indexHtml(), "main-menu");
+  const buttons = [...menu.matchAll(/<button(?![^>]*\bhidden\b)[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim());
+  assert.deepEqual(buttons, ["Create new game", "Join a game", "Options"]);
+  for (const action of MAIN_MENU_ACTIONS) assert.match(menu, new RegExp(`id="${action.id}"`));
+});
+
+test("f11_us1_as2_create_new_game_opens_the_existing_room_creation_form", () => {
+  const create = MAIN_MENU_ACTIONS.find((a) => a.label === "Create new game");
+  const state = reduce(reduce(initialState(), hello), create.event);
+  const visible = screens(state);
+  assert.equal(visible.roomPanel, true);
+  assert.equal(visible.mainMenu, false);
+  assert.equal(visible.directoryPanel, false);
+  const form = section(indexHtml(), "room-panel");
+  for (const id of ["room-name", "room-modes", "room-size", "room-minutes", "room-capacity", "room-password", "room-ff"]) {
+    assert.match(form, new RegExp(`id="${id}"`), id);
+  }
+  const back = reduce(state, { type: "show-main" });
+  assert.equal(screens(back).mainMenu, true, "Back returns to the main menu");
+});
+
+test("f11_us1_a_lost_connection_shows_the_main_menu_with_retry", () => {
+  const closed = reduce(reduce(reduce(initialState(), hello), { type: "show-directory" }), { type: "socket-closed" });
+  const visible = screens(closed);
+  assert.equal(visible.mainMenu, true);
+  assert.equal(visible.directoryPanel, false);
+  assert.match(section(indexHtml(), "main-menu"), /id="retry"/);
+});
+
+// ---- 011 US3: one tabbed Options screen ----
+import { OPTIONS_TABS, HUB_OPTIONS_TABS, optionsReducer, optionsView } from "../assets/app.js";
+
+test("f11_us3_as1_options_has_exactly_three_tabs_in_order", () => {
+  assert.deepEqual(OPTIONS_TABS.map((t) => t.label), ["Customize", "Sound", "Controls"]);
+  const html = indexHtml();
+  const panel = /<section[^>]*id="options-panel"[^>]*role="dialog"[^>]*>([\s\S]*)<\/section>\s*<section id="main-menu"/.exec(html)?.[1] ?? "";
+  assert.ok(panel, "the Options screen is one dialog");
+  const tablist = /<div[^>]*role="tablist"[^>]*>([\s\S]*?)<\/div>/.exec(panel)?.[1] ?? "";
+  assert.deepEqual([...tablist.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim()),
+    ["Customize", "Sound", "Controls"]);
+  for (const tab of OPTIONS_TABS) assert.match(panel, new RegExp(`id="${tab.panel}"[^>]*role="tabpanel"`), tab.panel);
+});
+
+test("f11_us3_as2_as3_the_sound_and_controls_tabs_hold_the_existing_controls", () => {
+  const html = indexHtml();
+  const sound = /<section[^>]*id="sound-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  for (const id of ["music-volume", "effects-volume", "mute", "test-sound"]) assert.match(sound, new RegExp(`id="${id}"`), id);
+  const controls = /<section[^>]*id="controls-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  for (const needle of ['data-bind-action="up"', 'data-bind-action="bomb"', 'id="controller-select"', 'id="controls-reset"']) {
+    assert.ok(controls.includes(needle), needle);
+  }
+});
+
+test("f11_us3_switching_tabs_only_changes_which_panel_shows", () => {
+  let options = optionsReducer(null, { type: "open", tab: "customize" });
+  assert.deepEqual(optionsView(options), { customize: true, sound: false, controls: false });
+  const opened = options;
+  options = optionsReducer(options, { type: "tab", tab: "sound" });
+  assert.deepEqual(optionsView(options), { customize: false, sound: true, controls: false });
+  options = optionsReducer(options, { type: "tab", tab: "customize" });
+  assert.deepEqual(options, opened, "coming back restores the same screen state");
+  assert.equal(optionsReducer(options, { type: "tab", tab: "nonsense" }), options);
+  assert.equal(optionsReducer(options, { type: "close" }), null);
+  assert.deepEqual(optionsView(null), { customize: false, sound: false, controls: false });
+  // the three tab panels stay in the page (hidden, never rebuilt), so unsaved edits survive a switch
+  const html = indexHtml();
+  for (const tab of OPTIONS_TABS) assert.equal(html.split(`id="${tab.panel}"`).length, 2, tab.panel);
+});
+
+test("f11_us1_as5_us3_as4_the_main_menu_opens_options_on_customize", () => {
+  const options = optionsReducer(null, MAIN_MENU_ACTIONS.find((a) => a.label === "Options").event.tab
+    ? { type: "open", tab: MAIN_MENU_ACTIONS[2].event.tab } : { type: "open" });
+  assert.equal(options.tab, "customize");
+});
+
+test("f11_us3_pause_menu_sound_and_controls_open_the_matching_tab", () => {
+  assert.deepEqual(HUB_OPTIONS_TABS, { "hub-sound": "sound", "hub-controls": "controls" });
+  for (const [entry, tab] of Object.entries(HUB_OPTIONS_TABS)) {
+    assert.equal(optionsReducer(null, { type: "open", tab }).tab, tab, entry);
+  }
+  const hub = /<section[^>]*id="menu-hub"[^>]*>([\s\S]*?)<\/section>/.exec(indexHtml())?.[1] ?? "";
+  assert.match(hub, /id="hub-sound"[^>]*aria-controls="options-panel"/);
+  assert.match(hub, /id="hub-controls"[^>]*aria-controls="options-panel"/);
 });

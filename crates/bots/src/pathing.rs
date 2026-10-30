@@ -116,10 +116,5 @@ pub fn has_malus(obs: &Observation, p: Pos) -> bool {
 
 /// Can the player step on `p` right now (ignoring fire)?
 pub fn passable(obs: &Observation, p: Pos) -> bool {
-    obs.arena.tile(p) == Tile::Floor
-        && !obs.bombs.iter().any(|b| b.flight.is_none() && b.pos == p)
-        && !obs
-            .players
-            .iter()
-            .any(|o| o.alive && o.id != obs.me && o.pos == p)
+    obs.arena.tile(p) == Tile::Floor && !obs.bombs.iter().any(|b| b.flight.is_none() && b.pos == p)
 }

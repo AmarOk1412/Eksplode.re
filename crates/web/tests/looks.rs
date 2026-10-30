@@ -4,7 +4,7 @@
 mod common;
 
 use common::*;
-use eksplode_re_net::look::{Colour, Face, Gender, Head, Look};
+use eksplode_re_net::look::{Colour, Costume, Face, Head, Look};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use serde_json::json;
 
@@ -21,14 +21,17 @@ fn two_tabs_see_each_other_s_looks_in_welcome_and_lobby() {
     let mut a = RoomWs::create_with_look(
         s.http_addr(),
         "Ann",
-        Some(json!({"colour":"Green","gender":"Female","head":"Crown","face":"Moustache"})),
+        // 011: an old page still sends a gender; it is ignored
+        Some(
+            json!({"colour":"Green","gender":"Female","head":"Crown","face":"Moustache","costume":"Medal"}),
+        ),
     );
     let looks = welcome_looks(&mut a);
     let ann = Look {
         colour: Colour::Green,
-        gender: Gender::Female,
         head: Head::Crown,
         face: Face::Moustache,
+        costume: Costume::Medal,
     };
     assert_eq!(looks[0], ann);
 

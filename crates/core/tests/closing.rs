@@ -393,3 +393,26 @@ fn the_pattern_draws_no_random_numbers() {
     );
     assert!(a.phase == Phase::Playing || matches!(a.phase, Phase::Ended(_)));
 }
+
+// ---- 011 US5: the landing block stamps the elimination order too ----
+
+#[test]
+fn f11_us5_a_crushed_player_gets_the_next_elimination_order_and_nobody_a_kill() {
+    let mut s = open_state([Some((3, 1)), Some((5, 5)), Some((1, 5)), None]);
+    run_to(&mut s, 50);
+    while s.tick < 60 {
+        step(&mut s, &idle());
+    }
+    assert!(!s.players[0].alive, "crushed at tick 59");
+    assert_eq!(s.players[0].eliminated_order, Some(1));
+    assert!(
+        s.players.iter().all(|p| p.kills == 0),
+        "a block is nobody's kill"
+    );
+    // a later blast elimination comes after it, like at the blast site
+    add_bomb(&mut s, 1, 1, 4, 1);
+    step(&mut s, &idle());
+    assert!(!s.players[2].alive);
+    assert_eq!(s.players[2].eliminated_order, Some(2));
+    assert_eq!(s.players[1].kills, 1);
+}

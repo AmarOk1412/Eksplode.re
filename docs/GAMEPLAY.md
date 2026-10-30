@@ -49,8 +49,8 @@ a draw. The result names the winning team and its members.
 Friendly fire is a room setting (on by default). With it on, explosions eliminate teammates like
 anybody. With it off, an explosion that only teammates lit does not hurt a player, but a player is
 still eliminated by their own bomb and by any explosion an opponent lit, and chain reactions still
-work. A Team match cannot start with fewer than four participants; the owner adds bots with the
-`Add bot` button (`b` in the terminal). A bot that takes over for a player who left plays for the
+work. A Team match cannot start with fewer than four participants; new rooms fill their empty
+seats with bots, and an emptied seat takes a bot again with the lobby's "+" (`b` in the terminal). A bot that takes over for a player who left plays for the
 same team and never targets a teammate; it also stays out of every explosion, including those of
 its teammates, and does not place a bomb that would reach a teammate while friendly fire is on.
 
@@ -167,7 +167,8 @@ hyper speed, red small bomb).
 
 In a match each player is drawn from the side they face: front when moving down or standing at the
 start of a round, back when moving up, side when moving left or right (the right side is the left
-side mirrored). The same colour, gender look and accessories are drawn in every view; from behind
+side mirrored). The same colour, accessories and costume are drawn in every view (the body
+silhouette alternates with the slot and is not a choice); from behind
 there is no face, from the side there is one eye and the hat brim points ahead. While a player
 walks the sprite alternates two steps (feet and arms swap, one pixel of bob) at the pace of their
 steps, so hyper speed walks faster and slow walks slower; a standing player shows an idle pose in

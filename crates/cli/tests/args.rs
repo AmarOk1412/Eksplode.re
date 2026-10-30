@@ -8,6 +8,14 @@ fn args(list: &[&str]) -> Result<Command, UsageError> {
     parse(list.iter().map(|s| s.to_string()))
 }
 
+/// `local` is now an explicit subcommand (bare invocation defaults to `host`, see
+/// `defaults_to_hosting_a_game`), so local-play option tests route through it.
+fn local(list: &[&str]) -> Result<Command, UsageError> {
+    let mut full = vec!["local"];
+    full.extend_from_slice(list);
+    args(&full)
+}
+
 fn opts(players: u8, bots: u8, seed: Option<u64>, lobby: bool) -> Result<Command, UsageError> {
     Ok(Command::Run(LocalOptions {
         players,
@@ -20,30 +28,46 @@ fn opts(players: u8, bots: u8, seed: Option<u64>, lobby: bool) -> Result<Command
 }
 
 #[test]
-fn defaults_to_one_human_and_three_bots() {
-    assert_eq!(args(&[]), opts(1, 3, None, false));
+fn defaults_to_hosting_a_game() {
+    assert!(matches!(args(&[]), Ok(Command::Host(_))));
+}
+
+#[test]
+fn local_defaults_to_one_human_and_three_bots_and_shows_the_lobby_first() {
+    assert_eq!(local(&[]), opts(1, 3, None, true));
 }
 
 #[test]
 fn bots_default_to_filling_the_match() {
-    assert_eq!(args(&["--players", "2"]), opts(2, 2, None, false));
-    assert_eq!(args(&["--players", "4"]), opts(4, 0, None, false));
-    assert_eq!(args(&["--players", "0"]), opts(0, 4, None, false));
+    assert_eq!(local(&["--players", "2"]), opts(2, 2, None, true));
+    assert_eq!(local(&["--players", "4"]), opts(4, 0, None, true));
+    assert_eq!(local(&["--players", "0"]), opts(0, 4, None, true));
 }
 
 #[test]
 fn parses_players_bots_seed_and_lobby() {
     assert_eq!(
-        args(&["--players", "2", "--bots", "1", "--seed", "42", "--lobby"]),
+        local(&["--players", "2", "--bots", "1", "--seed", "42", "--lobby"]),
         opts(2, 1, Some(42), true)
     );
-    assert_eq!(args(&["--bots", "0"]), opts(1, 0, None, false));
+    assert_eq!(local(&["--bots", "0"]), opts(1, 0, None, true));
+}
+
+#[test]
+fn instant_skips_the_lobby_screen() {
+    assert_eq!(
+        local(&["--players", "2", "--bots", "2", "--instant"]),
+        opts(2, 2, None, false)
+    );
+    // the last of --lobby/--instant on the command line wins
+    assert_eq!(local(&["--instant", "--lobby"]), opts(1, 3, None, true));
+    assert_eq!(local(&["--lobby", "--instant"]), opts(1, 3, None, false));
 }
 
 #[test]
 fn too_many_participants_is_a_usage_error() {
     assert_eq!(
-        args(&["--players", "3", "--bots", "2"]),
+        local(&["--players", "3", "--bots", "2"]),
         Err(UsageError::BadParticipants {
             players: 3,
             bots: 2
@@ -52,9 +76,9 @@ fn too_many_participants_is_a_usage_error() {
 }
 
 #[test]
-fn nobody_playing_is_a_usage_error() {
+fn nobody_playing_instantly_is_a_usage_error() {
     assert_eq!(
-        args(&["--players", "0", "--bots", "0"]),
+        local(&["--players", "0", "--bots", "0", "--instant"]),
         Err(UsageError::BadParticipants {
             players: 0,
             bots: 0
@@ -63,13 +87,21 @@ fn nobody_playing_is_a_usage_error() {
 }
 
 #[test]
+fn nobody_playing_yet_is_fine_since_the_lobby_shows_by_default() {
+    assert_eq!(
+        local(&["--players", "0", "--bots", "0"]),
+        opts(0, 0, None, true)
+    );
+}
+
+#[test]
 fn rejects_bad_values_and_unknown_options() {
     assert!(matches!(
-        args(&["--players", "x"]),
+        local(&["--players", "x"]),
         Err(UsageError::InvalidValue { .. })
     ));
     assert!(matches!(
-        args(&["--players", "9"]),
+        local(&["--players", "9"]),
         Err(UsageError::InvalidValue { .. })
     ));
     assert!(matches!(
@@ -96,7 +128,7 @@ fn help_and_version() {
 #[test]
 fn an_empty_start_is_fine_with_the_lobby() {
     assert_eq!(
-        args(&["--players", "0", "--bots", "0", "--lobby"]),
+        local(&["--players", "0", "--bots", "0", "--lobby"]),
         opts(0, 0, None, true)
     );
 }
@@ -307,10 +339,10 @@ mod network {
 
     #[test]
     fn terminal_key_options_parse_six_bindings_and_keep_omitted_slot_defaults() {
-        let Ok(Command::Run(defaults)) = args(&[]) else {
+        let Ok(Command::Run(defaults)) = local(&[]) else {
             panic!("expected default local options");
         };
-        let Ok(Command::Run(configured)) = args(&["--p1-keys", "1,2,3,4,5,6"]) else {
+        let Ok(Command::Run(configured)) = local(&["--p1-keys", "1,2,3,4,5,6"]) else {
             panic!("expected configured local options");
         };
         assert_eq!(configured.key_bindings[0].up, KeyCode::Char('1'));
@@ -363,7 +395,7 @@ mod room_options {
     }
 
     fn local_opts(list: &[&str]) -> LocalOptions {
-        match args(list) {
+        match local(list) {
             Ok(Command::Run(o)) => o,
             other => panic!("expected local options, got {other:?}"),
         }
@@ -415,7 +447,7 @@ mod room_options {
     fn the_local_game_has_no_room_name_and_no_setup_option() {
         for opt in ["--room-name", "--no-setup"] {
             assert!(matches!(
-                args(&[opt, "x"]),
+                local(&[opt, "x"]),
                 Err(UsageError::UnknownOption(_))
             ));
         }
@@ -424,11 +456,21 @@ mod room_options {
     #[test]
     fn a_mode_that_needs_four_participants_is_checked_for_the_local_game() {
         assert!(matches!(
-            args(&["--mode", "team", "--players", "1", "--bots", "1"]),
+            local(&[
+                "--mode",
+                "team",
+                "--players",
+                "1",
+                "--bots",
+                "1",
+                "--instant"
+            ]),
             Err(UsageError::ModeNeedsPlayers { needed: 4, .. })
         ));
-        assert!(args(&["--mode", "team", "--players", "2", "--bots", "2"]).is_ok());
-        assert!(args(&["--mode", "team", "--lobby", "--players", "0", "--bots", "0"]).is_ok());
+        // the lobby screen lets you add participants before starting, so it is not checked here
+        assert!(local(&["--mode", "team", "--players", "1", "--bots", "1"]).is_ok());
+        assert!(local(&["--mode", "team", "--players", "2", "--bots", "2"]).is_ok());
+        assert!(local(&["--mode", "team", "--lobby", "--players", "0", "--bots", "0"]).is_ok());
     }
 
     #[test]

@@ -91,8 +91,9 @@ test("us2_as2_room_password_inputs_are_masked_and_passwords_never_enter_room_def
   assert.match(html, /<input[^>]*id="join-password"[^>]*type="password"/);
   assert.match(html, /<select[^>]*id="lobby-capacity"/);
   assert.match(html, /<input[^>]*id="lobby-password"[^>]*type="password"/);
-  assert.match(html, /id="lobby-password-set"/);
-  assert.match(html, /id="lobby-password-remove"/);
+  // 011: the password is set or removed with the configuration panel's single Save
+  assert.match(html, /id="room-config-save"/);
+  assert.match(html, /<input[^>]*id="lobby-password-remove"[^>]*type="checkbox"/);
   const values = new Map();
   const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value) };
   saveRoom(storage, { ...defaultRoom(), password: "password-canary" });
@@ -127,4 +128,62 @@ test("us2_as6_room_updates_refresh_explicit_owner_capacity_and_protection_contro
   assert.equal(roomControls({ ...state, slot: 1, stage: "playing" }).enabled, false);
   assert.equal(reduce(state, { type: "Error", code: "NotOwner", message: "Only Bob can manage this room" }).notice,
     "Only Bob can manage this room");
+});
+
+// ---- 011 US2: per-seat controls and the two-button action row ----
+import { lobbyActions } from "../assets/app.js";
+
+const lobbyHtml = () => {
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  return /<section[^>]*id="lobby-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+};
+const owned = (slots) => ({ owner_slot: 0, slots, settings: { mode: "normal" } });
+const members = [{ membership_id: "m-ann", slot: 0 }, { membership_id: "m-bob", slot: 1 }];
+
+test("f11_us2_as2_the_owner_sees_a_cross_on_every_other_occupied_seat", () => {
+  const lobby = owned([slot("Remote", "Ann"), slot("Remote", "Bob"), slot("Bot"), slot("Empty")]);
+  const cards = lobbyCards(lobby, 0, { capacity: 4, memberships: members });
+  assert.equal(cards[0].remove, null, "the owner does not kick themselves");
+  assert.deepEqual(cards[1].remove, { type: "RemovePlayer", membership_id: "m-bob" });
+  assert.deepEqual(cards[2].remove, { type: "RemoveBot", slot: 2 });
+  assert.equal(cards[3].remove, null, "an empty seat has no cross");
+});
+
+test("f11_us2_as3_a_non_owner_sees_no_cross_at_all", () => {
+  const lobby = owned([slot("Remote", "Ann"), slot("Remote", "Bob"), slot("Bot"), slot("Bot")]);
+  const cards = lobbyCards(lobby, 1, { capacity: 4, memberships: members });
+  assert.ok(cards.every((c) => c.remove === null));
+});
+
+test("f11_us2_as4_every_empty_seat_shows_plus_for_any_session", () => {
+  const lobby = owned([slot("Remote", "Ann"), slot("Empty"), slot("Bot"), slot("Empty")]);
+  for (const you of [0, 1, null]) {
+    const cards = lobbyCards(lobby, you, { capacity: 4, memberships: members });
+    assert.deepEqual(cards.map((c) => c.add), [null, { type: "AddBot", slot: 1 }, null, { type: "AddBot", slot: 3 }]);
+  }
+  const small = lobbyCards(owned([slot("Remote", "Ann"), slot("Empty"), slot("Empty"), slot("Empty")]), 0, { capacity: 2 });
+  assert.deepEqual(small.map((c) => c.add), [null, { type: "AddBot", slot: 1 }, null, null], "seats past the capacity are closed");
+  assert.deepEqual(small.map((c) => c.closed), [false, false, true, true]);
+});
+
+test("f11_us2_as8_the_action_row_is_exactly_ready_then_start_for_the_owner", () => {
+  const lobby = owned([slot("Remote", "Ann"), slot("Remote", "Bob", true), slot("Bot"), slot("Bot")]);
+  const owner = lobbyActions({ stage: "lobby", slot: 0, lobby });
+  assert.deepEqual(owner.map((a) => [a.id, a.label]), [["ready", "Ready"], ["start", "Start"]]);
+  assert.deepEqual(owner.map((a) => a.visible), [true, true]);
+  const other = lobbyActions({ stage: "lobby", slot: 1, lobby });
+  assert.deepEqual(other.map((a) => [a.id, a.visible]), [["ready", true], ["start", false]]);
+  assert.equal(other[0].pressed, true, "Ready shows the sender's own state");
+  assert.deepEqual(owner[0].message, { type: "SetReady", ready: true });
+  assert.deepEqual(other[0].message, { type: "SetReady", ready: false });
+
+  const panel = lobbyHtml();
+  const row = /<div class="buttons lobby-actions"[^>]*>([\s\S]*?)<\/div>/.exec(panel)?.[1] ?? "";
+  assert.deepEqual([...row.matchAll(/<button[^>]*id="([^"]+)"/g)].map((m) => m[1]), ["ready", "start"]);
+});
+
+test("f11_us2_as9_add_bot_remove_bot_and_change_look_buttons_are_gone", () => {
+  const panel = lobbyHtml();
+  for (const id of ["add-bot", "remove-bot", "change-look"]) assert.doesNotMatch(panel, new RegExp(`id="${id}"`), id);
+  assert.doesNotMatch(panel, />\s*(Add bot|Remove bot|Change look)\s*</);
 });

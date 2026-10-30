@@ -160,7 +160,9 @@ def check_joined_non_owner():
     wait_for([host[1]], host[1], "(you)")
     client = spawn(["join", f"127.0.0.1:{port}", "--name", "Cli"])
     fds = [host[1], client[1]]
-    ok = wait_for(fds, client[1], "Rooms")
+    # wait for the room itself, not only the list header: the first screen says "No rooms
+    # available" until the directory answer arrives, and Enter on an empty list does nothing
+    ok = wait_for(fds, client[1], "Room:")
     if ok:
         os.write(client[1], b"\r")
         ok = wait_for(fds, client[1], "(you)")

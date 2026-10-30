@@ -137,7 +137,16 @@ them in `crates/web-render/tests/sprites3.rs`.
 **A look option.** Add the name to `crates/net/src/look.rs` and `crates/web-render/src/look.rs`
 (the wire names must match), the pixels or boxes in `look.rs` and `iso3d.rs`, the option in
 `crates/web/assets/look.js`, and tests in `crates/net/tests/look.rs` and
-`crates/web-render/tests/look.rs`.
+`crates/web-render/tests/look.rs`. Categories are colour, head, face and costume (feature 011 added `Costume` and
+removed the player-facing gender choice; `web-render` keeps a slot-derived silhouette). Also list the
+values in the Looks table of [PROTOCOL.md](PROTOCOL.md#looks): `crates/web/tests/consistency.rs` checks
+that the server, the renderer, the page and the docs agree.
+
+**A per-player statistic.** Add the field to `core::state::Participant` with `serde(default)` so that
+older peers still decode snapshots, count it in `step` (see `stamp_eliminations` and the kill credit
+in `eliminate`), and refresh the render fixture with
+`UPDATE_FIXTURES=1 cargo test -p eksplode-re-web-render --test fixtures`. The page reads it from
+`observation.players` (see `resultRows` in `app.js`).
 
 **A sound.** Add the id to `SOUND_IDS` and its recipe to `RECIPES` in
 `crates/web/assets/audio.js`, map the event in `soundsForEvents`, test it in

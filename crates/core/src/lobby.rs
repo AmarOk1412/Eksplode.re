@@ -33,6 +33,8 @@ pub enum LobbyError {
     SlotOutOfRange(usize),
     SlotTaken(usize),
     Full,
+    /// The slot holds a human or nobody, so there is no bot to remove from it.
+    NotABot(usize),
 }
 
 impl fmt::Display for LobbyError {
@@ -41,6 +43,7 @@ impl fmt::Display for LobbyError {
             LobbyError::SlotOutOfRange(i) => write!(f, "slot {i} does not exist"),
             LobbyError::SlotTaken(i) => write!(f, "slot {i} is already taken"),
             LobbyError::Full => write!(f, "all {MAX_PLAYERS} slots are taken"),
+            LobbyError::NotABot(i) => write!(f, "slot {i} is not a bot"),
         }
     }
 }
@@ -120,6 +123,41 @@ impl Lobby {
         let slot = self.first_free().ok_or(LobbyError::Full)?;
         self.assign(slot, Controller::Bot, &format!("Bot {}", slot + 1))?;
         Ok(slot)
+    }
+
+    /// Puts a bot into exactly `slot`, which must be empty (the lobby's "+" on that seat).
+    pub fn add_bot_at(&mut self, slot: usize) -> Result<(), LobbyError> {
+        self.assign(slot, Controller::Bot, &format!("Bot {}", slot + 1))
+    }
+
+    /// Removes the bot in exactly `slot` (the owner's cross on that seat); the seat stays empty.
+    pub fn remove_bot_at(&mut self, slot: usize) -> Result<(), LobbyError> {
+        let s = self
+            .slots
+            .get(slot)
+            .ok_or(LobbyError::SlotOutOfRange(slot))?;
+        if s.controller != Controller::Bot {
+            return Err(LobbyError::NotABot(slot));
+        }
+        self.clear(slot)
+    }
+
+    /// Puts a bot into every empty slot and returns the slots filled, in order; does nothing
+    /// when no slot is empty.
+    pub fn fill_vacant_with_bots(&mut self) -> Vec<usize> {
+        self.fill_vacant_with_bots_up_to(MAX_PLAYERS)
+    }
+
+    /// Like [`Lobby::fill_vacant_with_bots`], but only among the first `seats` slots (a room
+    /// capacity); slots past it stay empty.
+    pub fn fill_vacant_with_bots_up_to(&mut self, seats: usize) -> Vec<usize> {
+        let mut filled = Vec::new();
+        for slot in 0..seats.min(MAX_PLAYERS) {
+            if self.slots[slot].controller == Controller::Empty && self.add_bot_at(slot).is_ok() {
+                filled.push(slot);
+            }
+        }
+        filled
     }
 
     /// Frees a slot; freeing an empty slot is fine.
