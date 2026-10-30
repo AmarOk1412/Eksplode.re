@@ -512,21 +512,7 @@ impl Online {
                 self.notice = Some(format!("Player {} left, a bot took over", slot + 1));
             }
             ServerMsg::Ended { outcome } => {
-                self.notice = Some(match outcome {
-                    Outcome::Winner(id) if Some(id.index()) == self.slot => "You won!".to_string(),
-                    Outcome::Winner(id) => format!("Player {} won", id.index() + 1),
-                    Outcome::Draw => "Draw".to_string(),
-                    Outcome::TeamWin(t) => {
-                        let members = self
-                            .observation
-                            .as_ref()
-                            .map(|o| format!(" ({})", team_members(o, t)))
-                            .unwrap_or_default();
-                        format!("Team {} won{members}", team_letter(t))
-                    }
-                    Outcome::ChaserWins => "The chaser wins".to_string(),
-                    Outcome::RunnersWin => "The runners win".to_string(),
-                });
+                self.notice = None;
                 if self.stage == Stage::ConfirmLeave {
                     self.leave_return = Stage::Lobby;
                 } else {

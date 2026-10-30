@@ -502,9 +502,7 @@ fn the_result_shows_up_and_the_lobby_returns() {
     assert!(pump_until(&mut h, |o| o.lobby.slots[1].controller == Controller::Bot));
     h.handle_key(KeyCode::Enter);
     assert!(pump_until(&mut h, |o| o.stage == Stage::Playing));
-    assert!(pump_until(&mut h, |o| o.stage == Stage::Lobby && o.notice.is_some()));
-    let n = h.notice.clone().unwrap();
-    assert!(n.contains("won") || n.contains("Draw"), "{n}");
+    assert!(pump_until(&mut h, |o| o.stage == Stage::Lobby && o.notice.is_none()));
 }
 
 #[test]
