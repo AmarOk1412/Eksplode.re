@@ -717,3 +717,9 @@ select:focus-visible { background: var(--ink); color: #fff; }
   display: grid;
   place-items: center;
 }
+/* Material Icons "autorenew" (Apache 2.0), inlined so the page loads nothing external */
+.randomize-icon svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
