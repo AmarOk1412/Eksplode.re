@@ -44,7 +44,7 @@ fn alive(s: &GameState) -> [bool; 4] {
 }
 
 #[test]
-fn f4_us4_as1_one_chaser_in_the_center_with_two_bombs_and_three_hearts_and_runners_in_the_corners()
+fn f4_us4_as1_one_chaser_in_the_center_with_five_bombs_and_three_hearts_and_runners_in_the_corners()
 {
     let mut chasers = std::collections::BTreeSet::new();
     for size in BoardSize::ALL {
@@ -63,7 +63,7 @@ fn f4_us4_as1_one_chaser_in_the_center_with_two_bombs_and_three_hearts_and_runne
                 pos(w / 2, h / 2),
                 "the chaser starts in the middle"
             );
-            assert_eq!(s.players[c].bombs_max, 2);
+            assert_eq!(s.players[c].bombs_max, 5);
             assert_eq!(s.players[c].hearts, 3);
             let corners = [pos(1, 1), pos(w - 2, 1), pos(1, h - 2), pos(w - 2, h - 2)];
             for i in (0..4).filter(|i| *i != c) {

@@ -411,7 +411,8 @@ fn f4_us4_as9_the_chaser_is_marked_with_hearts_and_the_result_says_who_won() {
         status("P1 ").contains('*') && status("P1 ").contains("<3 x3"),
         "{s}"
     );
-    assert!(status("P1 ").contains("bombs 0/2"), "two bombs: {s}");
+    let bombs = format!("bombs 0/{}", st.config.chaser_bombs);
+    assert!(status("P1 ").contains(&bombs), "{bombs}: {s}");
     for runner in ["P2 ", "P3 ", "P4 "] {
         assert!(
             !status(runner).contains('*') && !status(runner).contains("<3"),
