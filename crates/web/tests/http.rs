@@ -119,7 +119,6 @@ fn the_page_mentions_what_it_loads() {
     let s = server(|_| {});
     let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
     assert!(html.contains("/app.js") && html.contains("/style.css"));
-    assert!(html.contains("controls-button") && html.contains("controls-panel"));
     assert!(html.contains("id=\"view\"") && html.contains("tabindex=\"0\""));
     assert!(
         !html.contains("<script>"),

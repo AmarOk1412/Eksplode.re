@@ -805,7 +805,6 @@ function start() {
     face: $("face"),
     costume: $("costume"),
     randomLook: $("random-look"),
-    soundButton: $("sound-button"),
     optionsPanel: $("options-panel"),
     optionsClose: $("options-close"),
     optionsTabs: OPTIONS_TABS.map((t) => ({ ...t, button: $(t.tab), root: $(t.panel) })),
@@ -813,7 +812,6 @@ function start() {
     hubControls: $("hub-controls"),
     hubDev: $("hub-dev"),
     hubResume: $("hub-resume"),
-    controlsButton: $("controls-button"),
     controlsStatus: $("controls-status"),
     controlBindings: [...document.querySelectorAll("[data-bind-action]")],
     controlsReset: $("controls-reset"),
@@ -1261,7 +1259,6 @@ function start() {
     } else if (state.stage !== "playing") {
       focusFirst();
     }
-    syncOptionsButtons();
     return true;
   }
 
@@ -1759,12 +1756,7 @@ function start() {
   el.musicVolume.value = String(Math.round(audio.settings.music * 100));
   el.effectsVolume.value = String(Math.round(audio.settings.effects * 100));
   el.mute.checked = audio.settings.muted;
-  // ---- the Options screen: one dialog with the Customize, Sound and Controls tabs ----
-  function syncOptionsButtons() {
-    const view = optionsView(navigationLayers.has("options") ? options : null);
-    el.soundButton.setAttribute("aria-expanded", String(view.sound));
-    el.controlsButton.setAttribute("aria-expanded", String(view.controls));
-  }
+
 
   function renderOptions() {
     const view = optionsView(options);
@@ -1775,7 +1767,6 @@ function start() {
     }
     if (view.controls) renderControllerPanel();
     if (view.customize) renderEditor();
-    syncOptionsButtons();
   }
 
   /** Opens Options on `tab` (or switches to it when Options is already open). */
@@ -1816,10 +1807,6 @@ function start() {
     });
   }
   el.optionsClose.addEventListener("click", closeOptions);
-  el.soundButton.addEventListener("click", () => {
-    if (navigationLayers.top?.id === "options" && options?.tab === "sound") closeOptions();
-    else openOptions("sound", el.soundButton);
-  });
   el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
   el.mute.addEventListener("change", () => audio.setSettings({ muted: el.mute.checked }));
@@ -1908,10 +1895,6 @@ function start() {
 
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
-  el.controlsButton.addEventListener("click", () => {
-    if (navigationLayers.top?.id === "options" && options?.tab === "controls") closeOptions();
-    else openOptions("controls", el.controlsButton);
-  });
   for (const [id, tab] of Object.entries(HUB_OPTIONS_TABS)) {
     const entry = id === "hub-sound" ? el.hubSound : el.hubControls;
     entry.addEventListener("click", () => openOptions(tab, entry));

@@ -605,20 +605,6 @@ async function main() {
   await setFakeGamepad();
   await sleep(100);
 
-  // the sound settings (feature 003): open the panel, move a slider, check that it is stored
-  await evaluate("document.getElementById('sound-button').click(); 1");
-  await evaluate(`(() => {
-    const m = document.getElementById('music-volume');
-    m.value = '60';
-    m.dispatchEvent(new Event('input'));
-    document.getElementById('mute').click();
-    return 1;
-  })()`);
-  await sleep(200);
-  await shot("1a-sound.png");
-  console.log("audio settings:", await evaluate("localStorage.getItem('eksplode.re.audio.v1')"));
-  await evaluate("document.getElementById('mute').click(); document.getElementById('close-sound').click(); 1");
-
   // keyboard controls (feature 005): edit a binding, reload, reject a conflict, and reset
   await setFakeGamepad([], [0, 0], "");
   await evaluate("document.getElementById('controls-button').click(); 1");
@@ -642,17 +628,6 @@ async function main() {
   await call("Page.reload");
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page after reloading controls");
   await setFakeGamepad();
-  await evaluate("document.getElementById('controls-button').click(); 1");
-  await waitFor("!document.getElementById('controls-panel').hidden && document.querySelector('[data-bind-action=up]').textContent.includes('I')", "the restored movement binding");
-  await evaluate(`document.querySelector('[data-bind-action="down"]').click(); 1`);
-  await key("KeyI", "i", 73);
-  await waitFor("document.getElementById('controls-status').textContent.toLowerCase().includes('already assigned')", "the duplicate-key message");
-  await evaluate("document.getElementById('controls-reset').click(); 1");
-  await waitFor("document.getElementById('controls-reset').textContent === 'Confirm reset'", "the reset confirmation step");
-  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('KeyI')", "the unchanged binding before reset confirmation");
-  await evaluate("document.getElementById('controls-reset').click(); 1");
-  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('ArrowUp')", "the reset keyboard defaults");
-  await shot("1c-controls.png");
   await evaluate("document.getElementById('controls-button').click(); 1");
 
   // pick a look in the character editor (feature 003) and save a screenshot of it

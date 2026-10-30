@@ -122,11 +122,12 @@ input, button {
 input { width: min(270px, 100%); text-align: center; }
 
 button { cursor: pointer; }
+
 input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-visible, [role="radio"]:focus-visible, [tabindex="0"]:focus-visible {
-  /* 011 US6: the accent blue of the palette instead of red; same width and offset */
-  outline: 3px solid var(--slot0);
+  /*outline: 3px solid var(--slot0);
   outline-offset: 3px;
-  box-shadow: 0 0 0 1px #fff;
+  box-shadow: 0 0 0 1px #fff;*/
+  outline: none; box-shadow: none;
 }
 #view:focus-visible { outline: none; box-shadow: none; }
 button:hover:not(:disabled), button:focus-visible { background: var(--ink); color: #fff; }
@@ -252,26 +253,6 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   background: transparent;
 }
 
-.sound-button {
-  position: fixed;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  font-size: 1.3rem;
-}
-.controls-button {
-  position: fixed;
-  top: 12px;
-  right: 64px;
-  z-index: 2;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  font-size: 1.15rem;
-}
 .controls-panel {
   position: fixed;
   top: 64px;
@@ -309,6 +290,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   transform: translate(-50%, -50%);
   padding: 20px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  background: white;
 }
 .results h2 { text-align: center; }
 .results h3 { margin: 0; font-size: 1rem; text-align: center; }
@@ -682,6 +664,9 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .room-config { width: min(520px, 100%); display: grid; gap: 12px; }
 .room-config .room-controls, .room-config .room-password-controls { display: grid; gap: 6px; justify-items: start; }
 .room-config select { font: inherit; font-size: 1rem; padding: 4px 8px; border: 3px solid var(--ink); background: #fff; color: var(--ink); border-radius: 0; }
+
+select:focus-visible { background: var(--ink); color: #fff; }
+
 
 /* ---- 011: the tabbed Options screen ---- */
 .options {

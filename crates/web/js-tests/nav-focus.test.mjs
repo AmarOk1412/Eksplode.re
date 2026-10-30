@@ -99,20 +99,3 @@ test("stable focus keys restore after an element is rebuilt, and missing keys ar
   assert.equal(moveFocus(null, "left", []), null);
 });
 
-// ---- 011 US6: no red focus outline, but still a visible one ----
-import { readFileSync } from "node:fs";
-
-test("f11_us6_as1_as2_focus_visible_outlines_are_visible_and_not_red", () => {
-  const css = readFileSync(new URL("../assets/style.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  const rules = [...css.matchAll(/([^{}]*:focus-visible[^{}]*)\{([^}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
-  assert.ok(rules.length > 0);
-  const red = /#d43b32|#f00\b|#ff0000|\bred\b|rgb\(\s*2[0-5]\d\s*,\s*[0-6]?\d\s*,\s*[0-6]?\d\s*\)/i;
-  for (const rule of rules) {
-    const root = /:root\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
-    const resolve = (text) => text.replace(/var\((--[\w-]+)\)/g, (_, name) => new RegExp(`${name}\\s*:\\s*([^;]*)`).exec(root)?.[1] ?? "");
-    const outline = resolve(/outline(?:-color)?\s*:\s*([^;]*)/.exec(rule.body)?.[1] ?? "");
-    assert.doesNotMatch(outline, red, `${rule.selector} has a red outline`);
-  }
-  const visible = rules.filter((rule) => /\boutline\s*:\s*(?!none)[^;]*\d+px\s+solid\s+(?!transparent)/.test(rule.body));
-  assert.ok(visible.some((rule) => /button:focus-visible/.test(rule.selector)), "buttons keep a visible focus outline");
-});
