@@ -4,7 +4,7 @@ use std::fmt;
 use std::net::IpAddr;
 
 use crate::input::{default_key_bindings, KeyBindings};
-use eksplode_re_core::{BoardSize, Mode, RoomSettings, MINUTES};
+use eksplode_re_core::{BoardSize, BotDifficulty, Mode, RoomSettings, MINUTES};
 use eksplode_re_net::protocol::{valid_name, DEFAULT_PORT};
 use ratatui::crossterm::event::KeyCode;
 
@@ -13,6 +13,7 @@ Usage:
   eksplode-re-cli [OPTIONS]                          host a game (default; see Host options)
   eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
                      [--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
+                     [--bot-difficulty easy|medium|hard]
     eksplode-re-cli join <ADDR[:PORT]> [--name NAME] [--keys KEYS] [--room-id ID]
     eksplode-re-cli local [OPTIONS]                    play on this machine only, no network
 
@@ -37,10 +38,12 @@ Host options:
   --web-port <N>  also serve the web page on this port so browsers can join
   --bind <IP>     address to listen on (default: game port on all interfaces,
                   web page on 0.0.0.0)
-  --dev           developer mode: the owner can pause bots and set drop chances in
-                  the web page (testing only)
+  --dev           developer mode: the owner can pause bots, choose the bot behaviour and set
+                  drop chances in the web page (testing only)
   --room-name <TEXT>  name of the room (at most 24 characters; default: your name plus 's room)
   --mode, --size, --time, --friendly-fire  the room settings, as above
+  --bot-difficulty <D>  easy, medium or hard: how well the room's bots play (default medium);
+                  only the host chooses it, local games keep medium
   --no-setup      do not show the room setup screen before the lobby (it is also skipped
                   when a room setting is given)
     --server-id <ID>  stable host identifier, 1-64 ASCII identifier characters
@@ -50,7 +53,7 @@ Host options:
 Network play: the host listens on port 7878 by default; up to 4 participants (humans and bots).
 Join accepts host, host:port or a web address such as http://host:8080/ (the host is kept).
 Lobby keys: host b add bot, x remove bot, Enter start; clients r ready. The room owner changes
-the settings with m mode, s size, t time, f friendly fire. Anyone: q quit.
+the settings with m mode, s size, t time, f friendly fire, d bot difficulty. Anyone: q quit.
 KEYS is six comma-separated bindings in up,down,left,right,bomb,punch order; use single characters or Up,Down,Left,Right,Space. Joining clients use --keys for their own controls. Reserved keys: q quit, p pause, r rematch.";
 
 /// Options of a local match.
@@ -295,6 +298,12 @@ fn parse_host(mut it: impl Iterator<Item = String>) -> Result<Command, UsageErro
             "--no-setup" => opts.no_setup = true,
             "--room-name" => {
                 opts.room.name = value(&arg, it.next())?;
+                opts.room_given = true;
+            }
+            "--bot-difficulty" => {
+                let v = value(&arg, it.next())?;
+                opts.room.bot_difficulty = BotDifficulty::from_name(&v)
+                    .ok_or_else(|| choice(&arg, v, "easy, medium, hard"))?;
                 opts.room_given = true;
             }
             _ if room_option(&arg, &mut it, &mut opts.room)? => opts.room_given = true,

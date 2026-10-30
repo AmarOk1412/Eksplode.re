@@ -306,3 +306,164 @@ fn f4_us4_soak_chaser_two_hundred_rounds_end_in_time_and_nobody_gets_stuck() {
         "{spawned} bonuses for {ticks_total} ticks"
     );
 }
+
+// Feature 012: statistics per behaviour and difficulty.
+
+use eksplode_re_bots::{Behaviour, Profile};
+use eksplode_re_core::{BotDifficulty, Event};
+
+/// What happened to each slot during one match.
+#[derive(Default)]
+struct Stats {
+    /// Bombs placed while an opponent stood in their blast.
+    hits: [u32; 4],
+    /// Eliminated by a flame of its own bomb.
+    self_kills: [u32; 4],
+    /// Ticks alive.
+    survived: [u32; 4],
+}
+
+/// Plays one match with one bot per slot (`None` for an empty slot).
+fn play_profiles(seed: u64, profiles: [Option<Profile>; 4]) -> (GameState, Stats) {
+    let active = profiles.map(|p| p.is_some());
+    let mut s = GameState::new(Config::default(), seed, active).unwrap();
+    let mut bots = profiles.map(|p| p.map(|p| DefaultBot::with_profile(seed * 4 + 7, p)));
+    let mut stats = Stats::default();
+    let limit = s.config.round_limit_ticks + s.config.closing_lead_ticks + 5;
+    for _ in 0..limit {
+        if s.phase != Phase::Playing {
+            break;
+        }
+        let mut inputs = [PlayerInput::default(); 4];
+        for (i, bot) in bots.iter_mut().enumerate() {
+            if let Some(bot) = bot {
+                inputs[i] = bot.decide(&s.observe(pid(i as u8)));
+            }
+        }
+        for event in step(&mut s, &inputs) {
+            match event {
+                Event::BombPlaced { player, pos } => {
+                    let me = &s.players[player.index()];
+                    let tiles = blast(&s.arena, pos, me.placed_range()).tiles;
+                    if s.players
+                        .iter()
+                        .any(|p| p.alive && p.id != player && tiles.contains(&p.pos))
+                    {
+                        stats.hits[player.index()] += 1;
+                    }
+                }
+                Event::PlayerEliminated { player } => {
+                    let at = s.players[player.index()].pos;
+                    if s.flames.iter().any(|f| f.pos == at && f.owned_by(player)) {
+                        stats.self_kills[player.index()] += 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (i, p) in s.players.iter().enumerate() {
+            if p.alive && active[i] {
+                stats.survived[i] += 1;
+            }
+        }
+    }
+    (s, stats)
+}
+
+#[test]
+fn f12_sc001_behaviour_distribution() {
+    let mut counts = [0u32; 3];
+    for seed in 0..75u64 {
+        for slot in 0..4 {
+            let b = Behaviour::pick(seed.wrapping_mul(4).wrapping_add(slot));
+            counts[Behaviour::ALL.iter().position(|x| *x == b).unwrap()] += 1;
+        }
+    }
+    println!("behaviours over 300 seats: {counts:?}");
+    for c in counts {
+        let share = f64::from(c) / 300.0;
+        assert!((0.25..=0.42).contains(&share), "{counts:?}");
+    }
+}
+
+#[test]
+fn f12_sc004_aggressive_hits_more_protective_survives_longer() {
+    // the same 100 seeds, once with four Aggressive bots and once with four Protective ones
+    let mut totals = Vec::new();
+    for behaviour in [Behaviour::Aggressive, Behaviour::Protective] {
+        let profile = Some(Profile {
+            behaviour,
+            difficulty: BotDifficulty::Hard,
+        });
+        let (mut hits, mut survived) = (0u32, 0u64);
+        for seed in 0..100u64 {
+            let (_, stats) = play_profiles(seed, [profile; 4]);
+            hits += stats.hits.iter().sum::<u32>();
+            survived += stats.survived.iter().map(|t| u64::from(*t)).sum::<u64>();
+        }
+        println!(
+            "{behaviour:?}: hits {hits}, mean survival {} ticks",
+            survived / 400
+        );
+        totals.push((hits, survived));
+    }
+    let (aggressive, protective) = (totals[0], totals[1]);
+    assert!(
+        f64::from(aggressive.0) >= 1.3 * f64::from(protective.0),
+        "hits {} vs {}",
+        aggressive.0,
+        protective.0
+    );
+    assert!(protective.1 > aggressive.1, "survival {totals:?}");
+}
+
+/// Share of decided 1-v-1 rounds won by `strong` against `weak`, both Balanced, over 100 seeds;
+/// the sides swap every other seed.
+fn win_rate(strong: BotDifficulty, weak: BotDifficulty) -> f64 {
+    let profile = |difficulty| {
+        Some(Profile {
+            behaviour: Behaviour::Balanced,
+            difficulty,
+        })
+    };
+    let (mut won, mut decided) = (0u32, 0u32);
+    for seed in 0..100u64 {
+        let strong_slot = (seed % 2) as usize;
+        let mut profiles = [None; 4];
+        profiles[strong_slot] = profile(strong);
+        profiles[1 - strong_slot] = profile(weak);
+        let (s, _) = play_profiles(seed, profiles);
+        if let Phase::Ended(Outcome::Winner(w)) = s.phase {
+            decided += 1;
+            won += u32::from(w.index() == strong_slot);
+        }
+    }
+    let rate = f64::from(won) / f64::from(decided.max(1));
+    println!("{strong:?} vs {weak:?}: {won}/{decided} = {rate:.2}");
+    rate
+}
+
+#[test]
+fn f12_sc002_win_rates_by_difficulty() {
+    use BotDifficulty::{Easy, Hard, Medium};
+    assert!(win_rate(Hard, Easy) >= 0.65);
+    assert!(win_rate(Medium, Easy) >= 0.55);
+    assert!(win_rate(Hard, Medium) >= 0.55);
+}
+
+#[test]
+fn f12_sc003_easy_self_eliminates_more() {
+    let mut self_kills = Vec::new();
+    for difficulty in [BotDifficulty::Easy, BotDifficulty::Hard] {
+        let mut total = 0u32;
+        for seed in 0..100u64 {
+            let profiles = [0, 1, 2, 3].map(|i| Some(Profile::pick(seed * 4 + i, difficulty)));
+            let (_, stats) = play_profiles(seed, profiles);
+            total += stats.self_kills.iter().sum::<u32>();
+        }
+        println!("{difficulty:?}: {total} self-eliminations");
+        self_kills.push(total);
+    }
+    assert!(self_kills[0] > 0, "{self_kills:?}");
+    assert!(self_kills[0] >= 2 * self_kills[1], "{self_kills:?}");
+}

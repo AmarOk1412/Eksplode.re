@@ -141,7 +141,8 @@ fn v2_terminal_directory_creates_joins_and_leaves_explicit_rooms() {
     assert_eq!(owner.slot, None);
     owner.handle_key(KeyCode::Char('c'));
     assert_eq!(owner.stage, Stage::Creating);
-    for _ in 0..5 {
+    // name, mode, size, time, bot difficulty, then Create room
+    for _ in 0..6 {
         owner.handle_key(KeyCode::Enter);
     }
     assert!(pump_until(&mut owner, |online| online.stage == Stage::Lobby));
@@ -919,6 +920,37 @@ fn f4_us1_as7_the_terminal_host_sets_and_shows_the_same_settings() {
         "{}",
         screen(&a)
     );
+}
+
+#[test]
+fn f12_us3_as7_the_owner_cycles_the_bot_difficulty_with_d() {
+    use eksplode_re_core::{BotDifficulty, RoomSettings};
+    let host = room_host(RoomSettings {
+        name: "Lab".into(),
+        ..RoomSettings::default()
+    });
+    let mut h = hosting(host);
+    assert!(pump_until(&mut h, |o| o.slot == Some(0)));
+    assert!(lobby_text_has(&h, "Medium bots"), "{}", screen(&h));
+    h.handle_key(KeyCode::Char('d'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.bot_difficulty
+        == BotDifficulty::Hard));
+    assert!(lobby_text_has(&h, "Hard bots"), "{}", screen(&h));
+    h.handle_key(KeyCode::Char('D'));
+    assert!(pump_until(&mut h, |o| o.lobby.settings.bot_difficulty
+        == BotDifficulty::Easy));
+
+    // a terminal player sees it and cannot change it
+    let mut a = joined_at(h.host_addr().unwrap(), "Ann");
+    assert!(pump_until(&mut a, |o| o.slot == Some(1)));
+    assert!(lobby_text_has(&a, "Easy bots"), "{}", screen(&a));
+    a.handle_key(KeyCode::Char('d'));
+    assert!(pump_until(&mut a, |o| o
+        .notice
+        .as_deref()
+        .is_some_and(|n| n.contains("Only"))));
+    h.pump();
+    assert_eq!(h.lobby.settings.bot_difficulty, BotDifficulty::Easy);
 }
 
 #[test]

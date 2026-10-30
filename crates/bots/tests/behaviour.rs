@@ -430,3 +430,441 @@ fn f4_us4_as8_a_runner_bot_still_flees_the_chasers_bomb() {
     }
     assert!(s.players[1].alive);
 }
+
+// Feature 012: behaviours and difficulty.
+
+use eksplode_re_bots::{Behaviour, Profile};
+use eksplode_re_core::BotDifficulty;
+
+const WIDE: [&str; 7] = [
+    "###############",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "#.............#",
+    "###############",
+];
+
+fn bot_of(behaviour: Behaviour, difficulty: BotDifficulty) -> DefaultBot {
+    DefaultBot::with_profile(
+        1,
+        Profile {
+            behaviour,
+            difficulty,
+        },
+    )
+}
+
+fn decide_with(behaviour: Behaviour, s: &GameState, slot: u8) -> PlayerInput {
+    bot_of(behaviour, BotDifficulty::Hard).decide(&s.observe(pid(slot)))
+}
+
+fn target(from: eksplode_re_core::Pos, dir: Dir) -> eksplode_re_core::Pos {
+    let (dx, dy) = dir.delta();
+    eksplode_re_core::Pos::new(
+        (i16::from(from.x) + i16::from(dx)) as u8,
+        (i16::from(from.y) + i16::from(dy)) as u8,
+    )
+}
+
+#[test]
+fn f12_us1_as1_pick_gives_each_bot_one_of_three_behaviours() {
+    let mut seen = [0u32; 3];
+    for seed in 0..300u64 {
+        let b = Behaviour::pick(seed);
+        let i = Behaviour::ALL.iter().position(|x| *x == b).unwrap();
+        seen[i] += 1;
+    }
+    assert!(seen.iter().all(|n| *n > 0), "{seen:?}");
+}
+
+#[test]
+fn f12_us1_as2_pick_is_reproducible() {
+    for seed in [0, 1, 7, 12345, u64::MAX] {
+        assert_eq!(Behaviour::pick(seed), Behaviour::pick(seed));
+        for d in BotDifficulty::ALL {
+            let p = Profile::pick(seed, d);
+            assert_eq!(p.difficulty, d);
+            assert_eq!(p.behaviour, Behaviour::pick(seed));
+        }
+    }
+}
+
+#[test]
+fn f12_behaviour_names_round_trip() {
+    let names: Vec<_> = Behaviour::ALL.iter().map(|b| b.name()).collect();
+    assert_eq!(names, ["aggressive", "protective", "balanced"]);
+    for b in Behaviour::ALL {
+        assert_eq!(Behaviour::from_name(b.name()), Some(b));
+    }
+    assert_eq!(Behaviour::from_name("random"), None);
+    assert_eq!(Behaviour::from_name("Aggressive"), None);
+    assert_eq!(Behaviour::Protective.label(), "Protective");
+}
+
+#[test]
+fn f12_us1_as3_aggressive_heads_for_a_reachable_opponent() {
+    let mut s = duel(&WIDE, (7, 3), (13, 3));
+    s.powerups.push(eksplode_re_core::PowerUp {
+        pos: pos(5, 3),
+        kind: eksplode_re_core::PowerUpKind::Range,
+    });
+    assert_eq!(
+        decide_with(Behaviour::Aggressive, &s, 0).mv,
+        Some(Dir::Right)
+    );
+    assert_eq!(decide_with(Behaviour::Balanced, &s, 0).mv, Some(Dir::Left));
+    assert_eq!(DefaultBot::new(1).decide(&obs(&s, 0)).mv, Some(Dir::Left));
+}
+
+#[test]
+fn f12_us1_aggressive_approaches_a_far_opponent_when_idle() {
+    // nothing to collect or dig and the opponent beyond any bombing square within 14 steps
+    let s = duel(&WIDE, (1, 1), (13, 5));
+    let i = decide_with(Behaviour::Aggressive, &s, 0);
+    let dir = i.mv.expect("it moves toward the opponent");
+    assert!(
+        manhattan(target(pos(1, 1), dir), pos(13, 5)) < manhattan(pos(1, 1), pos(13, 5)),
+        "{dir:?}"
+    );
+}
+
+#[test]
+fn f12_us1_as4_protective_prefers_powerups_and_keeps_off_opponents() {
+    let mut s = duel(&WIDE, (7, 3), (11, 3));
+    s.powerups.push(eksplode_re_core::PowerUp {
+        pos: pos(4, 3),
+        kind: eksplode_re_core::PowerUpKind::Range,
+    });
+    assert_eq!(
+        decide_with(Behaviour::Protective, &s, 0).mv,
+        Some(Dir::Left)
+    );
+    assert_eq!(
+        decide_with(Behaviour::Aggressive, &s, 0).mv,
+        Some(Dir::Right)
+    );
+
+    // the only power-up lies next to the opponent: a Protective bot does not step beside it
+    let mut s = duel(&WIDE, (9, 2), (10, 3));
+    s.powerups.push(eksplode_re_core::PowerUp {
+        pos: pos(9, 3),
+        kind: eksplode_re_core::PowerUpKind::Range,
+    });
+    assert_eq!(decide_with(Behaviour::Balanced, &s, 0).mv, Some(Dir::Down));
+    let i = decide_with(Behaviour::Protective, &s, 0);
+    if let Some(dir) = i.mv {
+        assert!(
+            manhattan(target(pos(9, 2), dir), pos(10, 3)) > 1,
+            "{dir:?} ends next to the opponent"
+        );
+    }
+}
+
+#[test]
+fn f12_us1_protective_backs_away_from_a_close_opponent() {
+    // no power-up, no block, no bomb: an opponent two squares away makes it step back
+    let mut s = duel(&WIDE, (7, 3), (9, 3));
+    s.players[0].bombs_max = 0;
+    let i = decide_with(Behaviour::Protective, &s, 0);
+    let dir = i.mv.expect("it moves away");
+    assert!(manhattan(target(pos(7, 3), dir), pos(9, 3)) > 2, "{dir:?}");
+}
+
+/// Runs a bot with `profile` as `slot` while everybody else stands still.
+fn run_profile(s: &mut GameState, profile: Profile, slot: u8, ticks: u32) {
+    let mut bot = DefaultBot::with_profile(1, profile);
+    for _ in 0..ticks {
+        let mut inputs = [PlayerInput::default(); 4];
+        inputs[usize::from(slot)] = bot.decide(&s.observe(pid(slot)));
+        step(s, &inputs);
+    }
+}
+
+#[test]
+fn f12_us1_behaviours_keep_the_safety_layer() {
+    for behaviour in Behaviour::ALL {
+        let hard = Profile {
+            behaviour,
+            difficulty: BotDifficulty::Hard,
+        };
+        // flees a blast
+        let mut s = duel(&OPEN, (3, 3), (5, 5));
+        add_bomb(&mut s, 1, 3, 2, 20);
+        run_profile(&mut s, hard, 0, 40);
+        assert!(s.players[0].alive, "{behaviour:?} flees");
+
+        // flees a chain reaction
+        let mut s = duel(&OPEN, (5, 5), (1, 1));
+        add_bomb(&mut s, 1, 3, 3, 3);
+        add_bomb(&mut s, 1, 5, 3, 60);
+        s.players[1].bombs_max = 2;
+        run_profile(&mut s, hard, 0, 25);
+        assert!(s.players[0].alive, "{behaviour:?} chain");
+
+        // no bomb without a way out
+        let rows = [
+            "#######", "#.+...#", "#+....#", "#.....#", "#.....#", "#.....#", "#######",
+        ];
+        let s = duel(&rows, (1, 1), (5, 5));
+        assert!(
+            !decide_with(behaviour, &s, 0).bomb,
+            "{behaviour:?} boxed in"
+        );
+
+        // friendly fire on: no bomb that reaches a teammate
+        let starts = [Some((3, 3)), Some((3, 4)), Some((3, 2)), Some((5, 5))];
+        assert!(
+            !decide_with(behaviour, &team_state_of(true, starts), 0).bomb,
+            "{behaviour:?} teammate"
+        );
+
+        // moves off an announced square in time
+        let mut s = pattern_state([Some((1, 1)), Some((3, 3)), Some((4, 3)), None]);
+        while s.tick < 100 {
+            step(&mut s, &[PlayerInput::default(); 4]);
+        }
+        run_profile(&mut s, hard, 0, 40);
+        assert!(s.players[0].alive, "{behaviour:?} pattern");
+        assert_ne!(s.players[0].pos, pos(1, 1));
+
+        // a runner moves away from the chaser and never bombs
+        let s = chaser_state([Some((3, 5)), Some((3, 3)), None, None]);
+        let i = decide_with(behaviour, &s, 1);
+        assert!(!i.bomb, "{behaviour:?} runner bomb");
+        let dir = i.mv.expect("a runner moves away");
+        assert!(
+            manhattan(target(pos(3, 3), dir), pos(3, 5)) > 2,
+            "{behaviour:?} runner {dir:?}"
+        );
+    }
+}
+
+#[test]
+fn f12_us1_a_protective_runner_flees_the_chaser_from_farther_away() {
+    // the chaser is 6 squares away: beyond a Balanced runner's flee distance, not a Protective one's
+    let s = state_with(
+        eksplode_re_core::Config {
+            mode: eksplode_re_core::Mode::Chaser,
+            ..eksplode_re_core::Config::default()
+        },
+        &WIDE,
+        [Some((13, 3)), Some((7, 3)), None, None],
+    );
+    let protective = decide_with(Behaviour::Protective, &s, 1);
+    let dir = protective.mv.expect("a protective runner moves away");
+    assert!(manhattan(target(pos(7, 3), dir), pos(13, 3)) > 6, "{dir:?}");
+}
+
+use eksplode_re_bots::Skill;
+
+fn skill(think_every: u32, react_ticks: u32, mistake_chance: f32) -> Skill {
+    Skill {
+        think_every,
+        react_ticks,
+        mistake_chance,
+    }
+}
+
+#[test]
+fn f12_skill_table_is_ordered() {
+    assert_eq!(Skill::of(BotDifficulty::Easy), skill(6, 10, 0.20));
+    assert_eq!(Skill::of(BotDifficulty::Medium), skill(3, 5, 0.06));
+    assert_eq!(Skill::of(BotDifficulty::Hard), skill(1, 0, 0.0));
+    for pair in BotDifficulty::ALL.windows(2) {
+        let (a, b) = (Skill::of(pair[0]), Skill::of(pair[1]));
+        assert!(a.think_every >= b.think_every, "{pair:?}");
+        assert!(a.react_ticks >= b.react_ticks, "{pair:?}");
+        assert!(a.mistake_chance >= b.mistake_chance, "{pair:?}");
+    }
+}
+
+/// Bot 0 at (3,3) on the line of a bomb of player 1 at (3,2) that is `age` ticks old.
+fn threatened(age: u32) -> GameState {
+    let mut s = duel(&OPEN, (3, 3), (5, 5));
+    let fuse = s.config.fuse_ticks;
+    add_bomb(&mut s, 1, 3, 2, fuse - age);
+    s
+}
+
+fn flees(i: PlayerInput) -> bool {
+    i.mv.is_some_and(|d| target(pos(3, 3), d).y == 3 && target(pos(3, 3), d).x != 3)
+}
+
+#[test]
+fn f12_us2_as1_hard_reacts_at_once() {
+    for seed in 0..20 {
+        let mut bot = DefaultBot::with_profile(
+            seed,
+            Profile {
+                behaviour: Behaviour::Balanced,
+                difficulty: BotDifficulty::Hard,
+            },
+        );
+        assert!(flees(bot.decide(&obs(&threatened(0), 0))), "seed {seed}");
+    }
+}
+
+#[test]
+fn f12_us2_as2_easy_and_medium_react_late() {
+    for difficulty in [BotDifficulty::Easy, BotDifficulty::Medium] {
+        let react = Skill::of(difficulty).react_ticks;
+        let profile = Profile {
+            behaviour: Behaviour::Balanced,
+            difficulty,
+        };
+        let mut fled = 0;
+        for seed in 0..20 {
+            // too young: the bot decides as if the bomb were not there
+            let young =
+                DefaultBot::with_profile(seed, profile).decide(&obs(&threatened(react - 1), 0));
+            let without = DefaultBot::with_profile(seed, profile)
+                .decide(&obs(&duel(&OPEN, (3, 3), (5, 5)), 0));
+            assert_eq!(young, without, "{difficulty:?} seed {seed}");
+            // old enough: it runs, unless this decision is one of its mistakes
+            let old = DefaultBot::with_profile(seed, profile).decide(&obs(&threatened(react), 0));
+            fled += u32::from(flees(old));
+        }
+        assert!(fled >= 14, "{difficulty:?} fled {fled}/20");
+    }
+}
+
+#[test]
+fn f12_us2_own_bombs_and_flames_are_seen_at_once() {
+    let profile = Profile {
+        behaviour: Behaviour::Balanced,
+        difficulty: BotDifficulty::Easy,
+    };
+    let mut moved = 0;
+    for seed in 0..20 {
+        let mut s = duel(&OPEN, (3, 3), (5, 5));
+        let fuse = s.config.fuse_ticks;
+        add_bomb(&mut s, 0, 3, 3, fuse);
+        moved += u32::from(
+            DefaultBot::with_profile(seed, profile)
+                .decide(&obs(&s, 0))
+                .mv
+                .is_some(),
+        );
+    }
+    assert!(moved >= 14, "it left its own fresh bomb {moved}/20 times");
+}
+
+#[test]
+fn f12_us2_think_interval_holds_the_last_move() {
+    let profile = Profile {
+        behaviour: Behaviour::Balanced,
+        difficulty: BotDifficulty::Easy,
+    };
+    let every = Skill::of(BotDifficulty::Easy).think_every;
+    let mut s = duel(&WIDE, (1, 3), (13, 5));
+    s.powerups.push(eksplode_re_core::PowerUp {
+        pos: pos(6, 3),
+        kind: eksplode_re_core::PowerUpKind::Range,
+    });
+    let mut checked = 0;
+    for seed in 0..20 {
+        let mut bot = DefaultBot::with_profile(seed, profile);
+        let first = bot.decide(&obs(&s, 0));
+        let Some(dir) = first.mv else { continue };
+        checked += 1;
+        for _ in 1..every {
+            let held = bot.decide(&obs(&s, 0));
+            assert_eq!(held.mv, Some(dir), "seed {seed}");
+            assert!(!held.bomb && !held.punch);
+        }
+        // a burning square ahead drops the held move
+        let mut bot = DefaultBot::with_profile(seed, profile);
+        bot.decide(&obs(&s, 0));
+        let mut burning = s.clone();
+        burning.flames.push(eksplode_re_core::Flame {
+            pos: target(pos(1, 3), dir),
+            ticks_left: 5,
+            owners: 0,
+        });
+        assert_eq!(bot.decide(&obs(&burning, 0)), PlayerInput::default());
+    }
+    assert!(checked >= 10, "only {checked} seeds started with a move");
+}
+
+#[test]
+fn f12_us2_as4_hard_makes_no_mistakes() {
+    assert_eq!(Skill::of(BotDifficulty::Hard).mistake_chance, 0.0);
+    // Hard bots of every behaviour play the same moves as the same bot fed the same states
+    for behaviour in Behaviour::ALL {
+        let profile = Profile {
+            behaviour,
+            difficulty: BotDifficulty::Hard,
+        };
+        let mut s = state(&WIDE, [Some((1, 1)), Some((13, 5)), None, None]);
+        let (mut a, mut b) = (
+            DefaultBot::with_profile(3, profile),
+            DefaultBot::with_profile(3, profile),
+        );
+        for _ in 0..200 {
+            let o = obs(&s, 0);
+            let i = a.decide(&o);
+            assert_eq!(i, b.decide(&o));
+            let mut inputs = [PlayerInput::default(); 4];
+            inputs[0] = i;
+            step(&mut s, &inputs);
+        }
+    }
+}
+
+#[test]
+fn f12_us2_as5_mistakes_never_step_into_fire() {
+    let profile = Profile {
+        behaviour: Behaviour::Balanced,
+        difficulty: BotDifficulty::Easy,
+    };
+    for seed in 0..200 {
+        let mut s = duel(&OPEN, (3, 3), (5, 5));
+        for (x, y) in [(3, 2), (2, 3)] {
+            s.flames.push(eksplode_re_core::Flame {
+                pos: pos(x, y),
+                ticks_left: 8,
+                owners: 0,
+            });
+        }
+        let mut bot = DefaultBot::with_profile(seed, profile);
+        for _ in 0..12 {
+            if let Some(dir) = bot.decide(&obs(&s, 0)).mv {
+                let to = target(pos(3, 3), dir);
+                assert!(
+                    !s.flames.iter().any(|f| f.pos == to),
+                    "seed {seed} stepped into fire at {to:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn f12_us2_difficulty_is_reproducible() {
+    for difficulty in [BotDifficulty::Easy, BotDifficulty::Medium] {
+        let run = || {
+            let mut s = eksplode_re_core::GameState::new(
+                eksplode_re_core::Config::default(),
+                11,
+                [true; 4],
+            )
+            .unwrap();
+            let mut bots: Vec<DefaultBot> = (0..4)
+                .map(|i| DefaultBot::with_profile(40 + i, Profile::pick(40 + i, difficulty)))
+                .collect();
+            let mut log = Vec::new();
+            for _ in 0..600 {
+                let mut inputs = [PlayerInput::default(); 4];
+                for (i, bot) in bots.iter_mut().enumerate() {
+                    inputs[i] = bot.decide(&s.observe(pid(i as u8)));
+                }
+                log.push(inputs);
+                step(&mut s, &inputs);
+            }
+            log
+        };
+        assert_eq!(run(), run(), "{difficulty:?}");
+    }
+}

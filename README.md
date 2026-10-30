@@ -12,8 +12,9 @@ pixel-art view are all small, tested crates.
 
 - Four players per match: any mix of people (terminal or browser) and bots.
 - **Rooms and modes:** the owner of a room chooses the mode (Normal, Team, Chaser), the board size (small,
-  medium, large), the round time (2, 3, 5 or 10 minutes) and, for Team, friendly fire, on a creation
-  menu (page) or setup screen (terminal). In Normal and Team rounds the board closes in during the
+  medium, large), the round time (2, 3, 5 or 10 minutes), for Team friendly fire, and the bot
+  difficulty (Easy, Medium or Hard; Medium by default), on a creation menu (page) or setup screen
+  (terminal). In Normal and Team rounds the board closes in during the
   last minute until one player or team is left; see [docs/GAMEPLAY.md](docs/GAMEPLAY.md).
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
   grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
@@ -26,7 +27,9 @@ pixel-art view are all small, tested crates.
 - **Terminal version** for local play on one keyboard, with a lobby screen.
 - **Network play:** an authoritative host, `join` by address, or a server that hosts the match
   and serves the web page.
-- Bots that flee flames, collect power-ups, hunt opponents and dig through blocks.
+- Bots that flee flames, collect power-ups, hunt opponents and dig through blocks, each with a
+  behaviour drawn at the start of every match (Aggressive, Protective or Balanced) and the room's
+  difficulty.
 - Deterministic rules: the same seed and inputs always give the same match.
 - Safe defaults: loopback bind, same-origin WebSockets, hard limits on all external input.
 
@@ -83,7 +86,8 @@ ready for others to join. `eksplode-re-cli local [OPTIONS]` plays on this machin
 - `-h`, `--help` and `-V`, `--version`.
 
 `eksplode-re-cli host [--port N] [--bots N] [--name NAME] [--seed N] [--web-port N] [--bind IP] [--dev]
-[--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]`
+[--room-name TEXT] [--mode M] [--size S] [--time MIN] [--friendly-fire on|off] [--no-setup]
+[--bot-difficulty easy|medium|hard]`
 (the `host` keyword is optional — this is also what a bare `eksplode-re-cli` runs):
 
 - `--port <N>` game port (default 7878), `--bots <N>` bots from 0 to 3, `--name <NAME>` your
@@ -92,13 +96,15 @@ ready for others to join. `eksplode-re-cli local [OPTIONS]` plays on this machin
 - `--server-id <ID>` stable ASCII host identifier, 1 to 64 characters; `--max-rooms <N>` limits
   simultaneous rooms to 1-128 (default 32), and `--max-connections <N>` sets the shared host
   connection cap to 4-1024 (default 256);
-- `--room-name <TEXT>` names the room (at most 24 characters), and `--mode`, `--size`, `--time` and
-  `--friendly-fire` set it as above; without any of them the host first shows a room setup screen
+- `--room-name <TEXT>` names the room (at most 24 characters), and `--mode`, `--size`, `--time`,
+  `--friendly-fire` and `--bot-difficulty <easy|medium|hard>` (default medium) set it as above;
+  without any of them the host first shows a room setup screen
   (Up/Down select, Left/Right change, type the name, Enter on "Create room"), which `--no-setup`
-  skips. In the lobby the owner changes the settings with `m` mode, `s` size, `t` time and `f`
-  friendly fire; everybody sees them;
-- `--dev` developer mode (testing only): the owner can pause bots and set drop chances from the
-  web page; see [docs/WEB.md](docs/WEB.md);
+  skips. In the lobby the owner changes the settings with `m` mode, `s` size, `t` time, `f`
+  friendly fire and `d` bot difficulty; everybody sees them. Only the host chooses the bot
+  difficulty: local games keep Medium;
+- `--dev` developer mode (testing only): the owner can pause bots, force the behaviour of the bots
+  created from then on and set drop chances from the web page; see [docs/WEB.md](docs/WEB.md);
 - `--bind <IP>` listening address. By default the game port listens on every interface and the
   page only on `0.0.0.0`; a non-loopback address prints a `WARNING:`. See
   [docs/SECURITY.md](docs/SECURITY.md).
@@ -173,11 +179,18 @@ is a practice round that ends when that player dies.
 ## Bots
 
 Bots take any slot that is not a person. They see exactly what a human sees (the public
-observation) and act through the same input type. Check them with:
+observation) and act through the same input type. When a match starts each bot draws a
+behaviour: **Aggressive** (hunts opponents first and from farther away), **Protective** (collects
+power-ups and digs first, keeps its distance and only fights opponents that come close) or
+**Balanced** (a mix of both). The room's bot difficulty, chosen by the owner, sets how fast they
+react and how often they slip: **Easy** bots decide slowly, notice new bombs late and make
+regular mistakes, **Medium** bots (the default) are a little slower with a few mistakes, **Hard**
+bots react at once and make none. No bot ever steps into fire on purpose. Check them with:
 
 ```sh
 cargo test -p eksplode-re-bots
-cargo test -p eksplode-re-bots --test soak -- --nocapture   # 100 four-bot matches + escape rate
+cargo test -p eksplode-re-bots --test soak -- --nocapture   # 100 four-bot matches, escape rate,
+                                                            # behaviour and difficulty statistics
 ```
 
 ## Network play and safety

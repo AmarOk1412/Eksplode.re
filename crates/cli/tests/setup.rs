@@ -105,6 +105,33 @@ fn friendly_fire_is_a_row_only_in_team_mode() {
 }
 
 #[test]
+fn f12_us3_as7_setup_screen_has_a_bot_difficulty_row() {
+    use eksplode_re_core::BotDifficulty;
+    for mode in [Mode::Normal, Mode::Team] {
+        let s = SetupScreen::new(RoomSettings {
+            mode,
+            ..RoomSettings::default()
+        });
+        let t = text(&s);
+        assert!(t.contains("Bot difficulty") && t.contains("Medium"), "{t}");
+    }
+    let mut s = screen();
+    // Name, Mode, Size, Time, then the bot difficulty
+    keys(&mut s, &[KeyCode::Down; 4]);
+    keys(&mut s, &[KeyCode::Right]);
+    assert_eq!(s.settings.bot_difficulty, BotDifficulty::Hard);
+    keys(&mut s, &[KeyCode::Right]);
+    assert_eq!(
+        s.settings.bot_difficulty,
+        BotDifficulty::Easy,
+        "wraps around"
+    );
+    keys(&mut s, &[KeyCode::Left]);
+    assert_eq!(s.settings.bot_difficulty, BotDifficulty::Hard);
+    assert!(text(&s).contains("Hard"));
+}
+
+#[test]
 fn typing_edits_the_name_up_to_24_characters() {
     let mut s = screen();
     type_text(&mut s, "Friday room");

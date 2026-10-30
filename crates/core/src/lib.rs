@@ -30,7 +30,7 @@ pub use error::CoreError;
 pub use lobby::{Controller, Lobby, LobbyError, Slot};
 pub use observation::Observation;
 pub use rng::Rng;
-pub use room::{BoardSize, Mode, RoomSettings, MINUTES, PLAYABLE};
+pub use room::{BoardSize, BotDifficulty, Mode, RoomSettings, MINUTES, PLAYABLE};
 pub use state::{
     ActiveMalus, Bomb, Closing, Event, Falling, Flame, Flight, GameState, Outcome, Participant,
     Phase, PowerUp, PowerUpKind, Role, Slide,

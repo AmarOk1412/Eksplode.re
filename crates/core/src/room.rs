@@ -111,6 +111,55 @@ impl BoardSize {
     }
 }
 
+/// How well the room's bots play.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(rename_all = "lowercase")
+)]
+pub enum BotDifficulty {
+    /// Slow reactions and regular mistakes.
+    Easy,
+    /// A little slower than Hard, with a few mistakes; the default.
+    #[default]
+    Medium,
+    /// Reacts at once and makes no deliberate mistakes.
+    Hard,
+}
+
+impl BotDifficulty {
+    /// Every difficulty, easiest first.
+    pub const ALL: [BotDifficulty; 3] = [
+        BotDifficulty::Easy,
+        BotDifficulty::Medium,
+        BotDifficulty::Hard,
+    ];
+
+    /// The name used on the wire and in options.
+    pub fn name(self) -> &'static str {
+        match self {
+            BotDifficulty::Easy => "easy",
+            BotDifficulty::Medium => "medium",
+            BotDifficulty::Hard => "hard",
+        }
+    }
+
+    /// The difficulty with this exact name.
+    pub fn from_name(name: &str) -> Option<BotDifficulty> {
+        Self::ALL.into_iter().find(|d| d.name() == name)
+    }
+
+    /// The name shown to people.
+    pub fn label(self) -> &'static str {
+        match self {
+            BotDifficulty::Easy => "Easy",
+            BotDifficulty::Medium => "Medium",
+            BotDifficulty::Hard => "Hard",
+        }
+    }
+}
+
 /// Everything the owner chooses for a room.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -128,6 +177,9 @@ pub struct RoomSettings {
     /// Whether explosions hurt teammates (Team mode only).
     #[cfg_attr(feature = "serde", serde(default = "default_true"))]
     pub friendly_fire: bool,
+    /// The difficulty of every bot of the room's matches; Medium by default.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub bot_difficulty: BotDifficulty,
 }
 
 #[cfg(feature = "serde")]
@@ -148,6 +200,7 @@ impl Default for RoomSettings {
             size: BoardSize::Small,
             minutes: 3,
             friendly_fire: true,
+            bot_difficulty: BotDifficulty::Medium,
         }
     }
 }
@@ -197,8 +250,8 @@ impl RoomSettings {
         }
     }
 
-    /// One line for the lobby: `name - Mode - 19 x 15 - 5 min`; Team mode adds the friendly-fire
-    /// choice.
+    /// One line for the lobby: `name - Mode - 19 x 15 - 5 min - Medium bots`; Team mode adds the
+    /// friendly-fire choice before the bot difficulty.
     pub fn label(&self) -> String {
         let (w, h) = self.size.dimensions();
         let mut line = format!(
@@ -216,6 +269,7 @@ impl RoomSettings {
                 " - friendly fire off"
             });
         }
+        line.push_str(&format!(" - {} bots", self.bot_difficulty.label()));
         line
     }
 
@@ -238,6 +292,15 @@ impl RoomSettings {
     pub fn step_minutes(&mut self, step: i8) {
         let at = MINUTES.iter().position(|m| *m == self.minutes).unwrap_or(1);
         self.minutes = MINUTES[wrap(at, step, MINUTES.len())];
+    }
+
+    /// Moves to the next or previous bot difficulty, wrapping around.
+    pub fn step_bot_difficulty(&mut self, step: i8) {
+        let at = BotDifficulty::ALL
+            .iter()
+            .position(|d| *d == self.bot_difficulty)
+            .unwrap_or(1);
+        self.bot_difficulty = BotDifficulty::ALL[wrap(at, step, BotDifficulty::ALL.len())];
     }
 }
 

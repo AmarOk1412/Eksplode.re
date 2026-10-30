@@ -2,7 +2,7 @@
 
 mod common;
 
-use eksplode_re_core::{BoardSize, Mode, RoomSettings};
+use eksplode_re_core::{BoardSize, BotDifficulty, Mode, RoomSettings};
 use eksplode_re_net::room::from_wire;
 use serde_json::json;
 
@@ -438,6 +438,25 @@ fn missing_wrong_and_unknown_fields_fall_back_per_field() {
 }
 
 #[test]
+fn f12_the_bot_difficulty_is_read_and_falls_back_to_medium() {
+    let s = from_wire(&json!({"bot_difficulty": "hard"}));
+    assert_eq!(s.bot_difficulty, BotDifficulty::Hard);
+    let s = from_wire(&json!({"bot_difficulty": "easy", "mode": "team"}));
+    assert_eq!(s.bot_difficulty, BotDifficulty::Easy);
+    assert_eq!(from_wire(&json!({})).bot_difficulty, BotDifficulty::Medium);
+    for v in [
+        json!("HARD"),
+        json!(3),
+        json!(null),
+        json!([]),
+        json!({"a": 1}),
+    ] {
+        let s = from_wire(&json!({ "bot_difficulty": v }));
+        assert_eq!(s.bot_difficulty, BotDifficulty::Medium, "{v}");
+    }
+}
+
+#[test]
 fn the_name_is_cleaned_and_cut() {
     let s = from_wire(&json!({"name": "  \u{7}Hi\u{0}\nthere  "}));
     assert_eq!(s.name, "Hithere");
@@ -455,11 +474,13 @@ fn the_wire_names_are_lowercase_strings() {
         size: BoardSize::Large,
         minutes: 10,
         friendly_fire: false,
+        bot_difficulty: BotDifficulty::Hard,
     };
     let v = serde_json::to_value(&s).unwrap();
     assert_eq!(
         v,
-        json!({"name":"A","mode":"chaser","size":"large","minutes":10,"friendly_fire":false})
+        json!({"name":"A","mode":"chaser","size":"large","minutes":10,"friendly_fire":false,
+            "bot_difficulty":"hard"})
     );
     assert_eq!(from_wire(&v), s);
     for (mode, name) in [

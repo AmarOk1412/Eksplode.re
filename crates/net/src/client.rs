@@ -239,6 +239,11 @@ impl Client {
                     request_id,
                     room_id,
                 },
+                ClientMsg::DevSetBotBehaviour { behaviour } => Request::DevSetBotBehaviour {
+                    request_id,
+                    room_id,
+                    behaviour,
+                },
                 _ => {
                     return Err(NetError::Protocol(
                         "admission requires an explicit v2 room request".into(),

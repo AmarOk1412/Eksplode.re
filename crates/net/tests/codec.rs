@@ -79,6 +79,8 @@ fn v2_control_requests_round_trip_and_keep_secrets_out_of_debug() {
         json!({"type":"DevPauseBots","request_id":"pause","room_id":"room","paused":true}),
         json!({"type":"DevSetDrops","request_id":"drops","room_id":"room","chances":[0.0,1.0]}),
         json!({"type":"DevResetDrops","request_id":"reset","room_id":"room"}),
+        json!({"type":"DevSetBotBehaviour","request_id":"behaviour","room_id":"room",
+            "behaviour":"balanced"}),
         json!({"type":"Ping","nonce":42}),
     ];
     for value in requests {
@@ -532,6 +534,7 @@ fn every_server_message_round_trips() {
     roundtrip(ServerMsg::DevState {
         paused: true,
         drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2, 0.3],
+        behaviour: Some("protective".into()),
     });
     roundtrip(ServerMsg::Rejected {
         reason: RejectReason::Full,
@@ -788,6 +791,21 @@ fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
         chances: vec![0.1; 8],
     });
     roundtrip(ClientMsg::DevResetDrops);
+    roundtrip(ClientMsg::DevSetBotBehaviour {
+        behaviour: serde_json::json!("aggressive"),
+    });
+    roundtrip(ClientMsg::DevSetBotBehaviour {
+        behaviour: serde_json::Value::Null,
+    });
+    // a DevState from an older host has no behaviour: random
+    let old = r#"{"type":"DevState","paused":false,"drops":[0,0,0,0,0,0,0,0]}"#;
+    assert!(matches!(
+        decode::<ServerMsg>(old.as_bytes()),
+        Ok(ServerMsg::DevState {
+            behaviour: None,
+            ..
+        })
+    ));
     let old = r#"{"type":"Welcome","slot":0,"config":null}"#;
     assert!(
         decode::<ServerMsg>(old.as_bytes()).is_err(),

@@ -5,10 +5,10 @@ use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
-use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_bots::{Bot, DefaultBot, Profile};
 use eksplode_re_core::{
-    Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase, PlayerId,
-    MAX_PLAYERS,
+    BotDifficulty, Config, Controller, CoreError, Event, GameState, Lobby, LobbyError, Phase,
+    PlayerId, MAX_PLAYERS,
 };
 use eksplode_re_net::protocol::RejectReason;
 use eksplode_re_net::{Client, Host, HostConfig, NetError};
@@ -87,6 +87,7 @@ pub struct Session {
     config: Config,
     seed: u64,
     controllers: [Controller; MAX_PLAYERS],
+    bot_difficulty: BotDifficulty,
     key_bindings: [KeyBindings; MAX_PLAYERS],
     active: [bool; MAX_PLAYERS],
     bots: [Option<DefaultBot>; MAX_PLAYERS],
@@ -118,13 +119,15 @@ impl Session {
         let config = lobby.settings.to_config(&Config::default());
         let state = GameState::new(config.clone(), seed, lobby.active())?;
         let controllers = [0, 1, 2, 3].map(|i| lobby.slots[i].controller);
+        let bot_difficulty = lobby.settings.bot_difficulty;
         Ok(Session {
             input: InputState::new(config.base_move_cooldown),
-            bots: make_bots(&controllers, seed),
+            bots: make_bots(&controllers, seed, bot_difficulty),
             active: lobby.active(),
             config,
             seed,
             controllers,
+            bot_difficulty,
             key_bindings,
             state,
             paused: false,
@@ -187,7 +190,7 @@ impl Session {
         self.seed = self.seed.wrapping_add(1);
         if let Ok(state) = GameState::new(self.config.clone(), self.seed, self.active) {
             self.state = state;
-            self.bots = make_bots(&self.controllers, self.seed);
+            self.bots = make_bots(&self.controllers, self.seed, self.bot_difficulty);
             self.input.clear();
         }
     }
@@ -196,10 +199,13 @@ impl Session {
 fn make_bots(
     controllers: &[Controller; MAX_PLAYERS],
     seed: u64,
+    difficulty: BotDifficulty,
 ) -> [Option<DefaultBot>; MAX_PLAYERS] {
     [0, 1, 2, 3].map(|i| {
-        (controllers[i] == Controller::Bot)
-            .then(|| DefaultBot::new(seed.wrapping_mul(4).wrapping_add(i as u64)))
+        (controllers[i] == Controller::Bot).then(|| {
+            let s = seed.wrapping_mul(4).wrapping_add(i as u64);
+            DefaultBot::with_profile(s, Profile::pick(s, difficulty))
+        })
     })
 }
 

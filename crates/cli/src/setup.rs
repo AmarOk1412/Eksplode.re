@@ -13,7 +13,8 @@ const MODE: usize = 1;
 const SIZE: usize = 2;
 const TIME: usize = 3;
 const FRIENDLY_FIRE: usize = 4;
-const CREATE: usize = 5;
+const BOT_DIFFICULTY: usize = 5;
+const CREATE: usize = 6;
 /// The longest name that can be typed, in characters.
 const MAX_NAME: usize = eksplode_re_core::room::MAX_NAME_CHARS;
 
@@ -44,6 +45,7 @@ impl SetupScreen {
         if self.settings.mode == Mode::Team {
             rows.push(FRIENDLY_FIRE);
         }
+        rows.push(BOT_DIFFICULTY);
         rows.push(CREATE);
         rows
     }
@@ -69,6 +71,7 @@ impl SetupScreen {
                 SIZE => self.settings.step_size(step(code)),
                 TIME => self.settings.step_minutes(step(code)),
                 FRIENDLY_FIRE => self.settings.friendly_fire = !self.settings.friendly_fire,
+                BOT_DIFFICULTY => self.settings.step_bot_difficulty(step(code)),
                 _ => {}
             },
             KeyCode::Enter if self.row() == CREATE => self.done = true,
@@ -131,6 +134,11 @@ pub fn render(frame: &mut Frame, screen: &SetupScreen) {
             FRIENDLY_FIRE => (
                 "Friendly fire",
                 format!("< {} >", if s.friendly_fire { "on" } else { "off" }),
+                String::new(),
+            ),
+            BOT_DIFFICULTY => (
+                "Bot difficulty",
+                format!("< {} >", s.bot_difficulty.label()),
                 String::new(),
             ),
             _ => ("[ Create room ]", String::new(), String::new()),

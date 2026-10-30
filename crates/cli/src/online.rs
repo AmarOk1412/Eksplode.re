@@ -722,12 +722,13 @@ impl Online {
             _ => {}
         }
         let msg = match code {
-            KeyCode::Char(c @ ('m' | 's' | 't' | 'f' | 'M' | 'S' | 'T' | 'F')) => {
+            KeyCode::Char(c @ ('m' | 's' | 't' | 'f' | 'd' | 'M' | 'S' | 'T' | 'F' | 'D')) => {
                 let mut settings = self.lobby.settings.clone();
                 match c.to_ascii_lowercase() {
                     'm' => settings.step_mode(1),
                     's' => settings.step_size(1),
                     't' => settings.step_minutes(1),
+                    'd' => settings.step_bot_difficulty(1),
                     _ => settings.friendly_fire = !settings.friendly_fire,
                 }
                 ClientMsg::set_room(&settings)

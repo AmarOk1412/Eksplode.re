@@ -425,6 +425,37 @@ mod room_options {
     }
 
     #[test]
+    fn f12_us3_as7_only_the_host_sets_the_bot_difficulty() {
+        use eksplode_re_core::BotDifficulty;
+        assert_eq!(host_opts(&[]).room.bot_difficulty, BotDifficulty::Medium);
+        for (name, want) in [
+            ("easy", BotDifficulty::Easy),
+            ("medium", BotDifficulty::Medium),
+            ("hard", BotDifficulty::Hard),
+        ] {
+            let o = host_opts(&["--bot-difficulty", name]);
+            assert_eq!(o.room.bot_difficulty, want);
+            assert!(o.room_given, "a room setting skips the setup screen");
+        }
+        assert!(matches!(
+            args(&["host", "--bot-difficulty", "extreme"]),
+            Err(UsageError::InvalidChoice { .. })
+        ));
+        assert!(matches!(
+            args(&["host", "--bot-difficulty"]),
+            Err(UsageError::MissingValue(_))
+        ));
+        assert!(
+            matches!(
+                local(&["--bot-difficulty", "hard"]),
+                Err(UsageError::UnknownOption(_))
+            ),
+            "local games keep the default difficulty"
+        );
+        assert!(USAGE.contains("--bot-difficulty"));
+    }
+
+    #[test]
     fn host_without_settings_keeps_the_defaults_and_shows_the_setup() {
         let o = host_opts(&[]);
         assert_eq!(o.room, RoomSettings::default());

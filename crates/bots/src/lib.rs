@@ -3,10 +3,12 @@
 mod danger;
 mod default_bot;
 mod pathing;
+mod profile;
 
 pub use danger::DangerMap;
 pub use default_bot::DefaultBot;
 pub use pathing::{find_path, passable, PathRequest};
+pub use profile::{Behaviour, Profile, Skill};
 
 use eksplode_re_core::{Observation, PlayerInput};
 

@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use eksplode_re_core::{BoardSize, Lobby, Mode, RoomSettings};
+use eksplode_re_core::{BoardSize, BotDifficulty, Lobby, Mode, RoomSettings};
 use eksplode_re_net::protocol::{ClientMsg, ServerMsg};
 use eksplode_re_net::Host;
 use serde_json::{json, Value};
@@ -1329,7 +1329,7 @@ fn f4_us4_dev_commands_still_work_in_a_chaser_room() {
     );
     let state = a.recv_until(|m| matches!(m, ServerMsg::DevState { drops, .. } if drops[0] == 0.5));
     match state {
-        Some(ServerMsg::DevState { paused, drops }) => {
+        Some(ServerMsg::DevState { paused, drops, .. }) => {
             assert!(paused);
             assert_eq!(drops[0], 0.5);
         }
@@ -1796,4 +1796,114 @@ fn significant_mutations_emit_correlated_secret_free_typed_events() {
             "a proof field leaked in {json}"
         );
     }
+}
+
+#[test]
+fn f12_us3_as1_new_room_defaults_to_medium() {
+    let host = host();
+    let (mut raw, welcome) = v2_create(&host, "Ann", 4);
+    assert_eq!(welcome["lobby"]["settings"]["bot_difficulty"], "medium");
+    raw.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    assert_eq!(
+        v2_reply(&mut raw, "Rooms")["rooms"][0]["bot_difficulty"],
+        "medium"
+    );
+}
+
+#[test]
+fn f12_us3_as2_owner_sets_difficulty_and_members_see_it() {
+    let host = host();
+    let (mut a, room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    let mut b = Raw::connect(host.addr());
+    b.hello_v2().unwrap();
+    b.join_room_v2("join", &room, "Bob");
+    let joined = v2_reply(&mut b, "Welcome");
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["bot_difficulty"] = json!("hard");
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"hard", "room_id":room["room_id"],
+        "expected_revision":joined["revision"], "settings":settings, "capacity":4}),
+    );
+    for raw in [&mut a, &mut b] {
+        let s = lobby_settings(raw, |s| s.bot_difficulty == BotDifficulty::Hard);
+        assert_eq!(s.bot_difficulty, BotDifficulty::Hard);
+    }
+}
+
+#[test]
+fn f12_us3_as3_non_owner_cannot_change_it() {
+    let host = host();
+    let (_a, room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    let mut b = Raw::connect(host.addr());
+    b.hello_v2().unwrap();
+    b.join_room_v2("join", &room, "Bob");
+    let joined = v2_reply(&mut b, "Welcome");
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["bot_difficulty"] = json!("easy");
+    b.send_value(
+        &json!({"type":"SetRoom", "request_id":"denied", "room_id":room["room_id"],
+        "expected_revision":joined["revision"], "settings":settings, "capacity":4}),
+    );
+    assert_eq!(v2_reply(&mut b, "Error")["code"], "NotOwner");
+    b.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    assert_eq!(
+        v2_reply(&mut b, "Rooms")["rooms"][0]["bot_difficulty"],
+        "medium"
+    );
+}
+
+#[test]
+fn f12_us3_as4_no_change_during_a_match() {
+    let host = host_with(|c| c.game = quick_game(400));
+    let (mut a, room) = v2_create_settings(
+        &host,
+        "Ann",
+        serde_json::to_value(RoomSettings::default()).unwrap(),
+    );
+    a.send_value(&json!({"type":"Start", "request_id":"start", "room_id":room["room_id"]}));
+    assert!(a
+        .recv_until(|m| matches!(m, ServerMsg::Start { .. }))
+        .is_some());
+    let mut settings = room["lobby"]["settings"].clone();
+    settings["bot_difficulty"] = json!("easy");
+    a.send_value(
+        &json!({"type":"SetRoom", "request_id":"too-late", "room_id":room["room_id"],
+        "expected_revision":room["revision"], "settings":settings, "capacity":4}),
+    );
+    assert!(a.recv_until(is_error("InMatch")).is_some());
+    let s = lobby_settings(&mut a, |_| true);
+    assert_eq!(s.bot_difficulty, BotDifficulty::Medium);
+}
+
+#[test]
+fn f12_us3_as6_old_clients_get_medium() {
+    let host = host();
+    let old = json!({"name":"Old","mode":"normal","size":"small","minutes":3,"friendly_fire":true});
+    let (mut a, welcome) = v2_create_settings(&host, "Ann", old);
+    assert_eq!(welcome["lobby"]["settings"]["bot_difficulty"], "medium");
+    for (index, bad) in [json!("HARD"), json!(3), json!(null)]
+        .into_iter()
+        .enumerate()
+    {
+        let mut settings = welcome["lobby"]["settings"].clone();
+        settings["bot_difficulty"] = bad;
+        a.send_value(
+            &json!({"type":"SetRoom", "request_id":format!("bad-{index}"),
+            "room_id":welcome["room_id"], "expected_revision":welcome["revision"],
+            "settings":settings, "capacity":4}),
+        );
+    }
+    a.send_value(&json!({"type":"ListRooms", "request_id":"directory", "scope":"local"}));
+    assert_eq!(
+        v2_reply(&mut a, "Rooms")["rooms"][0]["bot_difficulty"],
+        "medium"
+    );
 }

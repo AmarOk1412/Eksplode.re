@@ -1,4 +1,4 @@
-use eksplode_re_core::{BoardSize, Config, Mode, RoomSettings};
+use eksplode_re_core::{BoardSize, BotDifficulty, Config, Mode, RoomSettings};
 
 #[test]
 fn defaults_are_the_game_as_it_was() {
@@ -11,6 +11,87 @@ fn defaults_are_the_game_as_it_was() {
     let c = s.to_config(&Config::default());
     assert_eq!(c, Config::default());
     assert_eq!((c.width, c.height, c.round_limit_ticks), (15, 13, 3600));
+}
+
+#[test]
+fn bot_difficulty_names_labels_and_default() {
+    assert_eq!(
+        BotDifficulty::ALL,
+        [
+            BotDifficulty::Easy,
+            BotDifficulty::Medium,
+            BotDifficulty::Hard
+        ]
+    );
+    let names: Vec<_> = BotDifficulty::ALL.iter().map(|d| d.name()).collect();
+    assert_eq!(names, ["easy", "medium", "hard"]);
+    let labels: Vec<_> = BotDifficulty::ALL.iter().map(|d| d.label()).collect();
+    assert_eq!(labels, ["Easy", "Medium", "Hard"]);
+    for d in BotDifficulty::ALL {
+        assert_eq!(BotDifficulty::from_name(d.name()), Some(d));
+    }
+    assert_eq!(BotDifficulty::from_name("HARD"), None);
+    assert_eq!(BotDifficulty::default(), BotDifficulty::Medium);
+    assert_eq!(
+        RoomSettings::default().bot_difficulty,
+        BotDifficulty::Medium
+    );
+}
+
+#[test]
+fn f12_us3_label_shows_bot_difficulty() {
+    let s = RoomSettings {
+        name: "Friday".into(),
+        ..RoomSettings::default()
+    };
+    assert_eq!(s.label(), "Friday - Normal - 15 x 13 - 3 min - Medium bots");
+    let s = RoomSettings {
+        name: "Duo".into(),
+        mode: Mode::Team,
+        friendly_fire: false,
+        bot_difficulty: BotDifficulty::Hard,
+        ..RoomSettings::default()
+    };
+    assert_eq!(
+        s.label(),
+        "Duo - Team - 15 x 13 - 3 min - friendly fire off - Hard bots"
+    );
+}
+
+#[test]
+fn step_bot_difficulty_wraps_around() {
+    let mut s = RoomSettings {
+        bot_difficulty: BotDifficulty::Hard,
+        ..RoomSettings::default()
+    };
+    s.step_bot_difficulty(1);
+    assert_eq!(s.bot_difficulty, BotDifficulty::Easy);
+    s.step_bot_difficulty(-1);
+    assert_eq!(s.bot_difficulty, BotDifficulty::Hard);
+    s.step_bot_difficulty(-1);
+    assert_eq!(s.bot_difficulty, BotDifficulty::Medium);
+}
+
+#[test]
+fn bot_difficulty_does_not_change_the_rules() {
+    let base = Config::default();
+    for bot_difficulty in BotDifficulty::ALL {
+        let s = RoomSettings {
+            bot_difficulty,
+            ..RoomSettings::default()
+        };
+        assert_eq!(s.to_config(&base), base);
+    }
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn settings_without_bot_difficulty_load_as_medium() {
+    let json = r#"{"name":"A","mode":"normal","size":"small","minutes":3,"friendly_fire":true}"#;
+    let s: RoomSettings = serde_json::from_str(json).unwrap();
+    assert_eq!(s.bot_difficulty, BotDifficulty::Medium);
+    let json = serde_json::to_string(&RoomSettings::default()).unwrap();
+    assert!(json.contains("\"bot_difficulty\":\"medium\""));
 }
 
 #[test]
@@ -153,9 +234,11 @@ fn json_round_trip_and_old_configs_still_load() {
         size: BoardSize::Large,
         minutes: 10,
         friendly_fire: false,
+        bot_difficulty: BotDifficulty::Easy,
     };
     let json = serde_json::to_string(&s).unwrap();
     assert!(json.contains("\"chaser\"") && json.contains("\"large\""));
+    assert!(json.contains("\"bot_difficulty\":\"easy\""));
     assert_eq!(serde_json::from_str::<RoomSettings>(&json).unwrap(), s);
 
     let mut value = serde_json::to_value(Config::default()).unwrap();

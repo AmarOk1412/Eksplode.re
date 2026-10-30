@@ -13,10 +13,10 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use argon2::{Algorithm, Argon2, Params, Version};
-use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_bots::{Behaviour, Bot, DefaultBot, Profile};
 use eksplode_re_core::{
-    step, BoardSize, Config, Controller, DropTable, Event, GameState, Lobby, Mode, Phase, PlayerId,
-    PlayerInput, RoomSettings, MAX_PLAYERS,
+    step, BoardSize, BotDifficulty, Config, Controller, DropTable, Event, GameState, Lobby, Mode,
+    Phase, PlayerId, PlayerInput, RoomSettings, MAX_PLAYERS,
 };
 use serde_json::Value;
 use subtle::ConstantTimeEq;
@@ -811,6 +811,8 @@ pub struct RoomRuntime {
     next_tick: Duration,
     drops: DropTable,
     bots_paused: bool,
+    /// Developer mode: the behaviour of every bot created from now on; `None` picks one at random.
+    bot_behaviour: Option<Behaviour>,
     pub(crate) password: Option<PasswordVerifier>,
 }
 
@@ -855,6 +857,7 @@ impl RoomRuntime {
             next_tick: Duration::ZERO,
             drops,
             bots_paused: false,
+            bot_behaviour: None,
             password: None,
         })
     }
@@ -878,6 +881,7 @@ impl RoomRuntime {
         candidate.matches = self.matches;
         candidate.drops = self.drops.clone();
         candidate.bots_paused = self.bots_paused;
+        candidate.bot_behaviour = self.bot_behaviour;
         candidate.password = self.password.clone();
         Ok(candidate)
     }
@@ -977,7 +981,7 @@ impl RoomRuntime {
                     .map_err(|_| ErrorCode::BadRoom)?;
                 let bots = std::array::from_fn(|index| {
                     (self.lobby.slots[index].controller == Controller::Bot)
-                        .then(|| DefaultBot::new(seed.wrapping_mul(4).wrapping_add(index as u64)))
+                        .then(|| self.bot(seed.wrapping_mul(4).wrapping_add(index as u64)))
                 });
                 self.running = Some(RoomGame {
                     state,
@@ -1197,7 +1201,8 @@ impl RoomRuntime {
             }
             request @ (Request::DevPauseBots { .. }
             | Request::DevSetDrops { .. }
-            | Request::DevResetDrops { .. }) => {
+            | Request::DevResetDrops { .. }
+            | Request::DevSetBotBehaviour { .. }) => {
                 self.owner(connection_id)?;
                 if !self.dev {
                     return Err(ErrorCode::Unsupported);
@@ -1209,6 +1214,15 @@ impl RoomRuntime {
                             chances.try_into().map_err(|_| ErrorCode::BadRoom)?;
                         self.drops = DropTable::new(chances).map_err(|_| ErrorCode::BadRoom)?;
                     }
+                    Request::DevSetBotBehaviour { behaviour, .. } => {
+                        self.bot_behaviour = match behaviour {
+                            Value::Null => None,
+                            Value::String(name) => {
+                                Some(Behaviour::from_name(&name).ok_or(ErrorCode::BadRoom)?)
+                            }
+                            _ => return Err(ErrorCode::BadRoom),
+                        };
+                    }
                     _ => self.drops = DropTable::defaults(self.config.powerup_chance),
                 }
                 if let Some(game) = self.running.as_mut() {
@@ -1216,11 +1230,7 @@ impl RoomRuntime {
                         .set_drops(self.drops.clone())
                         .map_err(|_| ErrorCode::BadRoom)?;
                 }
-                return Ok(self.fanout(Reply::DevState {
-                    reference: self.reference.clone(),
-                    paused: self.bots_paused,
-                    drops: self.drops.chances,
-                }));
+                return Ok(self.fanout(self.dev_state()));
             }
             _ => return Err(ErrorCode::Unsupported),
         }
@@ -1236,6 +1246,7 @@ impl RoomRuntime {
             reference: self.reference.clone(),
             paused: self.bots_paused,
             drops: self.drops.chances,
+            behaviour: self.bot_behaviour.map(|b| b.name().to_string()),
         }
     }
 
@@ -1497,6 +1508,19 @@ impl RoomRuntime {
         self.vacate_connection(connection_id, true);
     }
 
+    /// A bot for a seat: the forced developer behaviour or a random one, at the room's difficulty.
+    fn bot(&self, seed: u64) -> DefaultBot {
+        let difficulty = self.lobby.settings.bot_difficulty;
+        let profile = match self.bot_behaviour {
+            Some(behaviour) => Profile {
+                behaviour,
+                difficulty,
+            },
+            None => Profile::pick(seed, difficulty),
+        };
+        DefaultBot::with_profile(seed, profile)
+    }
+
     /// Removes a human; `refill` puts a bot into the seat they leave in the lobby (an owner's
     /// explicit kick passes `false` so the seat shows "+").
     fn vacate_connection(&mut self, connection_id: u64, refill: bool) {
@@ -1508,11 +1532,10 @@ impl RoomRuntime {
         if let Some(membership) = membership {
             if let Some(member) = self.members.remove(&membership) {
                 let slot = usize::from(member.slot);
+                let bot = self.bot(self.matches.get().wrapping_mul(8).wrapping_add(slot as u64));
                 if let Some(game) = self.running.as_mut() {
                     self.lobby.slots[slot].controller = Controller::Bot;
-                    game.bots[slot] = Some(DefaultBot::new(
-                        self.matches.get().wrapping_mul(8).wrapping_add(slot as u64),
-                    ));
+                    game.bots[slot] = Some(bot);
                 } else {
                     let _ = self.lobby.clear(slot);
                     if refill
@@ -1575,8 +1598,172 @@ pub fn from_wire(value: &Value) -> RoomSettings {
             .get("friendly_fire")
             .and_then(Value::as_bool)
             .unwrap_or(defaults.friendly_fire),
+        bot_difficulty: field("bot_difficulty")
+            .and_then(|v| serde_json::from_value::<BotDifficulty>(v).ok())
+            .unwrap_or(defaults.bot_difficulty),
     }
     .clean()
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod bot_profile_tests {
+    use super::*;
+    use eksplode_re_bots::{Behaviour, Profile};
+    use serde_json::json;
+
+    const OWNER: u64 = 1;
+    const GUEST: u64 = 2;
+
+    fn make_room(dev: bool, bot_difficulty: BotDifficulty) -> RoomRuntime {
+        let reference = RoomRef {
+            server_id: "server".into(),
+            server_epoch: "epoch".into(),
+            room_id: "room".into(),
+        };
+        let settings = RoomSettings {
+            bot_difficulty,
+            ..RoomSettings::default()
+        };
+        let mut room =
+            RoomRuntime::new(reference, settings, 4, Config::default(), dev, Some(42)).unwrap();
+        room.admit(OWNER, "Ann", false, None, &OsRandom).unwrap();
+        room.admit(GUEST, "Bob", false, None, &OsRandom).unwrap();
+        room.fill_bots();
+        room
+    }
+
+    fn request(room: &mut RoomRuntime, from: u64, request: Request) -> Result<(), ErrorCode> {
+        room.command(
+            from,
+            request,
+            Duration::ZERO,
+            Duration::from_millis(50),
+            &OsRandom,
+        )
+        .map(|_| ())
+    }
+
+    fn start(room: &mut RoomRuntime) {
+        let start = Request::Start {
+            request_id: RequestId::new("start").unwrap(),
+            room_id: "room".into(),
+        };
+        request(room, OWNER, start).unwrap();
+    }
+
+    fn force(room: &mut RoomRuntime, from: u64, behaviour: Value) -> Result<(), ErrorCode> {
+        let set = Request::DevSetBotBehaviour {
+            request_id: RequestId::new("behaviour").unwrap(),
+            room_id: "room".into(),
+            behaviour,
+        };
+        request(room, from, set)
+    }
+
+    fn profiles(room: &RoomRuntime) -> Vec<(usize, Profile)> {
+        let game = room.running.as_ref().unwrap();
+        (0..MAX_PLAYERS)
+            .filter_map(|slot| game.bots[slot].as_ref().map(|b| (slot, b.profile())))
+            .collect()
+    }
+
+    /// Ends the running match so the room is back in its lobby.
+    fn back_to_lobby(room: &mut RoomRuntime) {
+        room.running = None;
+        room.phase = RoomPhase::Lobby;
+    }
+
+    #[test]
+    fn f12_us1_as5_rematch_repicks_behaviours() {
+        let mut room = make_room(false, BotDifficulty::Medium);
+        for _ in 0..2 {
+            start(&mut room);
+            let seed = room.fixed_seed.unwrap();
+            let bots = profiles(&room);
+            assert_eq!(bots.len(), 2, "two humans, two bots");
+            for (slot, profile) in &bots {
+                let s = seed.wrapping_mul(4).wrapping_add(*slot as u64);
+                assert_eq!(*profile, Profile::pick(s, BotDifficulty::Medium));
+            }
+            back_to_lobby(&mut room);
+            room.fixed_seed = room.fixed_seed.map(|s| s + 1);
+        }
+    }
+
+    #[test]
+    fn f12_us1_as6_takeover_bot_gets_a_picked_behaviour() {
+        let mut room = make_room(false, BotDifficulty::Medium);
+        start(&mut room);
+        room.remove_connection(GUEST);
+        let seed = room.matches.get().wrapping_mul(8).wrapping_add(1);
+        let game = room.running.as_ref().unwrap();
+        let bot = game.bots[1].as_ref().expect("a bot took the seat");
+        assert_eq!(bot.profile(), Profile::pick(seed, BotDifficulty::Medium));
+    }
+
+    #[test]
+    fn f12_us1_as7_dev_forced_behaviour_applies_to_new_bots() {
+        let mut room = make_room(true, BotDifficulty::Medium);
+        force(&mut room, OWNER, json!("aggressive")).unwrap();
+        start(&mut room);
+        assert!(profiles(&room)
+            .iter()
+            .all(|(_, p)| p.behaviour == Behaviour::Aggressive));
+        // a mid-match change applies to the bot that takes over a seat
+        force(&mut room, OWNER, json!("protective")).unwrap();
+        room.remove_connection(GUEST);
+        let game = room.running.as_ref().unwrap();
+        let bot = game.bots[1].as_ref().unwrap();
+        assert_eq!(bot.profile().behaviour, Behaviour::Protective);
+        // back to random
+        back_to_lobby(&mut room);
+        force(&mut room, OWNER, Value::Null).unwrap();
+        start(&mut room);
+        let seed = room.fixed_seed.unwrap();
+        for (slot, profile) in profiles(&room) {
+            let s = seed.wrapping_mul(4).wrapping_add(slot as u64);
+            assert_eq!(profile, Profile::pick(s, BotDifficulty::Medium));
+        }
+    }
+
+    #[test]
+    fn f12_us1_as8_dev_behaviour_is_refused_outside_dev_mode_for_guests_and_bad_names() {
+        let mut room = make_room(false, BotDifficulty::Medium);
+        assert_eq!(
+            force(&mut room, OWNER, json!("aggressive")),
+            Err(ErrorCode::Unsupported)
+        );
+        let mut room = make_room(true, BotDifficulty::Medium);
+        assert_eq!(
+            force(&mut room, GUEST, json!("aggressive")),
+            Err(ErrorCode::NotOwner)
+        );
+        for bad in [json!("random"), json!("AGGRESSIVE"), json!(3), json!([])] {
+            assert_eq!(force(&mut room, OWNER, bad), Err(ErrorCode::BadRoom));
+        }
+        assert_eq!(room.bot_behaviour, None);
+    }
+
+    #[test]
+    fn f12_us3_as2_start_uses_room_difficulty() {
+        let mut room = make_room(false, BotDifficulty::Medium);
+        room.lobby.settings.bot_difficulty = BotDifficulty::Hard;
+        start(&mut room);
+        assert!(profiles(&room)
+            .iter()
+            .all(|(_, p)| p.difficulty == BotDifficulty::Hard));
+    }
+
+    #[test]
+    fn f12_us3_as5_takeover_bot_uses_room_difficulty() {
+        let mut room = make_room(false, BotDifficulty::Easy);
+        start(&mut room);
+        room.remove_connection(GUEST);
+        let game = room.running.as_ref().unwrap();
+        let bot = game.bots[1].as_ref().unwrap();
+        assert_eq!(bot.profile().difficulty, BotDifficulty::Easy);
+    }
 }
 
 #[cfg(test)]

@@ -7,6 +7,7 @@ use eksplode_re_core::{
 
 use crate::danger::DangerMap;
 use crate::pathing::{find_path, has_malus, passable, PathRequest};
+use crate::profile::{Behaviour, Profile, Skill};
 use crate::Bot;
 
 /// Chance per tick to take a random safe step when nothing else is worth doing.
@@ -15,13 +16,34 @@ const WANDER_CHANCE: f32 = 0.3;
 /// A deterministic bot; the seed only breaks ties between equally good moves.
 pub struct DefaultBot {
     rng: Rng,
+    profile: Profile,
+    skill: Skill,
+    /// The input of the last decision, without bomb or punch.
+    last: PlayerInput,
+    /// Ticks left before the next decision.
+    waiting: u32,
 }
 
 impl DefaultBot {
+    /// Balanced behaviour at Hard difficulty, the bot from before behaviours existed.
     pub fn new(seed: u64) -> Self {
+        Self::with_profile(seed, Profile::default())
+    }
+
+    /// A bot with this behaviour and difficulty.
+    pub fn with_profile(seed: u64, profile: Profile) -> Self {
         Self {
             rng: Rng::new(seed),
+            profile,
+            skill: Skill::of(profile.difficulty),
+            last: PlayerInput::default(),
+            waiting: 0,
         }
+    }
+
+    /// Its behaviour and difficulty.
+    pub fn profile(&self) -> Profile {
+        self.profile
     }
 
     fn shuffled_dirs(&mut self) -> [Dir; 4] {
@@ -85,6 +107,87 @@ impl Bot for DefaultBot {
         if !me.alive || obs.phase != Phase::Playing {
             return PlayerInput::default();
         }
+        if self.waiting > 0 {
+            self.waiting -= 1;
+            return self.held(obs, me);
+        }
+        self.waiting = self.skill.think_every.saturating_sub(1);
+        let late;
+        let view = if self.skill.react_ticks > 0 {
+            late = self.late_view(obs);
+            &late
+        } else {
+            obs
+        };
+        let planned = self.plan(view);
+        let input = self.mistake(view, planned);
+        self.last = PlayerInput {
+            bomb: false,
+            punch: false,
+            ..input
+        };
+        input
+    }
+}
+
+impl DefaultBot {
+    /// Between two decisions: keep walking the same way unless that square burns or is blocked.
+    fn held(&self, obs: &Observation, me: &Participant) -> PlayerInput {
+        let mv = self.last.mv.filter(|d| {
+            me.pos
+                .step(*d, obs.arena.width(), obs.arena.height())
+                .is_some_and(|t| passable(obs, t) && !obs.flames.iter().any(|f| f.pos == t))
+        });
+        PlayerInput {
+            mv,
+            ..PlayerInput::default()
+        }
+    }
+
+    /// What a slow bot has noticed: opponents' bombs younger than its reaction time are missing.
+    fn late_view(&self, obs: &Observation) -> Observation {
+        let mut view = obs.clone();
+        let fuse = obs.config.fuse_ticks;
+        view.bombs.retain(|b| {
+            b.owner == obs.me || fuse.saturating_sub(b.ticks_left) >= self.skill.react_ticks
+        });
+        view
+    }
+
+    /// Now and then a bot below Hard gets it wrong: it skips a bomb, hesitates or takes a wrong
+    /// turn, but never onto a burning square.
+    fn mistake(&mut self, obs: &Observation, planned: PlayerInput) -> PlayerInput {
+        if self.skill.mistake_chance <= 0.0 || !self.rng.chance(self.skill.mistake_chance) {
+            return planned;
+        }
+        if planned.bomb {
+            return PlayerInput::default();
+        }
+        let me = &obs.players[obs.me.index()];
+        let in_danger = !DangerMap::from_observation(obs).safe_from(me.pos, 1);
+        if in_danger || self.rng.chance(0.5) {
+            return PlayerInput::default();
+        }
+        for d in self.shuffled_dirs() {
+            let Some(t) = me.pos.step(d, obs.arena.width(), obs.arena.height()) else {
+                continue;
+            };
+            if passable(obs, t) && !obs.flames.iter().any(|f| f.pos == t) {
+                return PlayerInput {
+                    mv: Some(d),
+                    ..PlayerInput::default()
+                };
+            }
+        }
+        PlayerInput::default()
+    }
+
+    /// The best input for what the bot sees.
+    fn plan(&mut self, obs: &Observation) -> PlayerInput {
+        let me = &obs.players[obs.me.index()];
+        if !me.alive || obs.phase != Phase::Playing {
+            return PlayerInput::default();
+        }
         let danger = DangerMap::from_observation(obs);
         let order = self.shuffled_dirs();
         let mut req = PathRequest::new(obs, &danger);
@@ -122,13 +225,28 @@ impl Bot for DefaultBot {
         }
         if me.role == Role::Runner {
             req.max_depth = 10;
-            if let Some(i) = step_to(flee_chaser(obs, me, &req)) {
+            let flee_at = match self.profile.behaviour {
+                Behaviour::Protective => FLEE_DISTANCE + 2,
+                _ => FLEE_DISTANCE,
+            };
+            if let Some(i) = step_to(flee_chaser(obs, me, &req, flee_at)) {
                 return i;
             }
         }
         if let Some(progress) = closing_progress(obs) {
             req.max_depth = 14;
             if let Some(i) = step_to(move_inward(obs, me, &req, progress)) {
+                return i;
+            }
+        }
+        let threats: Vec<Pos> = obs
+            .players
+            .iter()
+            .filter(|p| is_enemy(p, me))
+            .map(|p| p.pos)
+            .collect();
+        if self.profile.behaviour == Behaviour::Protective {
+            if let Some(i) = keep_away(obs, me, &danger, &threats, req.order) {
                 return i;
             }
         }
@@ -140,46 +258,142 @@ impl Bot for DefaultBot {
             };
         }
 
-        req.max_depth = 8;
         let powerup = |t: Pos| {
             obs.powerups
                 .iter()
                 .any(|u| u.pos == t && !u.kind.is_malus())
         };
-        if let Some(i) = step_to(find_path(&req, &powerup)) {
-            return i;
-        }
-
-        req.max_depth = 14;
-        if me.bombs_active < me.bombs_max {
-            let enemies: Vec<Pos> = obs
-                .players
+        let enemies: Vec<Pos> = obs
+            .players
+            .iter()
+            .filter(|p| is_enemy(me, p))
+            .map(|p| p.pos)
+            .collect();
+        let hunt = |t: Pos| {
+            t != me.pos
+                && roomy(obs, t)
+                && blast(&obs.arena, t, me.placed_range())
+                    .tiles
+                    .iter()
+                    .any(|x| enemies.contains(x))
+        };
+        let dig = |t: Pos| {
+            t != me.pos
+                && roomy(obs, t)
+                && !blast(&obs.arena, t, me.placed_range()).destroyed.is_empty()
+        };
+        let approach = |t: Pos| enemies.iter().any(|e| manhattan(t, *e) == 1);
+        let has_bomb = me.bombs_active < me.bombs_max;
+        if self.profile.behaviour == Behaviour::Protective {
+            req.avoid = threats
                 .iter()
-                .filter(|p| is_enemy(me, p))
-                .map(|p| p.pos)
+                .flat_map(|t| {
+                    std::iter::once(*t).chain(
+                        Dir::ALL
+                            .iter()
+                            .filter_map(|d| t.step(*d, obs.arena.width(), obs.arena.height())),
+                    )
+                })
+                .filter(|p| *p != me.pos)
                 .collect();
-            let hunt = |t: Pos| {
-                t != me.pos
-                    && roomy(obs, t)
-                    && blast(&obs.arena, t, me.placed_range())
-                        .tiles
-                        .iter()
-                        .any(|x| enemies.contains(x))
+        }
+        for goal in plan(self.profile.behaviour) {
+            let path = match *goal {
+                Goal::PowerUp(depth) => {
+                    req.max_depth = depth;
+                    find_path(&req, &powerup)
+                }
+                Goal::Hunt(depth) if has_bomb => {
+                    req.max_depth = depth;
+                    find_path(&req, &hunt)
+                }
+                Goal::Dig(depth) if has_bomb => {
+                    req.max_depth = depth;
+                    find_path(&req, &dig)
+                }
+                Goal::Approach(depth) => {
+                    req.max_depth = depth;
+                    find_path(&req, &approach)
+                }
+                Goal::KeepAway => {
+                    if let Some(i) = keep_away(obs, me, &danger, &threats, req.order) {
+                        return i;
+                    }
+                    None
+                }
+                Goal::Hunt(_) | Goal::Dig(_) => None,
             };
-            if let Some(i) = step_to(find_path(&req, &hunt)) {
-                return i;
-            }
-            let dig = |t: Pos| {
-                t != me.pos
-                    && roomy(obs, t)
-                    && !blast(&obs.arena, t, me.placed_range()).destroyed.is_empty()
-            };
-            if let Some(i) = step_to(find_path(&req, &dig)) {
+            if let Some(i) = step_to(path) {
                 return i;
             }
         }
         self.wander(obs, me, &danger)
     }
+}
+
+/// Something worth walking to once the bot is safe.
+#[derive(Clone, Copy)]
+enum Goal {
+    /// A bonus within this many steps.
+    PowerUp(u32),
+    /// A square from which a bomb reaches an opponent.
+    Hunt(u32),
+    /// A square from which a bomb destroys a block.
+    Dig(u32),
+    /// A square next to an opponent.
+    Approach(u32),
+    /// A step away from a close opponent.
+    KeepAway,
+}
+
+/// The goals of a behaviour, most wanted first.
+fn plan(behaviour: Behaviour) -> &'static [Goal] {
+    match behaviour {
+        Behaviour::Balanced => &[Goal::PowerUp(8), Goal::Hunt(14), Goal::Dig(14)],
+        Behaviour::Aggressive => &[
+            Goal::Hunt(20),
+            Goal::PowerUp(4),
+            Goal::Dig(14),
+            Goal::Approach(20),
+        ],
+        Behaviour::Protective => &[
+            Goal::PowerUp(8),
+            Goal::Dig(14),
+            Goal::Hunt(5),
+            Goal::KeepAway,
+        ],
+    }
+}
+
+/// How close an opponent may come before a Protective bot steps back.
+const KEEP_AWAY: u32 = 3;
+
+/// A safe step that gets farther from the nearest threat, when one is within [`KEEP_AWAY`].
+fn keep_away(
+    obs: &Observation,
+    me: &Participant,
+    danger: &DangerMap,
+    threats: &[Pos],
+    order: [Dir; 4],
+) -> Option<PlayerInput> {
+    let distance = |p: Pos| threats.iter().map(|t| manhattan(p, *t)).min();
+    let now = distance(me.pos)?;
+    if now > KEEP_AWAY {
+        return None;
+    }
+    order
+        .into_iter()
+        .filter_map(|d| {
+            let t = me.pos.step(d, obs.arena.width(), obs.arena.height())?;
+            let far = distance(t)?;
+            (passable(obs, t) && !has_malus(obs, t) && danger.safe_from(t, 1) && far > now)
+                .then_some((far, d))
+        })
+        .max_by_key(|(far, _)| *far)
+        .map(|(_, d)| PlayerInput {
+            mv: Some(d),
+            ..PlayerInput::default()
+        })
 }
 
 /// How far the end pattern has got, from 0.0 at its start to 1.0 at the end of its time; `None`
@@ -245,13 +459,18 @@ const FLEE_DISTANCE: u32 = 5;
 
 /// A runner keeps away from the chaser: the way to the nearest square that is farther from it and
 /// not a dead end, or `None` when the chaser is not close.
-fn flee_chaser(obs: &Observation, me: &Participant, req: &PathRequest) -> Option<Vec<Dir>> {
+fn flee_chaser(
+    obs: &Observation,
+    me: &Participant,
+    req: &PathRequest,
+    flee_at: u32,
+) -> Option<Vec<Dir>> {
     let chaser = obs
         .players
         .iter()
         .find(|p| p.alive && p.role == Role::Chaser)?;
     let now = manhattan(me.pos, chaser.pos);
-    if now > FLEE_DISTANCE {
+    if now > flee_at {
         return None;
     }
     let far = (now + 3).min(9);

@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use eksplode_re_bots::{Bot, DefaultBot};
+use eksplode_re_bots::{Behaviour, Bot, DefaultBot, Profile};
 use eksplode_re_core::{
     step, Config, Controller, DropTable, GameState, Lobby, Phase, PlayerId, PlayerInput,
     RoomSettings, MAX_PLAYERS,
@@ -494,6 +494,7 @@ enum DevCommand {
     Pause(bool),
     Drops(Vec<f32>),
     Reset,
+    Behaviour(Value),
 }
 
 #[derive(Clone, Copy)]
@@ -559,6 +560,8 @@ struct Server {
     looks: [Look; MAX_PLAYERS],
     /// Developer mode: bots give no input while this is set.
     bots_paused: bool,
+    /// Developer mode: the behaviour of every bot created from now on; `None` picks one at random.
+    bot_behaviour: Option<Behaviour>,
     /// What destroyed blocks drop; changed live in developer mode and applied to every match.
     drops: DropTable,
     identity: ServerIdentity,
@@ -599,6 +602,7 @@ impl Server {
             matches: 0,
             looks: [0, 1, 2, 3].map(Look::default_for),
             bots_paused: false,
+            bot_behaviour: None,
             identity,
             services,
             event_sequence: 0,
@@ -920,6 +924,9 @@ impl Server {
             ClientMsg::DevPauseBots { paused } => self.dev_command(id, DevCommand::Pause(paused)),
             ClientMsg::DevSetDrops { chances } => self.dev_command(id, DevCommand::Drops(chances)),
             ClientMsg::DevResetDrops => self.dev_command(id, DevCommand::Reset),
+            ClientMsg::DevSetBotBehaviour { behaviour } => {
+                self.dev_command(id, DevCommand::Behaviour(behaviour))
+            }
         }
     }
 
@@ -1266,6 +1273,7 @@ impl Server {
             | Request::DevPauseBots { .. }
             | Request::DevSetDrops { .. }
             | Request::DevResetDrops { .. }
+            | Request::DevSetBotBehaviour { .. }
             | Request::SetRoom { .. })
                 if negotiated =>
             {
@@ -2176,6 +2184,23 @@ impl Server {
         }
         match command {
             DevCommand::Pause(paused) => self.bots_paused = paused,
+            DevCommand::Behaviour(behaviour) => {
+                let chosen = match &behaviour {
+                    Value::Null => Some(None),
+                    Value::String(name) => Behaviour::from_name(name).map(Some),
+                    _ => None,
+                };
+                match chosen {
+                    Some(chosen) => self.bot_behaviour = chosen,
+                    None => {
+                        return self.error(
+                            id,
+                            "BadValue",
+                            "send aggressive, protective, balanced or null",
+                        )
+                    }
+                }
+            }
             DevCommand::Reset => self.set_drops(DropTable::defaults(self.cfg.game.powerup_chance)),
             DevCommand::Drops(chances) => {
                 let table = <[f32; 8]>::try_from(chances.as_slice())
@@ -2208,6 +2233,7 @@ impl Server {
         ServerMsg::DevState {
             paused: self.bots_paused,
             drops: self.drops.chances,
+            behaviour: self.bot_behaviour.map(|b| b.name().to_string()),
         }
     }
 
@@ -2409,7 +2435,7 @@ impl Server {
             return;
         };
         let _ = state.set_drops(self.drops.clone());
-        let bots = bots_for(&self.lobby, seed);
+        let bots = bots_for(&self.lobby, seed, self.bot_behaviour);
         self.broadcast(ServerMsg::Start { seed, config });
         self.game = Some(Running {
             state,
@@ -2479,7 +2505,11 @@ impl Server {
         };
         if let Some(game) = self.game.as_mut() {
             self.lobby.slots[slot].controller = Controller::Bot;
-            game.bots[slot] = Some(DefaultBot::new(self.matches.wrapping_mul(8) + slot as u64));
+            game.bots[slot] = Some(bot_for(
+                &self.lobby,
+                self.matches.wrapping_mul(8) + slot as u64,
+                self.bot_behaviour,
+            ));
             self.broadcast(ServerMsg::PlayerLeft {
                 slot: slot as u8,
                 replaced_by_bot: true,
@@ -2586,11 +2616,28 @@ impl Server {
     }
 }
 
-fn bots_for(lobby: &Lobby, seed: u64) -> [Option<DefaultBot>; MAX_PLAYERS] {
+fn bots_for(
+    lobby: &Lobby,
+    seed: u64,
+    forced: Option<Behaviour>,
+) -> [Option<DefaultBot>; MAX_PLAYERS] {
     [0, 1, 2, 3].map(|i| {
         (lobby.slots[i].controller == Controller::Bot)
-            .then(|| DefaultBot::new(seed.wrapping_mul(4).wrapping_add(i as u64)))
+            .then(|| bot_for(lobby, seed.wrapping_mul(4).wrapping_add(i as u64), forced))
     })
+}
+
+/// A bot with the forced developer behaviour or a random one, at the lobby's difficulty.
+fn bot_for(lobby: &Lobby, seed: u64, forced: Option<Behaviour>) -> DefaultBot {
+    let difficulty = lobby.settings.bot_difficulty;
+    let profile = match forced {
+        Some(behaviour) => Profile {
+            behaviour,
+            difficulty,
+        },
+        None => Profile::pick(seed, difficulty),
+    };
+    DefaultBot::with_profile(seed, profile)
 }
 
 fn client_address(mut address: SocketAddr) -> SocketAddr {

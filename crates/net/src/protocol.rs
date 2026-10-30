@@ -72,6 +72,12 @@ pub enum ClientMsg {
     },
     /// Developer mode, owner only: back to the default drop table.
     DevResetDrops,
+    /// Developer mode, owner only: the behaviour of every bot created from now on
+    /// (`"aggressive"`, `"protective"`, `"balanced"`), or `null` for a random one.
+    DevSetBotBehaviour {
+        #[serde(default)]
+        behaviour: Value,
+    },
     #[serde(untagged)]
     RoomV2(Box<v2::Request>),
 }
@@ -147,11 +153,13 @@ pub enum ServerMsg {
     Pong {
         nonce: u64,
     },
-    /// Developer mode: the bot pause and the live drop table; sent to a joiner and to everybody
-    /// when it changes.
+    /// Developer mode: the bot pause, the live drop table and the forced bot behaviour (`None`
+    /// for a random one); sent to a joiner and to everybody when it changes.
     DevState {
         paused: bool,
         drops: [f32; 8],
+        #[serde(default)]
+        behaviour: Option<String>,
     },
     #[serde(untagged)]
     RoomV2(Box<v2::Reply>),
@@ -200,7 +208,16 @@ impl ServerMsg {
             },
             Reply::Ended { outcome, .. } => Self::Ended { outcome },
             Reply::Pong { nonce } => Self::Pong { nonce },
-            Reply::DevState { paused, drops, .. } => Self::DevState { paused, drops },
+            Reply::DevState {
+                paused,
+                drops,
+                behaviour,
+                ..
+            } => Self::DevState {
+                paused,
+                drops,
+                behaviour,
+            },
             Reply::Error { code, message, .. } => Self::Error {
                 code: format!("{code:?}"),
                 message,
@@ -415,6 +432,12 @@ pub mod v2 {
             request_id: RequestId,
             room_id: String,
         },
+        DevSetBotBehaviour {
+            request_id: RequestId,
+            room_id: String,
+            #[serde(default)]
+            behaviour: Value,
+        },
         Ping {
             nonce: u64,
         },
@@ -457,7 +480,8 @@ pub mod v2 {
                 | Self::SetLook { request_id, .. }
                 | Self::DevPauseBots { request_id, .. }
                 | Self::DevSetDrops { request_id, .. }
-                | Self::DevResetDrops { request_id, .. } => Some(request_id),
+                | Self::DevResetDrops { request_id, .. }
+                | Self::DevSetBotBehaviour { request_id, .. } => Some(request_id),
             }
         }
 
@@ -477,7 +501,8 @@ pub mod v2 {
                 | Self::Input { room_id, .. }
                 | Self::DevPauseBots { room_id, .. }
                 | Self::DevSetDrops { room_id, .. }
-                | Self::DevResetDrops { room_id, .. } => Some(room_id),
+                | Self::DevResetDrops { room_id, .. }
+                | Self::DevSetBotBehaviour { room_id, .. } => Some(room_id),
                 _ => None,
             }
         }
@@ -699,6 +724,8 @@ pub mod v2 {
             reference: RoomRef,
             paused: bool,
             drops: [f32; 8],
+            #[serde(default)]
+            behaviour: Option<String>,
         },
     }
 }

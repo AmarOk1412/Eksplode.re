@@ -17,6 +17,8 @@ pub struct PathRequest<'a> {
     pub max_depth: u32,
     /// Do not step on a malus power-up (it is never worth it unless fleeing).
     pub avoid_malus: bool,
+    /// Squares never to step on, e.g. next to an opponent.
+    pub avoid: Vec<Pos>,
 }
 
 impl<'a> PathRequest<'a> {
@@ -29,6 +31,7 @@ impl<'a> PathRequest<'a> {
             order: Dir::ALL,
             max_depth: 14,
             avoid_malus: true,
+            avoid: Vec::new(),
         }
     }
 }
@@ -95,6 +98,7 @@ pub fn find_path(req: &PathRequest, goal: &dyn Fn(Pos) -> bool) -> Option<Vec<Di
             };
             if passable(obs, next)
                 && !(req.avoid_malus && has_malus(obs, next))
+                && !req.avoid.contains(&next)
                 && seen.insert(next)
             {
                 nodes.push(Node {

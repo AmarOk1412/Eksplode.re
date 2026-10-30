@@ -115,6 +115,7 @@ projection, not an accepted single-room admission path. First-party clients use 
 | `DevPauseBots` | `paused: bool` | developer mode and owner only: stop or resume the bots |
 | `DevSetDrops` | `chances: [f32; 8]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
 | `DevResetDrops` | none | developer mode and owner only: back to the default drop table |
+| `DevSetBotBehaviour` | `behaviour: "aggressive" / "protective" / "balanced" / null` | developer mode and owner only, in the lobby or during a match: every bot created from now on (next match, a bot taking over a seat) gets this behaviour; `null` goes back to a random one; any other value gives `BadValue` (`BadRoom` on the room protocol) |
 
 Examples:
 
@@ -138,7 +139,7 @@ Examples:
 | `Ended` | `outcome: {"Winner": slot} / "Draw" / {"TeamWin": 0 or 1}` | the round is over; the lobby follows |
 | `Error` | `code: string`, `message: string` | a message was refused; see below |
 | `Pong` | `nonce: u64` | answer to `Ping` |
-| `DevState` | `paused: bool`, `drops: [f32; 8]` | developer mode: sent to a joiner and to everybody when the pause or the drop table changes |
+| `DevState` | `paused: bool`, `drops: [f32; 8]`, `behaviour: string or null` (optional, null when missing) | developer mode: sent to a joiner and to everybody when the pause, the drop table or the forced bot behaviour changes |
 
 `controller` in a lobby slot is `Local` (a person at the host), `Remote` (a person on the
 network, terminal or browser), `Bot` or `Empty`.
@@ -172,7 +173,7 @@ Rules: [GAMEPLAY.md](GAMEPLAY.md).
 A room is the lobby plus its settings, one object that a later version can publish on the network:
 
 ```json
-{"name":"Friday room","mode":"normal","size":"medium","minutes":5,"friendly_fire":true}
+{"name":"Friday room","mode":"normal","size":"medium","minutes":5,"friendly_fire":true,"bot_difficulty":"medium"}
 ```
 
 | Field | Values | Default |
@@ -182,6 +183,7 @@ A room is the lobby plus its settings, one object that a later version can publi
 | `size` | `small` 15 x 13, `medium` 19 x 15, `large` 25 x 19 | `small` |
 | `minutes` | `2`, `3`, `5`, `10` | `3` |
 | `friendly_fire` | `true` or `false`, used by Team mode | `true` |
+| `bot_difficulty` | `easy`, `medium`, `hard`: how well every bot of the room plays (any other value becomes `medium`) | `medium` |
 
 The host reads the settings leniently, like looks: a missing, wrongly typed or unknown field
 becomes its default and a value that is not an object gives the defaults (only `SetRoom` refuses
@@ -225,7 +227,7 @@ silhouette from the slot. A look without `costume` (an older page or host) means
 | `NoSlot` | `AddBot` with all slots taken |
 | `BadTick` | an `Input` from the future |
 | `DevDisabled` | a `Dev*` message on a host that was not started with `--dev` |
-| `BadValue` | `DevSetDrops` with a value outside 0 to 1, not finite or not eight values |
+| `BadValue` | `DevSetDrops` with a value outside 0 to 1, not finite or not eight values, or `DevSetBotBehaviour` with an unknown behaviour |
 | `Timeout` | silent for too long; the slot goes to a bot |
 | `HostLeft` | the host is shutting down; every client gets it before the connection closes |
 | `LookAdjusted` | the requested colour was taken; the message names the colour you got (a notice, not a refusal) |

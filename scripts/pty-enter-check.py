@@ -126,7 +126,8 @@ def check_owner_through_server(seq):
             os.write(client[1], b"c")
             ok = wait_for([client[1]], client[1], "Create room")
         if ok:
-            os.write(client[1], b"\r" * 5)
+            # name, mode, size, time, bot difficulty, then Create room
+            os.write(client[1], b"\r" * 6)
             ok = wait_for([client[1]], client[1], "(you)")
         if ok:
             os.write(client[1], seq)

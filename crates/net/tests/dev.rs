@@ -50,7 +50,7 @@ fn is_dev_state(m: &ServerMsg) -> bool {
 
 fn dev_state(c: &Client) -> (bool, [f32; 8]) {
     match wait_for(c, is_dev_state) {
-        Some(ServerMsg::DevState { paused, drops }) => (paused, drops),
+        Some(ServerMsg::DevState { paused, drops, .. }) => (paused, drops),
         other => panic!("expected DevState, got {other:?}"),
     }
 }
@@ -412,4 +412,67 @@ fn f3_us2_as10_a_table_with_kick_at_100_percent_drops_only_kicks() {
         spawned.iter().all(|k| *k == PowerUpKind::Kick),
         "{spawned:?}"
     );
+}
+
+fn behaviour_of(c: &Client) -> Option<String> {
+    match wait_for(c, is_dev_state) {
+        Some(ServerMsg::DevState { behaviour, .. }) => behaviour,
+        other => panic!("expected DevState, got {other:?}"),
+    }
+}
+
+fn force(c: &Client, behaviour: serde_json::Value) {
+    c.send(ClientMsg::DevSetBotBehaviour { behaviour }).unwrap();
+}
+
+#[test]
+fn f12_us1_as7_dev_behaviour_is_broadcast_in_the_lobby_and_during_a_match() {
+    let host = dev_host();
+    let (owner, room) = create(&host, "Ann");
+    welcome_slot(&owner);
+    let guest = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    guest.join_room(&room, "Bob").unwrap();
+    welcome_slot(&guest);
+    assert_eq!(behaviour_of(&owner), None, "random by default");
+    assert_eq!(behaviour_of(&guest), None);
+    force(&owner, serde_json::json!("protective"));
+    assert_eq!(behaviour_of(&owner).as_deref(), Some("protective"));
+    assert_eq!(behaviour_of(&guest).as_deref(), Some("protective"));
+
+    owner.send(ClientMsg::Start).unwrap();
+    assert!(wait_for(&owner, |m| matches!(m, ServerMsg::Start { .. })).is_some());
+    force(&owner, serde_json::json!("aggressive"));
+    assert_eq!(behaviour_of(&owner).as_deref(), Some("aggressive"));
+    force(&owner, serde_json::Value::Null);
+    assert_eq!(behaviour_of(&owner), None);
+}
+
+#[test]
+fn f12_us1_as8_dev_behaviour_is_refused_and_changes_nothing() {
+    let host = host();
+    let (a, _room) = create(&host, "Ann");
+    welcome_slot(&a);
+    force(&a, serde_json::json!("aggressive"));
+    assert!(wait_for(&a, is_error("Unsupported")).is_some());
+
+    let host = dev_host();
+    let (owner, room) = create(&host, "Ann");
+    welcome_slot(&owner);
+    let guest = Client::connect_unjoined(&host.addr().to_string()).unwrap();
+    guest.join_room(&room, "Bob").unwrap();
+    welcome_slot(&guest);
+    force(&guest, serde_json::json!("aggressive"));
+    assert!(wait_for(&guest, is_error("NotOwner")).is_some());
+    for bad in [
+        serde_json::json!("random"),
+        serde_json::json!("AGGRESSIVE"),
+        serde_json::json!(3),
+    ] {
+        force(&owner, bad.clone());
+        assert!(wait_for(&owner, is_error("BadRoom")).is_some(), "{bad}");
+    }
+    owner
+        .send(ClientMsg::DevPauseBots { paused: false })
+        .unwrap();
+    assert_eq!(behaviour_of(&owner), None);
 }
