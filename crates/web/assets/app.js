@@ -646,6 +646,13 @@ export function patternBanner(events) {
   return Array.isArray(events) && events.includes("PatternStarted") ? "The walls close in!" : "";
 }
 
+/** "You are the Chaser" when the round's role draw names slot `me` the chaser; empty otherwise. */
+export function roleBanner(events, me) {
+  if (!Array.isArray(events) || !Number.isInteger(me)) return "";
+  const chaser = events.some((e) => e?.RoleAssigned?.player === me && e.RoleAssigned.role === "Chaser");
+  return chaser ? "You are the Chaser" : "";
+}
+
 /** Time left in the round as `MM:SS`, `CLOSING` while the end pattern runs, or an empty string. */
 export function timerText(obs) {
   const limit = obs?.config?.round_limit_ticks;
@@ -829,6 +836,7 @@ function start() {
     hud: $("hud"),
     timer: $("timer"),
     banner: $("banner"),
+    roleBanner: $("role-banner"),
     logo: $("logo"),
     version: $("version"),
     editor: $("editor"),
@@ -889,6 +897,7 @@ function start() {
   let logoKey = "";
   let lobbyCanvases = [];
   let bannerTimer = null;
+  let roleBannerTimer = null;
   let lastFocusRoot = null;
   let lastFocusStage = null;
   let oskState = null;
@@ -1086,6 +1095,15 @@ function start() {
         bannerTimer = setTimeout(() => {
           el.banner.hidden = true;
         }, 2000);
+      }
+      const role = roleBanner(event.events, state.slot);
+      if (role) {
+        el.roleBanner.textContent = role;
+        el.roleBanner.hidden = false;
+        clearTimeout(roleBannerTimer);
+        roleBannerTimer = setTimeout(() => {
+          el.roleBanner.hidden = true;
+        }, 3000);
       }
     }
     audio.setTune(tuneForStage(state.stage));
@@ -1345,6 +1363,7 @@ function start() {
     }));
     syncTouchControls();
     if (!playing) el.banner.hidden = true;
+    if (!playing) el.roleBanner.hidden = true;
     renderRoom();
     el.join.hidden = state.stage === "closed";
     el.retry.hidden = state.stage !== "closed";

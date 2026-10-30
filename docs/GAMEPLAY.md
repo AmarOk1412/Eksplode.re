@@ -86,8 +86,9 @@ its teammates, and does not place a bomb that would reach a teammate while frien
 
 ## Chaser mode
 
-Four participants; one of them, drawn with the round's seed (so a rematch can give another one), is
-the chaser and the other three are runners. The arena is nearly open: only about a third of the
+Four participants; one of them, people and bots alike, drawn at random with the round's seed (so a
+rematch can give another one), is the chaser and the other three are runners; a person drawn as the
+chaser sees "You are the Chaser" in the middle of the page when the round starts. The arena is nearly open: only about a third of the
 fixed pillars (the squares where `(x/2 + y/2) % 3 == 0`) and a few blocks, and the middle and the
 squares around it are free. The chaser starts in the middle with 2 bombs and 3 hearts; the runners
 start in their corners (the chaser's own corner stays empty) with no bombs and cannot place one by

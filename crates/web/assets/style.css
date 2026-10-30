@@ -414,6 +414,22 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   text-transform: uppercase;
 }
 
+.role-banner {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 3;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  padding: 12px 28px;
+  background: #a52c2c;
+  color: #fff;
+  font-family: var(--title);
+  font-size: 2rem;
+  text-align: center;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
 .mode-cards { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 .mode-cards button { width: auto; font-size: 1.1rem; padding: 6px 14px; }
 .mode-cards button[aria-checked="true"] { background: var(--ink); color: #fff; }

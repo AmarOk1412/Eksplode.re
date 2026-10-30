@@ -558,3 +558,22 @@ test("the main menu shows the player's character instead of a fixed logo", () =>
   const menu = /<section id="main-menu"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
   assert.match(menu, /<canvas id="logo"[^>]*aria-label="Your character"/);
 });
+
+test("the player drawn as the chaser is told so when the round starts", async () => {
+  const { roleBanner } = await import("../assets/app.js");
+  const assigned = [
+    { RoleAssigned: { player: 0, role: "Runner" } },
+    { RoleAssigned: { player: 2, role: "Chaser" } },
+  ];
+  assert.equal(roleBanner(assigned, 2), "You are the Chaser");
+  assert.equal(roleBanner(assigned, 0), "", "runners get no banner");
+  assert.equal(roleBanner(assigned, null), "", "a spectator gets no banner");
+  assert.equal(roleBanner([{ Moved: {} }], 2), "");
+  assert.equal(roleBanner(undefined, 2), "");
+  const html = readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
+  assert.match(html, /<p id="role-banner" class="role-banner" role="alert" hidden><\/p>/);
+  const css = readAsset(new URL("../assets/style.css", import.meta.url), "utf8");
+  const rule = /^\.role-banner\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+  assert.match(rule, /position:\s*fixed/);
+  assert.match(rule, /translate\(-50%,\s*-50%\)/, "centred on the screen");
+});
