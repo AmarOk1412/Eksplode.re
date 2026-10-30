@@ -84,7 +84,7 @@ fn default_closing_lead_ticks() -> u32 {
 
 #[cfg(feature = "serde")]
 fn default_chaser_bombs() -> u8 {
-    2
+    5
 }
 
 #[cfg(feature = "serde")]
@@ -156,7 +156,7 @@ impl Default for Config {
             friendly_fire: true,
             closing_ticks: 1200,
             closing_lead_ticks: 20,
-            chaser_bombs: 2,
+            chaser_bombs: 5,
             chaser_hearts: 3,
             shield_ticks: 40,
             chaser_pillar_mod: 3,
