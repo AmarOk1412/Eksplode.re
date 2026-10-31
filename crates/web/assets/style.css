@@ -562,10 +562,10 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   #touch-joystick {
     left: max(14px, env(safe-area-inset-left));
     bottom: max(14px, env(safe-area-inset-bottom));
-    width: min(30vw, 128px);
-    height: min(30vw, 128px);
-    min-width: 96px;
-    min-height: 96px;
+    width: min(40vh, 170px);
+    height: min(40vh, 170px);
+    min-width: 110px;
+    min-height: 110px;
     border-radius: 50%;
     background: rgba(34, 34, 34, 0.18);
   }
@@ -578,14 +578,15 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
     pointer-events: none;
   }
-  .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(30vw, 160px); height: 140px; pointer-events: none; }
-  #touch-bomb { right: 0; bottom: 0; width: 76px; height: 76px; background: rgba(232, 188, 54, 0.94); }
-  #touch-punch { right: 82px; bottom: 38px; width: 68px; height: 68px; background: rgba(218, 91, 61, 0.94); font-size: 0.78rem; }
+  .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(30vw, 190px); height: 160px; pointer-events: none; }
+  #touch-bomb { right: 0; bottom: 0; width: 90px; height: 90px; background: rgba(232, 188, 54, 0.94); }
+  #touch-punch { right: 94px; bottom: 44px; width: 78px; height: 78px; background: rgba(218, 91, 61, 0.94); font-size: 0.85rem; }
   .touch-controls button:active, .touch-controls button.is-active { background: var(--ink); color: #fff; }
 }
 
 @media (orientation: portrait) and (max-width: 600px) {
   .touch-device #game-panel {
+    --touch-pad: calc(min(46vw, 220px) + 28px + env(safe-area-inset-bottom));
     position: fixed;
     inset: 0;
     z-index: 5;
@@ -596,7 +597,7 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     overflow: hidden;
     background: var(--bg);
   }
-  .touch-device #view { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .touch-device #view { position: absolute; inset: 0 0 auto 0; width: 100%; height: calc(100% - var(--touch-pad)); }
   .touch-device #timer { position: absolute; z-index: 2; top: max(4px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 1.3rem; }
   .touch-device #hud { position: absolute; z-index: 2; top: max(28px, calc(env(safe-area-inset-top) + 22px)); left: 50%; transform: translateX(-50%); gap: 4px 10px; margin: 0; font-size: 0.75rem; }
   .touch-device #hud li { gap: 4px; font-size: inherit; }
@@ -623,10 +624,10 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   .touch-device #touch-joystick {
     left: max(14px, env(safe-area-inset-left));
     bottom: max(14px, env(safe-area-inset-bottom));
-    width: min(30vw, 140px);
-    height: min(30vw, 140px);
-    min-width: 104px;
-    min-height: 104px;
+    width: min(46vw, 220px);
+    height: min(46vw, 220px);
+    min-width: 150px;
+    min-height: 150px;
     background: rgba(34, 34, 34, 0.18);
   }
   .touch-device .touch-joystick-knob {
@@ -638,9 +639,9 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     transform: translate(var(--stick-x, 0px), var(--stick-y, 0px));
     pointer-events: none;
   }
-  .touch-device .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(32vw, 160px); height: 140px; pointer-events: none; }
-  .touch-device #touch-bomb { right: 0; bottom: 0; width: 76px; height: 76px; background: rgba(232, 188, 54, 0.94); }
-  .touch-device #touch-punch { right: 82px; bottom: 38px; width: 68px; height: 68px; background: rgba(218, 91, 61, 0.94); font-size: 0.78rem; }
+  .touch-device .touch-actions { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: max(14px, env(safe-area-inset-bottom)); width: min(40vw, 190px); height: 170px; pointer-events: none; }
+  .touch-device #touch-bomb { right: 0; bottom: 0; width: 92px; height: 92px; background: rgba(232, 188, 54, 0.94); }
+  .touch-device #touch-punch { right: 96px; bottom: 50px; width: 80px; height: 80px; background: rgba(218, 91, 61, 0.94); font-size: 0.85rem; }
   .touch-device .touch-controls button:active, .touch-device .touch-controls button.is-active { background: var(--ink); color: #fff; }
 }
 
