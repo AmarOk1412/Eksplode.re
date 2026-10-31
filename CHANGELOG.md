@@ -1,6 +1,57 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## v1.0.1 - 2026-10-31
+
+### Build
+
+- Build: set the Cargo.toml version from the release tag (eb3e143)
+
+
+### Core
+
+- Core: auto-bomb malus drops a bomb on every free square for 10 s (571134b)
+
+
+### Documentation
+
+- Docs: update CHANGELOG.md for v1.0.0 (7388737)
+
+- Docs: the auto-bomb malus (0cc1e1b)
+
+- Docs: README screenshots of the menu, lobby, match and scoreboard (0453424)
+
+
+### Rendering
+
+- Render: short dying animation for eliminated players (89b242f)
+
+
+### Testing
+
+- Test: the room passes to the next player when the owner leaves (b5a404a)
+
+
+### Web
+
+- Web: keep the scoreboard title and an empty top line after the round (fe19026)
+
+- Web: in-match menu with Options, Return to lobby and Main menu (24e9264)
+
+- Web: show the scoreboard one second after the match ends (4f66eff)
+
+- Web: tell the player when the room passes to them (07972c7)
+
+- Web: auto bomb in the dev drop sliders, effects and sounds (f129629)
+
+- Web: Customize in the main menu, blue main actions, friendly names (ef695a0)
+
+- Web: bigger touch joystick with the board above it (7f0a4fb)
+
+- Web: Customize and Options are two separate dialogs (a477f3f)
+
+- Web: Customize in the in-match menu, before Options (79fdfaf)
+
 ## v1.0.0 - 2026-10-30
 
 ### Bots
