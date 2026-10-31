@@ -169,10 +169,12 @@ disabled for other members and during a match. Confirmed leave returns to the di
 last human's explicit departure closes that room without affecting others. Passwords, reconnect
 and remote discovery are not available yet; see [PROTOCOL.md](PROTOCOL.md#rooms).
 
-**Options.** One dialog with three tabs, Customize, Sound and Controls. The main menu has a
-Customize entry (opens on Customize) and an Options entry (opens on Sound); the dialog is also opened
-from the pause menu's Options entry. Closing it returns to where it was opened, including a paused
-match. Switching tabs only hides and shows the panels, so nothing being edited is lost.
+**Options and Customize.** Two separate dialogs. Options has two tabs, Sound and Controls; the main
+menu's Options entry and the pause menu's Options entry open it (on Sound). Customize has no tabs
+(the character editor and a Close button); the main menu's Customize entry opens it, and so does the
+pause menu's Customize entry outside a match. Closing a dialog returns to where it was opened,
+including a paused match. Switching Options tabs only hides and shows the panels, so nothing being
+edited is lost.
 
 **Names and main actions.** The name field starts with a random friendly name such as "Golden
 Giraffe" (at most 16 characters). Create new game, Create room, Join room and Start are blue

@@ -14,7 +14,7 @@ pixel-art view are all small, tested crates.
 |---|---|
 | ![The main menu with your character, your name, Create new game, Join a game and Options](docs/screenshots/main-menu.png) | ![The lobby with the owner and three bots on animated 3D cards](docs/screenshots/lobby.png) |
 | Pick a name and jump in. | The lobby: empty seats fill with bots, the owner starts. |
-| ![Options, Customize tab: colour, head, face and costume](docs/screenshots/customize.png) | ![The scoreboard after a match: kills and bombs placed](docs/screenshots/scoreboard.png) |
+| ![Customize: colour, head, face and costume](docs/screenshots/customize.png) | ![The scoreboard after a match: kills and bombs placed](docs/screenshots/scoreboard.png) |
 | Dress your character up (or let the dice decide). | Who won, who blew up whom. |
 
 ## Features
@@ -28,9 +28,8 @@ pixel-art view are all small, tested crates.
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
   grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
   animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. The page
-  opens on a main menu (Create new game, Join a game, Customize, Options); Options has Customize, Sound and
-  Controls tabs, and Customize picks colour, head, face and costume (or randomizes them with the
-  icon on the preview). Empty lobby seats fill with bots: the owner removes a bot or kicks a
+  opens on a main menu (Create new game, Join a game, Customize, Options); Customize picks colour, head, face and costume (or randomizes them with the
+  icon on the preview) and Options has Sound and Controls tabs. Empty lobby seats fill with bots: the owner removes a bot or kicks a
   player with the cross on a seat, anybody puts a bot back with "+", and room settings and the
   password live behind the gear icon.
 - **Terminal version** for local play on one keyboard, with a lobby screen.

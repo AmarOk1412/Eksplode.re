@@ -177,9 +177,9 @@ test("f11_us4_as3_randomize_sets_colour_head_face_and_costume", () => {
   assert.equal(calls, 4, "one draw per category");
 });
 
-test("f11_us4_as1_as2_as4_the_customize_tab_has_head_face_costume_and_a_corner_randomize_icon", () => {
+test("f11_us4_as1_as2_as4_the_customize_dialog_has_head_face_costume_and_a_corner_randomize_icon", () => {
   const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
-  const tab = /<section[^>]*id="options-customize"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  const tab = /<section[^>]*id="customize-panel"[^>]*role="dialog"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
   for (const id of ["swatches", "head", "face", "costume", "preview"]) assert.match(tab, new RegExp(`id="${id}"`), id);
   assert.doesNotMatch(html, /id="gender"/, "no gender select anywhere");
   assert.doesNotMatch(tab, />\s*(Look|Male|Female)\s*</);

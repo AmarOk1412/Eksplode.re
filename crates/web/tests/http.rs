@@ -175,6 +175,7 @@ fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
     let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
     for id in [
         "menu-hub",
+        "hub-customize",
         "hub-options",
         "hub-lobby",
         "hub-main",
@@ -188,7 +189,9 @@ fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
         let start = html.find(&format!("id=\"{id}\"")).unwrap();
         html[start..html[start..].find('>').unwrap() + start].to_string()
     };
-    // 011: Sound and Controls are tabs of the one Options dialog
+    // Customize is a dialog of its own; Sound and Controls are tabs of the Options dialog
+    let customize = tag("customize-panel");
+    assert!(customize.contains("role=\"dialog\"") && customize.contains("aria-labelledby="));
     let options = tag("options-panel");
     assert!(
         options.contains("role=\"dialog\""),
@@ -198,7 +201,7 @@ fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
         options.contains("aria-labelledby="),
         "Options needs an accessible label"
     );
-    for id in ["options-customize", "sound-panel", "controls-panel"] {
+    for id in ["sound-panel", "controls-panel"] {
         let panel = tag(id);
         assert!(
             panel.contains("role=\"tabpanel\""),

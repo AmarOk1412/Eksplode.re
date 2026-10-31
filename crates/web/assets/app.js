@@ -341,11 +341,11 @@ export function reduce(state, event) {
 }
 
 /** The four actions of the main menu, in order; each one is an event for `reduce` (Customize and
- * Options are handled by the page, which opens the Options screen on the given tab). */
+ * Options are handled by the page, which opens the Customize or the Options dialog). */
 export const MAIN_MENU_ACTIONS = [
   { id: "menu-create", label: "Create new game", event: { type: "new-room" } },
   { id: "menu-join", label: "Join a game", event: { type: "show-directory" } },
-  { id: "menu-customize", label: "Customize", event: { type: "open-options", tab: "customize" } },
+  { id: "menu-customize", label: "Customize", event: { type: "open-customize" } },
   { id: "menu-options", label: "Options", event: { type: "open-options", tab: "sound" } },
 ];
 
@@ -366,15 +366,14 @@ export function randomPlayerName(random = Math.random) {
   return `${pick(same.length > 0 && random() < 0.7 ? same : fits(animal))} ${animal}`;
 }
 
-/** The tabs of the Options screen, in order, with the ids of their tab button and panel. */
+/** The tabs of the Options dialog (Customize has a dialog of its own), with the ids of their tab button and panel. */
 export const OPTIONS_TABS = [
-  { id: "customize", label: "Customize", tab: "tab-customize", panel: "options-customize" },
   { id: "sound", label: "Sound", tab: "tab-sound", panel: "sound-panel" },
   { id: "controls", label: "Controls", tab: "tab-controls", panel: "controls-panel" },
 ];
 
-/** The in-match menu: Options (on Sound during a match), Return to lobby (once the round is over
- * or only bots are left alive) and Main menu (leaves the room). */
+/** The in-match menu: Customize (not during a match), Options, Return to lobby (once the round is
+ * over or only bots are left alive) and Main menu (leaves the room). */
 export function hubActions(state) {
   const inMatch = state.stage === "playing" || state.stage === "results";
   const people = (state.lobby?.slots ?? [])
@@ -383,7 +382,8 @@ export function hubActions(state) {
   const players = state.observation?.players ?? [];
   const onlyBots = people.length > 0 && people.every((i) => players[i]?.alive !== true);
   return {
-    options: { visible: true, tab: state.stage === "playing" ? "sound" : "customize" },
+    customize: { visible: state.stage !== "playing" },
+    options: { visible: true, tab: "sound" },
     lobby: { visible: inMatch, enabled: state.stage === "results" || (state.stage === "playing" && onlyBots) },
     main: { visible: Boolean(state.room_id) },
   };
@@ -842,6 +842,9 @@ function start() {
     leaveConfirm: $("leave-confirm"),
     leaveCancel: $("leave-cancel"),
     hubOptions: $("hub-options"),
+    hubCustomize: $("hub-customize"),
+    customizePanel: $("customize-panel"),
+    customizeClose: $("customize-close"),
     hubLobby: $("hub-lobby"),
     hubMain: $("hub-main"),
     gameMenu: $("game-menu"),
@@ -1432,6 +1435,7 @@ function start() {
     el.roomCreate.disabled = state.protocol !== 2 || state.stage === "joining";
     el.roomBack.disabled = state.stage === "joining";
     const hubView = hubActions(state);
+    el.hubCustomize.hidden = !hubView.customize.visible;
     el.hubLobby.hidden = !hubView.lobby.visible;
     el.hubLobby.disabled = !hubView.lobby.enabled;
     el.hubMain.hidden = !hubView.main.visible;
@@ -1885,7 +1889,6 @@ function start() {
       tab.button.tabIndex = view[tab.id] ? 0 : -1;
     }
     if (view.controls) renderControllerPanel();
-    if (view.customize) renderEditor();
   }
 
   /** Opens Options on `tab` (or switches to it when Options is already open). */
@@ -1897,9 +1900,16 @@ function start() {
     options = optionsReducer(options, { type: "open", tab });
     renderOptions();
     const opened = openNavigationLayer("options", el.optionsPanel, opener);
-    // the preview can only be measured and drawn once the panel is shown
-    paintPreview();
     el.optionsTabs.find((t) => t.id === options?.tab)?.button.focus();
+    return opened;
+  }
+
+  function openCustomize(opener = document.activeElement) {
+    if (navigationLayers.has("customize")) return true;
+    renderEditor();
+    const opened = openNavigationLayer("customize", el.customizePanel, opener);
+    // the preview can only be measured and drawn once the dialog is shown
+    paintPreview();
     return opened;
   }
 
@@ -1928,6 +1938,7 @@ function start() {
     });
   }
   el.optionsClose.addEventListener("click", closeOptions);
+  el.customizeClose.addEventListener("click", closeNavigationLayer);
   el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
   el.mute.addEventListener("change", () => audio.setSettings({ muted: el.mute.checked }));
@@ -2016,6 +2027,7 @@ function start() {
 
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
+  el.hubCustomize.addEventListener("click", () => openCustomize(el.hubCustomize));
   el.hubOptions.addEventListener("click", () => openOptions(hubActions(state).options.tab, el.hubOptions));
   el.hubLobby.addEventListener("click", () => {
     if (!hubActions(state).lobby.enabled) return;
@@ -2031,7 +2043,7 @@ function start() {
   el.gameMenu.addEventListener("click", () => {
     if (!navigationLayers.top) openMenuHub(el.gameMenu);
   });
-  el.menuCustomize.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[2].event.tab, el.menuCustomize));
+  el.menuCustomize.addEventListener("click", () => openCustomize(el.menuCustomize));
   el.menuOptions.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[3].event.tab, el.menuOptions));
   el.hubDev.addEventListener("click", () => {
     if (openNavigationLayer("dev", el.devPanel, el.hubDev)) el.devPanel.classList.add("navigation-layer");
@@ -2137,8 +2149,8 @@ function start() {
   }
 
   function paintPreview() {
-    // the preview is drawn only while the Customize tab of Options shows it
-    if (!renderer || el.optionsPanel.hidden || el.optionsTabs[0].root.hidden) return;
+    // the preview is drawn only while the Customize dialog shows it
+    if (!renderer || el.customizePanel.hidden) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = el.preview.getBoundingClientRect();
     const w = Math.max(16, Math.round((rect.width || 160) * dpr));

@@ -484,18 +484,23 @@ test("f11_us1_a_lost_connection_shows_the_main_menu_with_retry", () => {
   assert.match(section(indexHtml(), "main-menu"), /id="retry"/);
 });
 
-// ---- 011 US3: one tabbed Options screen ----
+// ---- Options (Sound, Controls) and Customize are two dialogs ----
 import { OPTIONS_TABS, optionsReducer, optionsView, lobbyActions } from "../assets/app.js";
 
-test("f11_us3_as1_options_has_exactly_three_tabs_in_order", () => {
-  assert.deepEqual(OPTIONS_TABS.map((t) => t.label), ["Customize", "Sound", "Controls"]);
+test("options_has_exactly_two_tabs_and_customize_is_a_dialog_of_its_own", () => {
+  assert.deepEqual(OPTIONS_TABS.map((t) => t.label), ["Sound", "Controls"]);
   const html = indexHtml();
   const panel = /<section[^>]*id="options-panel"[^>]*role="dialog"[^>]*>([\s\S]*)<\/section>\s*<section id="main-menu"/.exec(html)?.[1] ?? "";
   assert.ok(panel, "the Options screen is one dialog");
   const tablist = /<div[^>]*role="tablist"[^>]*>([\s\S]*?)<\/div>/.exec(panel)?.[1] ?? "";
   assert.deepEqual([...tablist.matchAll(/<button[^>]*role="tab"[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim()),
-    ["Customize", "Sound", "Controls"]);
+    ["Sound", "Controls"]);
   for (const tab of OPTIONS_TABS) assert.match(panel, new RegExp(`id="${tab.panel}"[^>]*role="tabpanel"`), tab.panel);
+  assert.doesNotMatch(panel, /id="(editor|preview|head)"/, "no character editor inside Options");
+  const customize = /<section[^>]*id="customize-panel"[^>]*role="dialog"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(customize, /id="editor"/);
+  assert.match(customize, /id="customize-close"[^>]*>Close</);
+  assert.doesNotMatch(customize, /role="tab"/, "Customize has no tabs");
 });
 
 test("f11_us3_as2_as3_the_sound_and_controls_tabs_hold_the_existing_controls", () => {
@@ -509,25 +514,30 @@ test("f11_us3_as2_as3_the_sound_and_controls_tabs_hold_the_existing_controls", (
 });
 
 test("f11_us3_switching_tabs_only_changes_which_panel_shows", () => {
-  let options = optionsReducer(null, { type: "open", tab: "customize" });
-  assert.deepEqual(optionsView(options), { customize: true, sound: false, controls: false });
+  let options = optionsReducer(null, { type: "open", tab: "sound" });
+  assert.deepEqual(optionsView(options), { sound: true, controls: false });
   const opened = options;
+  options = optionsReducer(options, { type: "tab", tab: "controls" });
+  assert.deepEqual(optionsView(options), { sound: false, controls: true });
   options = optionsReducer(options, { type: "tab", tab: "sound" });
-  assert.deepEqual(optionsView(options), { customize: false, sound: true, controls: false });
-  options = optionsReducer(options, { type: "tab", tab: "customize" });
   assert.deepEqual(options, opened, "coming back restores the same screen state");
+  assert.equal(optionsReducer(options, { type: "tab", tab: "customize" }), options, "Customize is not a tab");
   assert.equal(optionsReducer(options, { type: "tab", tab: "nonsense" }), options);
   assert.equal(optionsReducer(options, { type: "close" }), null);
-  assert.deepEqual(optionsView(null), { customize: false, sound: false, controls: false });
-  // the three tab panels stay in the page (hidden, never rebuilt), so unsaved edits survive a switch
+  assert.deepEqual(optionsView(null), { sound: false, controls: false });
+  assert.equal(optionsReducer(null, { type: "open" }).tab, "sound", "Sound is the default tab");
+  // the tab panels stay in the page (hidden, never rebuilt), so unsaved edits survive a switch
   const html = indexHtml();
   for (const tab of OPTIONS_TABS) assert.equal(html.split(`id="${tab.panel}"`).length, 2, tab.panel);
 });
 
-test("the main menu opens Customize on its tab and Options on Sound", () => {
-  const tab = (label) => MAIN_MENU_ACTIONS.find((a) => a.label === label).event.tab;
-  assert.equal(optionsReducer(null, { type: "open", tab: tab("Customize") }).tab, "customize");
-  assert.equal(optionsReducer(null, { type: "open", tab: tab("Options") }).tab, "sound");
+test("the main menu opens Customize on its own dialog and Options on Sound", () => {
+  const action = (label) => MAIN_MENU_ACTIONS.find((a) => a.label === label);
+  assert.deepEqual(action("Customize").event, { type: "open-customize" });
+  assert.equal(optionsReducer(null, { type: "open", tab: action("Options").event.tab }).tab, "sound");
+  const menu = section(indexHtml(), "main-menu");
+  assert.match(menu, /id="menu-customize"[^>]*aria-controls="customize-panel"/);
+  assert.match(menu, /id="menu-options"[^>]*aria-controls="options-panel"/);
 });
 
 test("main actions carry the primary style", () => {
@@ -558,7 +568,8 @@ test("the in-match menu offers Options, Return to lobby and Main menu", async ()
   const playing = { ...initialState(), stage: "playing", slot: 0, room_id: "r", lobby: slots,
     observation: { players: players([true, true, false, true]), config: {} } };
   let hub = hubActions(playing);
-  assert.deepEqual(hub.options, { visible: true, tab: "sound" }, "during a match Options opens on Sound");
+  assert.deepEqual(hub.options, { visible: true, tab: "sound" });
+  assert.deepEqual(hub.customize, { visible: false }, "no character editing during a match");
   assert.deepEqual(hub.lobby, { visible: true, enabled: false }, "a person is still alive");
   assert.deepEqual(hub.main, { visible: true });
   hub = hubActions({ ...playing, observation: { players: players([false, true, false, true]), config: {} } });
@@ -567,13 +578,13 @@ test("the in-match menu offers Options, Return to lobby and Main menu", async ()
   assert.deepEqual(hub.lobby, { visible: true, enabled: true }, "the round is over");
   hub = hubActions({ ...playing, stage: "lobby" });
   assert.equal(hub.lobby.visible, false, "nothing to return to from the lobby");
-  assert.equal(hubActions({ ...playing, stage: "lobby" }).options.tab, "customize");
+  assert.deepEqual(hubActions({ ...playing, stage: "lobby" }).customize, { visible: true });
   assert.deepEqual(hubActions(initialState()).main, { visible: false }, "no room, no way back to the menu");
 
   const html = indexHtml();
   const menu = /<section[^>]*id="menu-hub"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
   assert.deepEqual([...menu.matchAll(/<button id="([^"]+)"/g)].map((m) => m[1]),
-    ["hub-options", "hub-lobby", "hub-main", "hub-dev", "hub-resume"]);
+    ["hub-customize", "hub-options", "hub-lobby", "hub-main", "hub-dev", "hub-resume"]);
   assert.match(menu, /id="hub-options"[^>]*aria-controls="options-panel"[^>]*>Options</);
   assert.match(menu, />Return to lobby</);
   assert.match(menu, />Main menu</);
