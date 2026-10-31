@@ -216,6 +216,16 @@ function outcomeText(outcome, slot, lobby, observation) {
   return `Player ${winner + 1} won`;
 }
 
+/** The scoreboard's heading: who won, fixed when the round ended. */
+export function resultsTitle(state) {
+  return state.result?.title || "Round complete";
+}
+
+/** The line at the top of the page; empty on the scoreboard, whose heading already says it all. */
+export function topNotice(state) {
+  return state.stage === "results" ? "" : state.notice;
+}
+
 /** Pure state machine of the page: `event` is a server message or a local event (lower case). */
 export function reduce(state, event) {
   if (state.room_id && event.room_id && (state.room_id !== event.room_id ||
@@ -296,13 +306,15 @@ export function reduce(state, event) {
       return { ...state, stage: "playing", observation: event.state, tick: event.tick };
     case "PlayerLeft":
       return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
-    case "Ended":
+    case "Ended": {
+      const title = outcomeText(event.outcome, state.slot, state.lobby, state.observation);
       return {
         ...state,
         stage: "results",
-        notice: outcomeText(event.outcome, state.slot, state.lobby, state.observation),
-        result: { outcome: event.outcome, observation: state.observation, lobby: state.lobby },
+        notice: title,
+        result: { outcome: event.outcome, observation: state.observation, lobby: state.lobby, title },
       };
+    }
     case "Error":
       if (event.code === "HostLeft") {
         return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
@@ -1338,7 +1350,7 @@ function start() {
   function updateUi() {
     const previousKey = focusKey(document.activeElement);
     renderDev();
-    el.notice.textContent = state.notice;
+    el.notice.textContent = topNotice(state);
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
     const resultsVisible = state.stage === "results";
@@ -1350,7 +1362,7 @@ function start() {
     el.lobbyPanel.hidden = !visible.lobbyPanel;
     el.gamePanel.hidden = !visible.gamePanel;
     el.resultsPanel.hidden = !visible.resultsPanel;
-    el.resultsTitle.textContent = state.notice || "Round complete";
+    el.resultsTitle.textContent = resultsTitle(state);
     el.resultsRows.replaceChildren(...resultRows(state).map((row) => {
       const tr = document.createElement("tr");
       const values = [row.label, String(row.kills), String(row.bombsPlaced)];

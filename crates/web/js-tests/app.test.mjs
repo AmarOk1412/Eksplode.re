@@ -577,3 +577,16 @@ test("the player drawn as the chaser is told so when the round starts", async ()
   assert.match(rule, /position:\s*fixed/);
   assert.match(rule, /translate\(-50%,\s*-50%\)/, "centred on the screen");
 });
+
+test("the scoreboard keeps its title and the top line stays empty when an error arrives", async () => {
+  const { resultsTitle, topNotice } = await import("../assets/app.js");
+  const s = run([welcome(0, lobby("Remote", "Bot", "Bot", "Bot")), { type: "Start", seed: 1, config: {} }]);
+  const ended = reduce(s, { type: "Ended", outcome: { Winner: 3 } });
+  assert.equal(resultsTitle(ended), "Player 4 won");
+  assert.equal(topNotice(ended), "", "the scoreboard says who won; the top line is empty");
+  const refused = reduce(ended, { type: "Error", code: "InMatch", message: "InMatch" });
+  assert.equal(resultsTitle(refused), "Player 4 won", "a late refusal does not replace the title");
+  assert.equal(topNotice(refused), "");
+  assert.equal(resultsTitle(initialState()), "Round complete");
+  assert.equal(topNotice({ ...s, notice: "Player 2 left, a bot took over" }), "Player 2 left, a bot took over");
+});
