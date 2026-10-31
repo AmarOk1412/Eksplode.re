@@ -305,7 +305,9 @@ export function reduce(state, event) {
     case "Lobby": {
       const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
       const lobby = Object.hasOwn(event, "owner_slot") ? { ...event.lobby, owner_slot: event.owner_slot } : event.lobby;
+      const promoted = state.lobby && state.slot !== null && lobbyOwner(state.lobby) !== state.slot && lobbyOwner(lobby) === state.slot;
       return { ...state, stage, lobby, looks: looksOf(event, state.looks),
+        notice: promoted ? "You are now the room owner" : state.notice,
         memberships: Array.isArray(event.memberships) ? event.memberships : state.memberships,
         revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity,
         password_required: event.password_required ?? state.password_required };

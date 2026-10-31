@@ -41,6 +41,18 @@ test("v2 directory requires room selection and uses explicit ownership", () => {
   assert.equal(state.slot, null);
 });
 
+test("the next player is told when the room passes to them", () => {
+  const slots = lobby("Remote", "Remote", "Remote");
+  let state = reduce(initialState(), { type: "Welcome", slot: 1, lobby: slots, owner_slot: 0, room_id: "room", revision: 1 });
+  state = reduce(state, { type: "RoomUpdated", room_id: "room", lobby: lobby("Bot", "Remote", "Remote"), owner_slot: 1, revision: 2 });
+  assert.equal(lobbyOwner(state.lobby), 1);
+  assert.equal(state.notice, "You are now the room owner");
+  const again = reduce({ ...state, notice: "" }, { type: "RoomUpdated", room_id: "room", lobby: lobby("Bot", "Remote", "Remote"), owner_slot: 1, revision: 3 });
+  assert.equal(again.notice, "", "said once");
+  const other = reduce(initialState(), { type: "Welcome", slot: 2, lobby: slots, owner_slot: 0, room_id: "room", revision: 1 });
+  assert.equal(reduce(other, { type: "RoomUpdated", room_id: "room", lobby: lobby("Bot", "Remote", "Remote"), owner_slot: 1, revision: 2 }).notice, "");
+});
+
 test("v2 admission refusal returns to the selected directory without closing transport", () => {
   const state = { ...initialState(), protocol: 2, stage: "joining", selectedRoom: { room_id: "room" } };
   const refused = reduce(state, { type: "Error", code: "Full", message: "The room is full" });
