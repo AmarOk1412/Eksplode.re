@@ -126,7 +126,7 @@ result in a browser or with the smoke script, and record manual checks in a chec
 **A power.** Add the kind to `PowerUpKind` (and `ALL`, `is_malus`), its pickup effect in
 `crates/core/src/step.rs`, its share in `drops::DEFAULT_SHARES`, then core tests (`powerups`,
 `malus`, `drops`). Bots score it in `crates/bots`, the terminal needs a letter in `view.rs`, the
-render module a 10x10 pixel icon in `sprites.rs` (`icon`) and a letter in `commands.rs`, the
+render module a 32x32 pixel icon in `sprites.rs` (`icon`) and a letter in `commands.rs`, the
 page a label in `DROP_LABELS` and the guide [GAMEPLAY.md](GAMEPLAY.md) a table row; the drop table
 (`DEFAULT_SHARES`, `DevSetDrops`, the dev panel) grows by one entry at the end. Rebuild the wasm.
 

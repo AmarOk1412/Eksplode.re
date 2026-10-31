@@ -6,7 +6,9 @@ use common::*;
 use eksplode_re_core::{Config, Dir, GameState, PowerUpKind, Slide};
 use eksplode_re_web_render::commands::{build, Command, Kind};
 use eksplode_re_web_render::interp::Interp;
-use eksplode_re_web_render::sprites::{icon, icon_colour, BOMB_BODY};
+use eksplode_re_web_render::sprites::{
+    icon, icon_colour, BOMB_BODY, ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, WHITE,
+};
 use eksplode_re_web_render::view::fit;
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
@@ -29,24 +31,52 @@ fn only_the_icon(kind: PowerUpKind, canvas: (f32, f32)) -> Vec<Command> {
 }
 
 #[test]
-fn f3_us2_as10_every_power_has_its_own_ten_by_ten_pixel_picture() {
+fn f3_us2_as10_every_power_has_its_own_thirty_two_by_thirty_two_pixel_picture() {
     let mut seen = std::collections::BTreeSet::new();
     for kind in PowerUpKind::ALL {
         let rows = icon(kind);
-        assert_eq!(rows.len(), 10, "{kind:?}");
-        assert!(rows.iter().all(|r| r.chars().count() == 10), "{kind:?}");
+        assert_eq!(rows.len(), ICON_SIZE, "{kind:?}");
+        assert!(
+            rows.iter().all(|r| r.chars().count() == ICON_SIZE),
+            "{kind:?}"
+        );
         let pixels = rows
             .iter()
             .flat_map(|r| r.chars())
             .filter(|c| icon_colour(kind, *c).is_some())
             .count();
-        assert!((20..=90).contains(&pixels), "{kind:?} has {pixels} pixels");
+        assert!(
+            (150..=700).contains(&pixels),
+            "{kind:?} has {pixels} pixels"
+        );
         assert!(
             seen.insert(rows.join("/")),
             "{kind:?} looks like another kind"
         );
     }
     assert_eq!(seen.len(), 9);
+}
+
+#[test]
+fn an_icon_never_spills_out_of_its_frame() {
+    for canvas in [CANVAS, (130.0, 130.0), (360.0, 300.0)] {
+        let scale = fit(7, 7, canvas).scale;
+        for kind in PowerUpKind::ALL {
+            for c in only_the_icon(kind, canvas) {
+                let backdrop = [WHITE, MALUS_FRAME, ICON_BONUS_FILL, ICON_MALUS_FILL];
+                if c.kind != Kind::Quad || backdrop.contains(&[c.color[0], c.color[1], c.color[2]])
+                {
+                    continue;
+                }
+                let w = c.points[1].0 - c.points[0].0;
+                let h = c.points[2].1 - c.points[1].1;
+                assert!(
+                    w <= 0.48 * scale + 1.0 && h <= 0.48 * scale + 1.0,
+                    "{kind:?} at scale {scale}: {w}x{h}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

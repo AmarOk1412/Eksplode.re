@@ -120,6 +120,20 @@ impl Pen<'_> {
         }
     }
 
+    /// Like [`Pen::sprite`] for a fractional `cell`; every edge snaps to a whole canvas pixel.
+    fn sprite_fit(&mut self, list: &[Run], cell: f32, x: f32, y: f32) {
+        for r in list {
+            let x0 = (x + r.col as f32 * cell).round();
+            let x1 = (x + (r.col + r.len) as f32 * cell).round();
+            let y0 = (y + r.row as f32 * cell).round();
+            let y1 = (y + (r.row + 1) as f32 * cell).round();
+            if x1 > x0 && y1 > y0 {
+                let p = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+                self.out.push(quad(solid(r.color), p, self.layer));
+            }
+        }
+    }
+
     /// Like [`Pen::sprite`] with sprite pixels `sx` by `sy` canvas pixels, every pixel in `tint`
     /// when given, and `alpha` opacity.
     #[allow(clippy::too_many_arguments)]
@@ -264,13 +278,22 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
                 ICON_BONUS_FILL
             };
             pen.rect(fill, tx + 0.26, ty + 0.26 + dy, tx + 0.74, ty + 0.74 + dy);
-            // always a pixel picture, never a letter, even on a tiny board (matches Sprite::Bomb's
-            // own minimum-size clamp just below)
-            let ps = (0.48 * view.scale / ICON_SIZE as f32).floor().max(1.0);
+            // Whole multiples of the 32px picture when the frame is big enough, else shrunk to
+            // fit it; always pixels, never a letter, even on a tiny board.
+            let fit = 0.48 * view.scale;
+            let size = if fit >= ICON_SIZE as f32 {
+                (fit / ICON_SIZE as f32).floor() * ICON_SIZE as f32
+            } else {
+                fit.floor().max(8.0)
+            };
             let list = runs(&icon(kind), ICON_SIZE, |c| icon_colour(kind, c));
             let (px, py) = view.project(cx, cy + dy);
-            let half = ICON_SIZE as f32 * ps / 2.0;
-            pen.sprite(&list, ps, (px - half).round(), (py - half).round());
+            pen.sprite_fit(
+                &list,
+                size / ICON_SIZE as f32,
+                (px - size / 2.0).round(),
+                (py - size / 2.0).round(),
+            );
         }
         Sprite::Bomb { ticks_left, flying } => {
             let pulse = 0.5 * (1.0 + (ticks_left as f32 * 0.8).sin());
