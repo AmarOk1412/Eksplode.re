@@ -117,14 +117,15 @@ Default chance is per destroyed block (`powerup_chance` 0.3 times the share of t
 
 | Kind | Icon (browser) | Terminal | Chance | Effect |
 |------|----------------|----------|--------|--------|
-| Extra bomb | a bomb with a plus | `+B` | 5.7 % | one more bomb at a time (max 6) |
-| Roller | a rollerskate | `+R` | 6.6 % | moves faster; the move cooldown drops by one tick (min 2) |
-| Flame | a flame | `+F` | 6.6 % | blast range plus one (max 8) |
+| Extra bomb | a bomb with a plus | `+B` | 5.4 % | one more bomb at a time (max 6) |
+| Roller | a rollerskate | `+R` | 6.3 % | moves faster; the move cooldown drops by one tick (min 2) |
+| Flame | a flame | `+F` | 6.3 % | blast range plus one (max 8) |
 | Punch | a boxing glove | `+P` | 0.9 % | lets you punch a bomb in front of you |
 | Kick | a boot | `+K` | 1.5 % | walking into a bomb makes it slide until the next square is blocked |
-| Slow | a snail | `-S` | 3.0 % | malus: moves about a third slower for 10 s |
-| Hyper speed | a lightning bolt | `-H` | 2.4 % | malus: moves twice as fast for 10 s (hard to steer) |
-| Small bomb | a tiny bomb with a minus | `-s` | 3.3 % | malus: bombs placed in the next 10 s reach one square only |
+| Slow | a snail | `-S` | 2.7 % | malus: moves about a third slower for 10 s |
+| Hyper speed | a lightning bolt | `-H` | 2.1 % | malus: moves twice as fast for 10 s (hard to steer) |
+| Small bomb | a tiny bomb with a minus | `-s` | 3.0 % | malus: bombs placed in the next 10 s reach one square only |
+| Auto bomb | a trail of three bombs | `-A` | 1.8 % | malus: for 10 s a bomb is placed on every free square you stand on |
 
 The icons are small pixel pictures (10 by 10 pixels, drawn by the render module); on a very small
 board, where a picture would be unreadable, the browser shows the letter of the power instead.
@@ -138,6 +139,9 @@ red frame and a red `-`.
   cooldown / 2)` ticks.
 - Small bomb: only bombs placed while it is active have range 1; bombs already on the board keep
   theirs.
+- Auto bomb: every tick the player stands on a square without a bomb, a bomb is placed there as if
+  the bomb key were pressed (still within the player's bomb limit, with their usual range). Keep
+  moving: standing still means standing on your own bomb.
 - Items stay on the board until somebody picks them up; flames do not destroy them.
 
 ## Kick
@@ -190,9 +194,9 @@ in your facing direction until it lands.
 | Terminal P4 | T F G H | Y | N |
 
 The terminal draws a bomb in flight as `(~` (cells are two characters wide) and lists the active
-effects after each player's stats: `punch`, `kick`, `slow 7s`, `hyper 4s`, `small 9s`. The browser lists
+effects after each player's stats: `punch`, `kick`, `slow 7s`, `hyper 4s`, `small 9s`, `auto 5s`. The browser lists
 them in the player list next to the board and tints a player with a malus (blue slow, yellow
-hyper speed, red small bomb).
+hyper speed, red small bomb, purple auto bomb).
 
 ## Characters
 

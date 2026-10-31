@@ -40,8 +40,8 @@ See [AUDIO.md](AUDIO.md).
 
 `--dev` (also `eksplode-re-cli host --dev`) turns on developer mode for testing. The page then shows
 a "DEV MODE" marker and a panel for the lobby owner: pause or resume every bot (placed bombs keep
-burning, people are not affected), eight sliders from 0 to 100 % for the drop chance of each power
-(extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick), a reset button and a "Bot
+burning, people are not affected), nine sliders from 0 to 100 % for the drop chance of each power
+(extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick, auto bomb), a reset button and a "Bot
 behaviour" choice (Random, Aggressive, Protective, Balanced) that every bot created from then on
 uses (the next match, or a bot taking over a seat mid-match); Random lets each bot draw its own.
 Forcing Balanced in a Hard room gives the bot as it was before behaviours existed. The sliders

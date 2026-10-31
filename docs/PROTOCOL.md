@@ -113,7 +113,7 @@ projection, not an accepted single-room admission path. First-party clients use 
 | `AddBot` | none | lobby owner only: put a bot into the first free slot |
 | `RemoveBot` | none | lobby owner only: free the highest bot slot |
 | `DevPauseBots` | `paused: bool` | developer mode and owner only: stop or resume the bots |
-| `DevSetDrops` | `chances: [f32; 8]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
+| `DevSetDrops` | `chances: [f32; 9]` in the order extra bomb, flame, roller, punch, slow, hyper speed, small bomb, kick, auto bomb | developer mode and owner only; each value finite and within 0 to 1, otherwise `BadValue` |
 | `DevResetDrops` | none | developer mode and owner only: back to the default drop table |
 | `DevSetBotBehaviour` | `behaviour: "aggressive" / "protective" / "balanced" / null` | developer mode and owner only, in the lobby or during a match: every bot created from now on (next match, a bot taking over a seat) gets this behaviour; `null` goes back to a random one; any other value gives `BadValue` (`BadRoom` on the room protocol) |
 
@@ -139,7 +139,7 @@ Examples:
 | `Ended` | `outcome: {"Winner": slot} / "Draw" / {"TeamWin": 0 or 1}` | the round is over; the lobby follows |
 | `Error` | `code: string`, `message: string` | a message was refused; see below |
 | `Pong` | `nonce: u64` | answer to `Ping` |
-| `DevState` | `paused: bool`, `drops: [f32; 8]`, `behaviour: string or null` (optional, null when missing) | developer mode: sent to a joiner and to everybody when the pause, the drop table or the forced bot behaviour changes |
+| `DevState` | `paused: bool`, `drops: [f32; 9]`, `behaviour: string or null` (optional, null when missing) | developer mode: sent to a joiner and to everybody when the pause, the drop table or the forced bot behaviour changes |
 
 `controller` in a lobby slot is `Local` (a person at the host), `Remote` (a person on the
 network, terminal or browser), `Bot` or `Empty`.

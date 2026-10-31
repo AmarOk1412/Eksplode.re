@@ -67,11 +67,11 @@ Pure rules in [`crates/core`](../crates/core).
   drop table. Bots and the render module consume only this.
 - `Lobby` and `Controller` (`Local`, `Remote`, `Bot`, `Empty`) describe who holds each slot; the
   lobby owner is the lowest slot held by a person.
-- `drops` holds the `DropTable`: eight chances in `PowerUpKind::ALL` order, rolled with the seeded
+- `drops` holds the `DropTable`: nine chances in `PowerUpKind::ALL` order, rolled with the seeded
   generator when a block is destroyed (so the table can change live in developer mode).
   `punch` has the hop and landing rules of a punched bomb and `predict_landing`, which bots use
   to see where a flying bomb will explode; `kick` has the slide rules of a kicked bomb and
-  `predict_slide_stop` and `predict_slide_explosion` for the same purpose. Maluses (slow, hyper speed, small bomb) are timers on
+  `predict_slide_stop` and `predict_slide_explosion` for the same purpose. Maluses (slow, hyper speed, small bomb, auto bomb) are timers on
   the participant.
 - `room` has `RoomSettings` (name, `Mode`, `BoardSize`, minutes, friendly fire), its `sanitize`
   and `to_config`, and `PLAYABLE`, the modes whose rules exist; the lobby carries the settings.
