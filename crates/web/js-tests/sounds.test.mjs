@@ -31,7 +31,7 @@ test("f3_us3_as2_every_listed_event_has_its_own_sound", () => {
   for (const kind of ["ExtraBomb", "Range", "Speed", "Punch", "Kick"]) {
     assert.deepEqual(ids([{ PowerUpCollected: { player: 0, pos: P, kind } }]), ["bonus"], kind);
   }
-  for (const kind of ["Slow", "HyperSpeed", "SmallBomb"]) {
+  for (const kind of ["Slow", "HyperSpeed", "SmallBomb", "AutoBomb"]) {
     assert.deepEqual(ids([{ PowerUpCollected: { player: 0, pos: P, kind } }]), ["malus"], kind);
   }
   assert.equal(new Set(SOUND_IDS).size, SOUND_IDS.length);

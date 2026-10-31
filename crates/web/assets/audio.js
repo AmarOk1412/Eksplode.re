@@ -53,7 +53,7 @@ export function effectiveGain(value, muted) {
 
 export const SOUND_IDS = ["click", "bombPlace", "explosion", "bonus", "malus", "punch", "kick", "land", "eliminated", "win", "draw", "warning", "impact", "heart"];
 export const MAX_SOUNDS_PER_SNAPSHOT = 8;
-const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb"]);
+const MALUS_KINDS = new Set(["Slow", "HyperSpeed", "SmallBomb", "AutoBomb"]);
 
 /**
  * The sounds a snapshot's events ask for: at most one per id, at most eight in all; several

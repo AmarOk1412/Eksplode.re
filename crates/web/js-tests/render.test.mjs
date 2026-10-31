@@ -124,7 +124,7 @@ test("a loaded game can be picked by canvas position", async () => {
 test("f3_us2_as10_the_wasm_draws_every_power_as_a_pixel_icon_and_the_malus_pulse", async () => {
   const m = await loadModule();
   const obs = JSON.parse(fixtureText());
-  const kinds = ["ExtraBomb", "Range", "Speed", "Punch", "Kick", "Slow", "HyperSpeed", "SmallBomb"];
+  const kinds = ["ExtraBomb", "Range", "Speed", "Punch", "Kick", "Slow", "HyperSpeed", "SmallBomb", "AutoBomb"];
   const bare = structuredClone(obs);
   bare.powerups = [];
   assert.equal(m.loadJson(JSON.stringify(bare)), 0);

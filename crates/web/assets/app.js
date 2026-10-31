@@ -431,8 +431,8 @@ export function versionLabel(text) {
 }
 
 /** The seven powers in the order of `DevSetDrops.chances`. */
-export const DROP_KINDS = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb", "Kick"];
-export const DROP_LABELS = ["Extra bomb", "Flame", "Roller", "Punch", "Slow", "Hyper speed", "Small bomb", "Kick"];
+export const DROP_KINDS = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb", "Kick", "AutoBomb"];
+export const DROP_LABELS = ["Extra bomb", "Flame", "Roller", "Punch", "Slow", "Hyper speed", "Small bomb", "Kick", "Auto bomb"];
 
 const unit = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
@@ -670,7 +670,7 @@ export function effectsOf(player, hz) {
   if (player.has_punch) effects.push("punch");
   const m = player.malus;
   if (m && typeof m.ticks_left === "number") {
-    const name = { Slow: "slow", HyperSpeed: "hyper", SmallBomb: "small" }[m.kind] ?? "malus";
+    const name = { Slow: "slow", HyperSpeed: "hyper", SmallBomb: "small", AutoBomb: "auto" }[m.kind] ?? "malus";
     effects.push(`${name} ${Math.ceil(m.ticks_left / hz)}s`);
   }
   return effects;
