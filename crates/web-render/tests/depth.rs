@@ -75,6 +75,43 @@ fn eliminated_players_are_not_listed() {
 }
 
 #[test]
+fn a_player_who_just_died_plays_a_short_dying_animation() {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    let mut i = Interp::default();
+    i.update(&obs(&s));
+    s.tick += 1;
+    s.players[1].alive = false;
+    let o = obs(&s);
+    i.update(&o);
+    let dying = |alpha: f32| {
+        draw_list(&o, &i, alpha, 0.0)
+            .iter()
+            .find_map(|it| match it.sprite {
+                Sprite::Dying { slot: 1, progress } => Some((it.pos, progress)),
+                _ => None,
+            })
+    };
+    let (pos, start) = dying(0.0).unwrap();
+    assert_eq!(pos, (5.5, 5.5), "the body stays where the player fell");
+    let (_, later) = dying(8.0).unwrap();
+    assert!(
+        start < later && later < 1.0,
+        "the animation goes on without snapshots"
+    );
+    assert!(dying(16.0).is_none(), "and ends after 16 ticks");
+}
+
+#[test]
+fn players_dead_since_the_first_snapshot_do_not_die_again() {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    s.players[1].alive = false;
+    let list = items(&s);
+    assert!(!list
+        .iter()
+        .any(|i| matches!(i.sprite, Sprite::Dying { .. })));
+}
+
+#[test]
 fn walls_and_blocks_are_listed_and_the_floor_is_not() {
     let rows = [
         "#######", "#.....#", "#..+..#", "#.....#", "#.....#", "#.....#", "#######",

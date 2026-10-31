@@ -7,10 +7,10 @@ use crate::interp::Interp;
 use crate::look::{default_for, runs_of, runs_view, Frame, Look, GRID_ROWS, OVERHEAD};
 use crate::sprites::{
     bomb_colour, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
-    BRICK_LINE, CROWN_GOLD, FLAME_CORE, FLAME_MID, FLAME_OUTER, HEART_RED, ICON_BONUS_FILL,
-    ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL, PLAYER,
-    TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE, WARNING_FRAME,
-    WARNING_SHADOW, WHITE,
+    BRICK_LINE, CROWN_GOLD, DEATH_SMOKE, FLAME_CORE, FLAME_MID, FLAME_OUTER, HEART_RED,
+    ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL,
+    PLAYER, TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE,
+    WARNING_FRAME, WARNING_SHADOW, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -119,9 +119,36 @@ impl Pen<'_> {
             self.out.push(quad(solid(r.color), p, self.layer));
         }
     }
+
+    /// Like [`Pen::sprite`] with sprite pixels `sx` by `sy` canvas pixels, every pixel in `tint`
+    /// when given, and `alpha` opacity.
+    #[allow(clippy::too_many_arguments)]
+    fn sprite_scaled(
+        &mut self,
+        list: &[Run],
+        (sx, sy): (f32, f32),
+        x: f32,
+        y: f32,
+        tint: Option<Rgb>,
+        alpha: f32,
+    ) {
+        for r in list {
+            let (x0, y0) = (x + r.col as f32 * sx, y + r.row as f32 * sy);
+            let p = [
+                (x0, y0),
+                (x0 + r.len as f32 * sx, y0),
+                (x0 + r.len as f32 * sx, y0 + sy),
+                (x0, y0 + sy),
+            ];
+            let c = tint.unwrap_or(r.color);
+            self.out
+                .push(quad([c[0], c[1], c[2], alpha], p, self.layer));
+        }
+    }
 }
 
-/// Builds the commands for one frame. `alpha` (0.0-1.0) is the progress between two ticks.
+/// Builds the commands for one frame. `alpha` is the time since the latest tick, in ticks: 0.0-1.0
+/// between two ticks, more when the snapshots stop (only the dying animation goes on then).
 pub fn build(obs: &Observation, interp: &Interp, alpha: f32, canvas: (f32, f32)) -> Vec<Command> {
     build_with_looks(obs, interp, alpha, canvas, &[0, 1, 2, 3].map(default_for))
 }
@@ -309,6 +336,45 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
             }
             let top = py + 0.5 * view.scale - GRID_ROWS as f32 * ps - 0.02 * view.scale - bob;
             pen.sprite(&list, ps, (px - 6.0 * ps).round(), top.round());
+        }
+        Sprite::Dying { slot, progress } => {
+            let list = runs_view(
+                &looks[usize::from(slot) % 4],
+                it.view,
+                Frame::Idle,
+                GRID_ROWS,
+            );
+            let ps = (1.2 * view.scale / PLAYER.len() as f32).round().max(1.0);
+            let (px, py) = view.project(cx, cy);
+            let feet = py + 0.5 * view.scale - 0.02 * view.scale;
+            let rows = GRID_ROWS as f32;
+            if progress < 0.4 {
+                // hit: the character flashes in the colour of the flames
+                pen.shadow(cx - 0.3, cy + 0.34, cx + 0.3, cy + 0.44);
+                let flash = ((progress / 0.1) as u32) % 2 == 0;
+                let tint = flash.then_some(FLAME_OUTER);
+                let (x, y) = ((px - 6.0 * ps).round(), (feet - rows * ps).round());
+                pen.sprite_scaled(&list, (ps, ps), x, y, tint, 1.0);
+            } else {
+                // then squashes flat and fades while a puff of smoke rises
+                let t = ((progress - 0.4) / 0.6).clamp(0.0, 1.0);
+                let (sx, sy) = (ps * (1.0 + 0.5 * t), ps * (1.0 - t).max(0.05));
+                let (x, y) = (px - 6.0 * sx, feet - rows * sy);
+                pen.sprite_scaled(&list, (sx, sy), x, y, None, 1.0 - t);
+                for (k, dx) in [-0.18f32, 0.0, 0.18].into_iter().enumerate() {
+                    let rise = 0.2 + 0.7 * t + 0.08 * k as f32;
+                    let half = 0.08 + 0.06 * t;
+                    let (ox, oy) = (cx + dx * (1.0 + t), cy - rise);
+                    pen.tint(
+                        DEATH_SMOKE,
+                        0.6 * (1.0 - t),
+                        ox - half,
+                        oy - half,
+                        ox + half,
+                        oy + half,
+                    );
+                }
+            }
         }
     }
 }

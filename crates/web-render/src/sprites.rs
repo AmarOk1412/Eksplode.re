@@ -38,6 +38,8 @@ pub const TEAM_B_RING: Rgb = [0.95, 0.55, 0.1];
 /// The frame and the block shadow of a square the end pattern is about to cover.
 pub const WARNING_FRAME: Rgb = [0.86, 0.12, 0.12];
 pub const WARNING_SHADOW: Rgb = [0.08, 0.08, 0.1];
+/// The puff of smoke over a player who just died.
+pub const DEATH_SMOKE: Rgb = [0.32, 0.32, 0.36];
 /// Frame of a malus power-up.
 pub const MALUS_FRAME: Rgb = [0.42, 0.06, 0.08];
 /// Tints of the pulse around a player with a malus.

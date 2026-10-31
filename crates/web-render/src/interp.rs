@@ -4,6 +4,9 @@ use eksplode_re_core::Observation;
 
 use crate::look::Frame;
 
+/// How many ticks the dying animation of a player lasts.
+pub const DYING_TICKS: f32 = 16.0;
+
 /// Remembers where every player was one tick ago and now.
 #[derive(Clone, Debug, Default)]
 pub struct Interp {
@@ -15,6 +18,9 @@ pub struct Interp {
     steps: [u32; 4],
     /// Ticks between two steps of each player (their speed).
     interval: [u32; 4],
+    /// Who was alive in the latest snapshot, and the tick each player was seen dying.
+    alive: [bool; 4],
+    died_at: [Option<u32>; 4],
 }
 
 impl Interp {
@@ -22,10 +28,12 @@ impl Interp {
     /// an older tick (a new match) jumps without sliding.
     pub fn update(&mut self, obs: &Observation) {
         let mut now = [(0.0, 0.0); 4];
-        for (slot, p) in obs.players.iter().enumerate() {
+        let mut alive = [false; 4];
+        for (slot, p) in obs.players.iter().enumerate().take(4) {
             now[slot] = (f32::from(p.pos.x), f32::from(p.pos.y));
+            alive[slot] = p.alive;
         }
-        for (slot, p) in obs.players.iter().enumerate() {
+        for (slot, p) in obs.players.iter().enumerate().take(4) {
             self.interval[slot] = p.effective_cooldown().max(1);
         }
         match self.tick {
@@ -37,16 +45,37 @@ impl Interp {
                         self.last_move[slot] = Some(obs.tick);
                         self.steps[slot] += 1;
                     }
+                    if self.alive[slot] && !alive[slot] {
+                        self.died_at[slot] = Some(obs.tick);
+                    } else if alive[slot] {
+                        self.died_at[slot] = None;
+                    }
                 }
             }
             _ => {
                 self.prev = now;
                 self.last_move = [None; 4];
                 self.steps = [0; 4];
+                self.died_at = [None; 4];
             }
         }
         self.cur = now;
+        self.alive = alive;
         self.tick = Some(obs.tick);
+    }
+
+    /// How far (0.0-1.0) a player who just died is into the dying animation, `ticks` after the
+    /// latest snapshot (more than one tick once the snapshots stop at the end of a match);
+    /// `None` for the living and once the animation is over.
+    pub fn dying(&self, slot: usize, ticks: f32) -> Option<f32> {
+        let at = (*self.died_at.get(slot)?)?;
+        let ticks = if ticks.is_finite() {
+            ticks.max(0.0)
+        } else {
+            0.0
+        };
+        let elapsed = self.tick?.saturating_sub(at) as f32 + ticks;
+        (elapsed < DYING_TICKS).then_some(elapsed / DYING_TICKS)
     }
 
     /// Tile coordinates of a player; `alpha` 0.0 is the previous tick, 1.0 the current one.

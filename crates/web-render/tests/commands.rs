@@ -515,3 +515,33 @@ fn the_hearts_follow_the_count_blink_while_protected_and_vanish_with_the_chaser(
     let list = commands(&s);
     assert!(quads_with(&list, CROWN_GOLD).is_empty() && quads_with(&list, HEART_RED).is_empty());
 }
+
+#[test]
+fn a_dying_player_flashes_then_fades_under_rising_smoke() {
+    let mut s = small(&OPEN, (1, 1), (5, 5));
+    let mut i = Interp::default();
+    i.update(&obs(&s));
+    s.tick += 1;
+    s.players[1].alive = false;
+    let o = obs(&s);
+    i.update(&o);
+    let flash = build(&o, &i, 0.0, CANVAS);
+    let between = build(&o, &i, 2.0, CANVAS);
+    assert!(
+        quads_with(&flash, FLAME_OUTER).len() > quads_with(&between, FLAME_OUTER).len(),
+        "the hit flashes in the flame colour"
+    );
+    let fade = build(&o, &i, 12.0, CANVAS);
+    let smoke = fade
+        .iter()
+        .filter(|c| c.color[..3] == DEATH_SMOKE && c.color[3] < 1.0)
+        .count();
+    assert_eq!(smoke, 3, "three puffs of smoke");
+    assert!(
+        fade.iter()
+            .any(|c| c.color[3] > 0.0 && c.color[3] < 1.0 && c.color[..3] != DEATH_SMOKE),
+        "the body fades"
+    );
+    let over = build(&o, &i, 20.0, CANVAS);
+    assert!(over.iter().all(|c| c.color[..3] != DEATH_SMOKE));
+}

@@ -46,6 +46,11 @@ pub enum Sprite {
     Player {
         slot: u8,
     },
+    /// A player who just died, `progress` (0.0-1.0) into the dying animation.
+    Dying {
+        slot: u8,
+        progress: f32,
+    },
 }
 
 /// One thing to draw at a position (the centre of its tile, in tile units).
@@ -183,6 +188,15 @@ pub fn draw_list(obs: &Observation, interp: &Interp, alpha: f32, phase: f32) -> 
             it.malus = p.malus.map(|m| m.kind);
             it.view = View::from_dir(p.facing);
             it.frame = interp.pose(slot, alpha);
+            objects.push(it);
+        } else if let Some(progress) = interp.dying(slot, alpha) {
+            let (x, y) = interp.position(slot, 1.0);
+            let sprite = Sprite::Dying {
+                slot: slot as u8,
+                progress,
+            };
+            let mut it = item((x + 0.5, y + 0.5), Layer::Player, sprite);
+            it.view = View::from_dir(p.facing);
             objects.push(it);
         }
     }
