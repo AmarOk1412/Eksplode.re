@@ -157,6 +157,10 @@ export function initialState() {
     selectedRoom: null,
     // who holds which seat (`RoomUpdated.memberships`), to kick a human from the lobby
     memberships: [],
+    // back in the lobby while the bots finish the round (Return to lobby with no person alive)
+    away: false,
+    // where leaving the room lands: the room list, or the main menu
+    leaveTo: "directory",
   };
 }
 
@@ -254,9 +258,13 @@ export function reduce(state, event) {
       return { ...state, menu: "main", selectedRoom: null, room: null, notice: "" };
     case "LeftRoom":
     case "Removed":
-    case "RoomClosed":
+    case "RoomClosed": {
+      const menu = state.leaveTo === "main" ? "main" : "directory";
       return { ...initialState(), protocol: state.protocol, server_id: state.server_id,
-        server_epoch: state.server_epoch, rooms: state.rooms, sources: state.sources, stage: "directory", menu: "directory" };
+        server_epoch: state.server_epoch, rooms: state.rooms, sources: state.sources, stage: "directory", menu };
+    }
+    case "leave-to-main":
+      return { ...state, leaveTo: "main" };
     case "connecting":
       return { ...state, stage: "connecting", notice: "" };
     case "socket-open":
@@ -267,7 +275,7 @@ export function reduce(state, event) {
     case "retry":
       return initialState();
     case "return-to-lobby":
-      return { ...state, stage: "lobby", result: null, notice: "" };
+      return { ...state, stage: "lobby", result: null, notice: "", away: state.stage === "playing" };
     case "RoomInfo": {
       const room = {
         open: event.open === true,
@@ -301,12 +309,14 @@ export function reduce(state, event) {
         password_required: event.password_required ?? state.password_required };
     }
     case "Start":
-      return { ...state, stage: "playing", notice: "" };
+      return { ...state, stage: "playing", notice: "", away: false };
     case "Snapshot":
+      if (state.away) return { ...state, observation: event.state, tick: event.tick };
       return { ...state, stage: "playing", observation: event.state, tick: event.tick };
     case "PlayerLeft":
       return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
     case "Ended": {
+      if (state.away) return { ...state, away: false, result: null };
       const title = outcomeText(event.outcome, state.slot, state.lobby, state.observation);
       return {
         ...state,
@@ -341,8 +351,21 @@ export const OPTIONS_TABS = [
   { id: "controls", label: "Controls", tab: "tab-controls", panel: "controls-panel" },
 ];
 
-/** The pause menu entries that open Options, and the tab each one lands on. */
-export const HUB_OPTIONS_TABS = { "hub-sound": "sound", "hub-controls": "controls" };
+/** The in-match menu: Options (on Sound during a match), Return to lobby (once the round is over
+ * or only bots are left alive) and Main menu (leaves the room). */
+export function hubActions(state) {
+  const inMatch = state.stage === "playing" || state.stage === "results";
+  const people = (state.lobby?.slots ?? [])
+    .map((s, i) => (s.controller === "Local" || s.controller === "Remote" ? i : -1))
+    .filter((i) => i >= 0);
+  const players = state.observation?.players ?? [];
+  const onlyBots = people.length > 0 && people.every((i) => players[i]?.alive !== true);
+  return {
+    options: { visible: true, tab: state.stage === "playing" ? "sound" : "customize" },
+    lobby: { visible: inMatch, enabled: state.stage === "results" || (state.stage === "playing" && onlyBots) },
+    main: { visible: Boolean(state.room_id) },
+  };
+}
 
 /** State of the Options screen: `null` while closed, otherwise the active tab. The panels are
  * only hidden and shown, so whatever is being edited in one survives a switch to another. */
@@ -515,7 +538,7 @@ export function lobbyActions(state) {
     i === owner || s.controller === "Empty" || s.controller === "Bot" || s.ready === true);
   return [
     { id: "ready", label: "Ready", visible: !isOwner, pressed: mine, message: { type: "SetReady", ready: !mine } },
-    { id: "start", label: "Start", visible: isOwner, disabled: !everybodyReady, message: { type: "Start" } },
+    { id: "start", label: "Start", visible: isOwner, disabled: !everybodyReady || state.away === true, message: { type: "Start" } },
   ];
 }
 
@@ -795,7 +818,10 @@ function start() {
     leavePanel: $("leave-panel"),
     leaveConfirm: $("leave-confirm"),
     leaveCancel: $("leave-cancel"),
-    hubLeave: $("hub-leave"),
+    hubOptions: $("hub-options"),
+    hubLobby: $("hub-lobby"),
+    hubMain: $("hub-main"),
+    gameMenu: $("game-menu"),
     joinPanel: $("join-panel"),
     joinPasswordLabel: $("join-password-label"),
     joinPassword: $("join-password"),
@@ -861,8 +887,6 @@ function start() {
     optionsPanel: $("options-panel"),
     optionsClose: $("options-close"),
     optionsTabs: OPTIONS_TABS.map((t) => ({ ...t, button: $(t.tab), root: $(t.panel) })),
-    hubSound: $("hub-sound"),
-    hubControls: $("hub-controls"),
     hubDev: $("hub-dev"),
     hubResume: $("hub-resume"),
     controlsStatus: $("controls-status"),
@@ -1383,7 +1407,10 @@ function start() {
     el.name.disabled = state.stage === "connecting" || state.stage === "joining";
     el.roomCreate.disabled = state.protocol !== 2 || state.stage === "joining";
     el.roomBack.disabled = state.stage === "joining";
-    el.hubLeave.hidden = !state.room_id;
+    const hubView = hubActions(state);
+    el.hubLobby.hidden = !hubView.lobby.visible;
+    el.hubLobby.disabled = !hubView.lobby.enabled;
+    el.hubMain.hidden = !hubView.main.visible;
     renderDirectory();
 
     const [readyAction, startAction] = lobbyActions(state);
@@ -1753,9 +1780,7 @@ function start() {
     refreshDirectory();
   });
   el.directoryRefresh.addEventListener("click", refreshDirectory);
-  for (const opener of [el.leaveRoom, el.hubLeave]) {
-    opener.addEventListener("click", () => openNavigationLayer("leave", el.leavePanel, opener));
-  }
+  el.leaveRoom.addEventListener("click", () => openNavigationLayer("leave", el.leavePanel, el.leaveRoom));
   el.leaveCancel.addEventListener("click", closeNavigationLayer);
   el.leaveConfirm.addEventListener("click", () => { closeNavigationLayer(); send({ type: "LeaveRoom" }); });
   el.roomConfigOpen.addEventListener("click", () => {
@@ -1957,10 +1982,21 @@ function start() {
 
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
-  for (const [id, tab] of Object.entries(HUB_OPTIONS_TABS)) {
-    const entry = id === "hub-sound" ? el.hubSound : el.hubControls;
-    entry.addEventListener("click", () => openOptions(tab, entry));
-  }
+  el.hubOptions.addEventListener("click", () => openOptions(hubActions(state).options.tab, el.hubOptions));
+  el.hubLobby.addEventListener("click", () => {
+    if (!hubActions(state).lobby.enabled) return;
+    while (navigationLayers.top) closeNavigationLayer();
+    dispatch({ type: "return-to-lobby" });
+  });
+  el.hubMain.addEventListener("click", () => {
+    while (navigationLayers.top) closeNavigationLayer();
+    if (!state.room_id) return;
+    dispatch({ type: "leave-to-main" });
+    send({ type: "LeaveRoom" });
+  });
+  el.gameMenu.addEventListener("click", () => {
+    if (!navigationLayers.top) openMenuHub(el.gameMenu);
+  });
   el.menuOptions.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[2].event.tab, el.menuOptions));
   el.hubDev.addEventListener("click", () => {
     if (openNavigationLayer("dev", el.devPanel, el.hubDev)) el.devPanel.classList.add("navigation-layer");

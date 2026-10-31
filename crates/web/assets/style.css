@@ -247,7 +247,8 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 .slot-2.chip { background: var(--slot2); }
 .slot-3.chip { background: var(--slot3); }
 
-#game-panel { width: 100%; display: grid; gap: 4px; justify-items: center; }
+#game-panel { position: relative; width: 100%; display: grid; gap: 4px; justify-items: center; }
+#game-menu { position: absolute; z-index: 6; top: max(4px, env(safe-area-inset-top)); right: max(4px, env(safe-area-inset-right)); }
 
 #timer {
   min-height: 1.2em;

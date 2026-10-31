@@ -175,10 +175,12 @@ fn the_navigation_hub_and_settings_panels_are_labelled_dialogs() {
     let html = String::from_utf8(get(s.http_addr(), "/").body).unwrap();
     for id in [
         "menu-hub",
-        "hub-sound",
-        "hub-controls",
+        "hub-options",
+        "hub-lobby",
+        "hub-main",
         "hub-dev",
         "hub-resume",
+        "game-menu",
     ] {
         assert!(html.contains(id), "missing {id}");
     }

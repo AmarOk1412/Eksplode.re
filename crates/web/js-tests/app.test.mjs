@@ -473,7 +473,7 @@ test("f11_us1_a_lost_connection_shows_the_main_menu_with_retry", () => {
 });
 
 // ---- 011 US3: one tabbed Options screen ----
-import { OPTIONS_TABS, HUB_OPTIONS_TABS, optionsReducer, optionsView } from "../assets/app.js";
+import { OPTIONS_TABS, optionsReducer, optionsView, lobbyActions } from "../assets/app.js";
 
 test("f11_us3_as1_options_has_exactly_three_tabs_in_order", () => {
   assert.deepEqual(OPTIONS_TABS.map((t) => t.label), ["Customize", "Sound", "Controls"]);
@@ -518,14 +518,59 @@ test("f11_us1_as5_us3_as4_the_main_menu_opens_options_on_customize", () => {
   assert.equal(options.tab, "customize");
 });
 
-test("f11_us3_pause_menu_sound_and_controls_open_the_matching_tab", () => {
-  assert.deepEqual(HUB_OPTIONS_TABS, { "hub-sound": "sound", "hub-controls": "controls" });
-  for (const [entry, tab] of Object.entries(HUB_OPTIONS_TABS)) {
-    assert.equal(optionsReducer(null, { type: "open", tab }).tab, tab, entry);
-  }
-  const hub = /<section[^>]*id="menu-hub"[^>]*>([\s\S]*?)<\/section>/.exec(indexHtml())?.[1] ?? "";
-  assert.match(hub, /id="hub-sound"[^>]*aria-controls="options-panel"/);
-  assert.match(hub, /id="hub-controls"[^>]*aria-controls="options-panel"/);
+test("the in-match menu offers Options, Return to lobby and Main menu", async () => {
+  const { hubActions } = await import("../assets/app.js");
+  const slots = lobby("Remote", "Bot", "Remote", "Bot");
+  const players = (alive) => alive.map((a) => ({ alive: a }));
+  const playing = { ...initialState(), stage: "playing", slot: 0, room_id: "r", lobby: slots,
+    observation: { players: players([true, true, false, true]), config: {} } };
+  let hub = hubActions(playing);
+  assert.deepEqual(hub.options, { visible: true, tab: "sound" }, "during a match Options opens on Sound");
+  assert.deepEqual(hub.lobby, { visible: true, enabled: false }, "a person is still alive");
+  assert.deepEqual(hub.main, { visible: true });
+  hub = hubActions({ ...playing, observation: { players: players([false, true, false, true]), config: {} } });
+  assert.deepEqual(hub.lobby, { visible: true, enabled: true }, "only bots are left");
+  hub = hubActions({ ...playing, stage: "results" });
+  assert.deepEqual(hub.lobby, { visible: true, enabled: true }, "the round is over");
+  hub = hubActions({ ...playing, stage: "lobby" });
+  assert.equal(hub.lobby.visible, false, "nothing to return to from the lobby");
+  assert.equal(hubActions({ ...playing, stage: "lobby" }).options.tab, "customize");
+  assert.deepEqual(hubActions(initialState()).main, { visible: false }, "no room, no way back to the menu");
+
+  const html = indexHtml();
+  const menu = /<section[^>]*id="menu-hub"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.deepEqual([...menu.matchAll(/<button id="([^"]+)"/g)].map((m) => m[1]),
+    ["hub-options", "hub-lobby", "hub-main", "hub-dev", "hub-resume"]);
+  assert.match(menu, /id="hub-options"[^>]*aria-controls="options-panel"[^>]*>Options</);
+  assert.match(menu, />Return to lobby</);
+  assert.match(menu, />Main menu</);
+  const game = /<section id="game-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(game, /<button id="game-menu"[^>]*aria-label="Exit menu"/, "a visible button opens it while playing");
+});
+
+test("returning to the lobby while bots finish the round keeps the lobby on screen", () => {
+  const slots = lobby("Remote", "Bot", "Bot", "Bot");
+  const s = run([welcome(0, slots), { type: "Start", seed: 1, config: {} }]);
+  const away = reduce(s, { type: "return-to-lobby" });
+  assert.equal(away.stage, "lobby");
+  assert.equal(away.away, true, "the match still runs for the bots");
+  const later = reduce(away, { type: "Snapshot", tick: 9, state: { players: [], config: {} }, events: [] });
+  assert.equal(later.stage, "lobby", "snapshots of the bots' round do not pull the player back");
+  assert.equal(lobbyActions({ ...later, lobby: { ...slots, owner_slot: 0 } })[1].disabled, true,
+    "no new match while the round runs");
+  const ended = reduce(later, { type: "Ended", outcome: { Winner: 2 } });
+  assert.equal(ended.stage, "lobby", "the end of the bots' round does not open the scoreboard");
+  assert.equal(ended.away, false);
+  assert.equal(reduce(ended, { type: "Start", seed: 2, config: {} }).stage, "playing");
+});
+
+test("the main menu entry leaves the room and lands on the main menu", () => {
+  const s = run([welcome(0, lobby("Remote", "Bot")), { type: "leave-to-main" }]);
+  assert.equal(s.leaveTo, "main");
+  const left = reduce({ ...s, room_id: "r" }, { type: "LeftRoom", room_id: "r" });
+  assert.equal(left.menu, "main");
+  assert.equal(screens(left).mainMenu, true);
+  assert.equal(reduce(reduce(initialState(), welcome(0)), { type: "LeftRoom" }).menu, "directory");
 });
 
 test("the player stats under the arena are a developer-mode aid only", async () => {
