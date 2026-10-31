@@ -172,7 +172,7 @@ and remote discovery are not available yet; see [PROTOCOL.md](PROTOCOL.md#rooms)
 **Options and Customize.** Two separate dialogs. Options has two tabs, Sound and Controls; the main
 menu's Options entry and the pause menu's Options entry open it (on Sound). Customize has no tabs
 (the character editor and a Close button); the main menu's Customize entry opens it, and so does the
-pause menu's Customize entry outside a match. Closing a dialog returns to where it was opened,
+pause menu's Customize entry (before Options), also during a match; a look changed in a match is saved and used the next time you join a room. Closing a dialog returns to where it was opened,
 including a paused match. Switching Options tabs only hides and shows the panels, so nothing being
 edited is lost.
 

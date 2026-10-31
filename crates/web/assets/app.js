@@ -372,7 +372,7 @@ export const OPTIONS_TABS = [
   { id: "controls", label: "Controls", tab: "tab-controls", panel: "controls-panel" },
 ];
 
-/** The in-match menu: Customize (not during a match), Options, Return to lobby (once the round is
+/** The in-match menu: Customize, Options, Return to lobby (once the round is
  * over or only bots are left alive) and Main menu (leaves the room). */
 export function hubActions(state) {
   const inMatch = state.stage === "playing" || state.stage === "results";
@@ -382,7 +382,6 @@ export function hubActions(state) {
   const players = state.observation?.players ?? [];
   const onlyBots = people.length > 0 && people.every((i) => players[i]?.alive !== true);
   return {
-    customize: { visible: state.stage !== "playing" },
     options: { visible: true, tab: "sound" },
     lobby: { visible: inMatch, enabled: state.stage === "results" || (state.stage === "playing" && onlyBots) },
     main: { visible: Boolean(state.room_id) },
@@ -1435,7 +1434,6 @@ function start() {
     el.roomCreate.disabled = state.protocol !== 2 || state.stage === "joining";
     el.roomBack.disabled = state.stage === "joining";
     const hubView = hubActions(state);
-    el.hubCustomize.hidden = !hubView.customize.visible;
     el.hubLobby.hidden = !hubView.lobby.visible;
     el.hubLobby.disabled = !hubView.lobby.enabled;
     el.hubMain.hidden = !hubView.main.visible;

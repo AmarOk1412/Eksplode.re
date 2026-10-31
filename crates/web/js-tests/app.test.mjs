@@ -569,7 +569,6 @@ test("the in-match menu offers Options, Return to lobby and Main menu", async ()
     observation: { players: players([true, true, false, true]), config: {} } };
   let hub = hubActions(playing);
   assert.deepEqual(hub.options, { visible: true, tab: "sound" });
-  assert.deepEqual(hub.customize, { visible: false }, "no character editing during a match");
   assert.deepEqual(hub.lobby, { visible: true, enabled: false }, "a person is still alive");
   assert.deepEqual(hub.main, { visible: true });
   hub = hubActions({ ...playing, observation: { players: players([false, true, false, true]), config: {} } });
@@ -578,7 +577,6 @@ test("the in-match menu offers Options, Return to lobby and Main menu", async ()
   assert.deepEqual(hub.lobby, { visible: true, enabled: true }, "the round is over");
   hub = hubActions({ ...playing, stage: "lobby" });
   assert.equal(hub.lobby.visible, false, "nothing to return to from the lobby");
-  assert.deepEqual(hubActions({ ...playing, stage: "lobby" }).customize, { visible: true });
   assert.deepEqual(hubActions(initialState()).main, { visible: false }, "no room, no way back to the menu");
 
   const html = indexHtml();
