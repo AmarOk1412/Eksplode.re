@@ -445,7 +445,7 @@ const hello = { type: "Hello", version: 2, server_id: "alpha", server_epoch: "ep
 const indexHtml = () => readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
 const section = (html, id) => new RegExp(`<section[^>]*id="${id}"[^>]*>([\\s\\S]*?)</section>`).exec(html)?.[1] ?? "";
 
-test("f11_us1_as1_the_client_opens_on_a_main_menu_with_exactly_three_actions", () => {
+test("f11_us1_as1_the_client_opens_on_a_main_menu_with_exactly_four_actions", () => {
   for (const state of [initialState(), reduce(initialState(), hello)]) {
     assert.equal(state.menu, "main");
     const visible = screens(state);
@@ -454,10 +454,10 @@ test("f11_us1_as1_the_client_opens_on_a_main_menu_with_exactly_three_actions", (
     assert.equal(visible.directoryPanel, false);
     assert.equal(visible.lobbyPanel, false);
   }
-  assert.deepEqual(MAIN_MENU_ACTIONS.map((a) => a.label), ["Create new game", "Join a game", "Options"]);
+  assert.deepEqual(MAIN_MENU_ACTIONS.map((a) => a.label), ["Create new game", "Join a game", "Customize", "Options"]);
   const menu = section(indexHtml(), "main-menu");
   const buttons = [...menu.matchAll(/<button(?![^>]*\bhidden\b)[^>]*>([^<]*)<\/button>/g)].map((m) => m[1].trim());
-  assert.deepEqual(buttons, ["Create new game", "Join a game", "Options"]);
+  assert.deepEqual(buttons, ["Create new game", "Join a game", "Customize", "Options"]);
   for (const action of MAIN_MENU_ACTIONS) assert.match(menu, new RegExp(`id="${action.id}"`));
 });
 
@@ -524,10 +524,31 @@ test("f11_us3_switching_tabs_only_changes_which_panel_shows", () => {
   for (const tab of OPTIONS_TABS) assert.equal(html.split(`id="${tab.panel}"`).length, 2, tab.panel);
 });
 
-test("f11_us1_as5_us3_as4_the_main_menu_opens_options_on_customize", () => {
-  const options = optionsReducer(null, MAIN_MENU_ACTIONS.find((a) => a.label === "Options").event.tab
-    ? { type: "open", tab: MAIN_MENU_ACTIONS[2].event.tab } : { type: "open" });
-  assert.equal(options.tab, "customize");
+test("the main menu opens Customize on its tab and Options on Sound", () => {
+  const tab = (label) => MAIN_MENU_ACTIONS.find((a) => a.label === label).event.tab;
+  assert.equal(optionsReducer(null, { type: "open", tab: tab("Customize") }).tab, "customize");
+  assert.equal(optionsReducer(null, { type: "open", tab: tab("Options") }).tab, "sound");
+});
+
+test("main actions carry the primary style", () => {
+  const html = indexHtml();
+  for (const id of ["menu-create", "room-create", "join", "start"]) {
+    assert.match(html, new RegExp(`<button id="${id}" class="primary"`), id);
+  }
+});
+
+test("random player names are friendly, fit the name field and vary", async () => {
+  const { randomPlayerName } = await import("../assets/app.js");
+  const names = new Set();
+  for (let i = 0; i < 400; i += 1) {
+    const name = randomPlayerName();
+    assert.match(name, /^[A-Z][a-z]+ [A-Z][a-z]+$/, name);
+    assert.ok(name.length <= 16, name);
+    names.add(name);
+  }
+  assert.ok(names.size > 40, "many different names");
+  // the extremes of the random source still give valid names
+  for (const value of [0, 0.999999]) assert.ok(randomPlayerName(() => value).length <= 16);
 });
 
 test("the in-match menu offers Options, Return to lobby and Main menu", async () => {

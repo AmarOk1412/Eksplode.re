@@ -28,7 +28,7 @@ pixel-art view are all small, tested crates.
 - **Web page** with a top-down pixel-art view: four characters (blue, black, red, purple),
   grey pillars, red-brick blocks, bombs and flames, a round timer and tall lobby cards with
   animated isometric 3D characters, all drawn by a Rust module compiled to WebAssembly. The page
-  opens on a main menu (Create new game, Join a game, Options); Options has Customize, Sound and
+  opens on a main menu (Create new game, Join a game, Customize, Options); Options has Customize, Sound and
   Controls tabs, and Customize picks colour, head, face and costume (or randomizes them with the
   icon on the preview). Empty lobby seats fill with bots: the owner removes a bot or kicks a
   player with the cross on a seat, anybody puts a bot back with "+", and room settings and the

@@ -90,9 +90,10 @@
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
       <div class="menu-actions" role="group" aria-label="Main menu actions">
-        <button id="menu-create" type="button">Create new game</button>
+        <button id="menu-create" class="primary" type="button">Create new game</button>
         <button id="menu-join" type="button">Join a game</button>
-        <button id="menu-options" type="button">Options</button>
+        <button id="menu-customize" type="button" aria-controls="options-panel">Customize</button>
+        <button id="menu-options" type="button" aria-controls="options-panel">Options</button>
       </div>
       <button id="retry" type="button" hidden>Retry</button>
     </section>
@@ -114,7 +115,7 @@
       <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
       <label for="room-bot-difficulty">Bot difficulty</label>
       <select id="room-bot-difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
-      <button id="room-create" type="button">Create room</button>
+      <button id="room-create" class="primary" type="button">Create room</button>
       <button id="room-back" type="button">Back</button>
     </section>
 
@@ -131,7 +132,7 @@
       <p id="join-room" class="hint" hidden></p>
       <label id="join-password-label" for="join-password" hidden>Room password</label>
       <input id="join-password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" hidden>
-      <button id="join" type="button">Join room</button>
+      <button id="join" class="primary" type="button">Join room</button>
     </section>
     </section>
 
@@ -151,7 +152,7 @@
       <ul id="slots" class="cards"></ul>
       <div class="buttons lobby-actions" role="group" aria-label="Lobby actions">
         <button id="ready" type="button" aria-pressed="false">Ready</button>
-        <button id="start" type="button" hidden>Start</button>
+        <button id="start" class="primary" type="button" hidden>Start</button>
       </div>
       <p class="hint">The first human player is the owner: only the owner changes the room settings, removes bots or players and starts the match. Anybody can put a bot into an empty seat with +.
 Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>

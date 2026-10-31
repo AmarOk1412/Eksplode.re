@@ -340,13 +340,31 @@ export function reduce(state, event) {
   }
 }
 
-/** The three actions of the main menu, in order; each one is an event for `reduce` (Options is
- * handled by the page, which opens the Options screen). */
+/** The four actions of the main menu, in order; each one is an event for `reduce` (Customize and
+ * Options are handled by the page, which opens the Options screen on the given tab). */
 export const MAIN_MENU_ACTIONS = [
   { id: "menu-create", label: "Create new game", event: { type: "new-room" } },
   { id: "menu-join", label: "Join a game", event: { type: "show-directory" } },
-  { id: "menu-options", label: "Options", event: { type: "open-options", tab: "customize" } },
+  { id: "menu-customize", label: "Customize", event: { type: "open-options", tab: "customize" } },
+  { id: "menu-options", label: "Options", event: { type: "open-options", tab: "sound" } },
 ];
+
+const NAME_ADJECTIVES = ["Golden", "Yellow", "Crimson", "Sneaky", "Brave", "Lucky", "Fuzzy", "Jolly", "Sleepy", "Cosmic",
+  "Rusty", "Mighty", "Wobbly", "Zesty", "Dizzy", "Grumpy", "Happy", "Silly", "Tiny", "Wild", "Pink", "Blue", "Salty",
+  "Bouncy", "Dapper", "Clever", "Nimble", "Quiet", "Turbo", "Velvet", "Spicy", "Giddy", "Fiery", "Misty", "Odd"];
+const NAME_ANIMALS = ["Giraffe", "Jellyfish", "Panda", "Otter", "Falcon", "Koala", "Llama", "Badger", "Gecko", "Walrus",
+  "Penguin", "Hedgehog", "Narwhal", "Axolotl", "Platypus", "Moose", "Lynx", "Yak", "Raccoon", "Salamander", "Wombat",
+  "Dolphin", "Fox", "Beaver", "Zebra", "Quokka", "Turtle", "Mongoose", "Owl", "Bat", "Capybara", "Octopus", "Ferret"];
+
+/** A friendly random name such as "Golden Giraffe": at most 16 characters, and it alliterates when
+ * a matching adjective fits. `random` gives numbers in [0, 1). */
+export function randomPlayerName(random = Math.random) {
+  const pick = (list) => list[Math.min(list.length - 1, Math.floor(random() * list.length))];
+  const fits = (animal) => NAME_ADJECTIVES.filter((a) => a.length + 1 + animal.length <= 16);
+  const animal = pick(NAME_ANIMALS.filter((a) => fits(a).length > 0));
+  const same = fits(animal).filter((a) => a[0] === animal[0]);
+  return `${pick(same.length > 0 && random() < 0.7 ? same : fits(animal))} ${animal}`;
+}
 
 /** The tabs of the Options screen, in order, with the ids of their tab button and panel. */
 export const OPTIONS_TABS = [
@@ -808,6 +826,7 @@ function start() {
     mainMenu: $("main-menu"),
     menuCreate: $("menu-create"),
     menuJoin: $("menu-join"),
+    menuCustomize: $("menu-customize"),
     menuOptions: $("menu-options"),
     directoryBack: $("directory-back"),
     directoryPanel: $("directory-panel"),
@@ -1088,7 +1107,7 @@ function start() {
   );
   document.addEventListener("visibilitychange", () => animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion()));
 
-  el.name.value = `Player${1 + Math.floor(Math.random() * 99)}`;
+  el.name.value = randomPlayerName();
 
   let requestSequence = 0;
   let directoryRequest = null;
@@ -2012,7 +2031,8 @@ function start() {
   el.gameMenu.addEventListener("click", () => {
     if (!navigationLayers.top) openMenuHub(el.gameMenu);
   });
-  el.menuOptions.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[2].event.tab, el.menuOptions));
+  el.menuCustomize.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[2].event.tab, el.menuCustomize));
+  el.menuOptions.addEventListener("click", () => openOptions(MAIN_MENU_ACTIONS[3].event.tab, el.menuOptions));
   el.hubDev.addEventListener("click", () => {
     if (openNavigationLayer("dev", el.devPanel, el.hubDev)) el.devPanel.classList.add("navigation-layer");
   });

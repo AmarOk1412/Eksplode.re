@@ -146,6 +146,8 @@ button:hover:not(:disabled), button:focus-visible { background: var(--ink); colo
 .main-menu .menu-actions { display: grid; gap: 12px; justify-items: center; width: 100%; margin-top: 8px; }
 .main-menu .menu-actions button { width: min(320px, 100%); }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
+button.primary { background: var(--slot0); border-color: var(--slot0); color: #fff; }
+button.primary:hover:not(:disabled), button.primary:focus-visible { background: var(--ink); border-color: var(--ink); }
 
 .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; justify-content: center; }
 

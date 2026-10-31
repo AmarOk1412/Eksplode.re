@@ -169,10 +169,17 @@ disabled for other members and during a match. Confirmed leave returns to the di
 last human's explicit departure closes that room without affecting others. Passwords, reconnect
 and remote discovery are not available yet; see [PROTOCOL.md](PROTOCOL.md#rooms).
 
-**Options.** One dialog with three tabs, Customize, Sound and Controls, opened from the main
-menu (on Customize), from the header's sound and keyboard icons and from the pause menu's Sound and
-Controls entries (on the matching tab). Closing it returns to where it was opened, including a paused
+**Options.** One dialog with three tabs, Customize, Sound and Controls. The main menu has a
+Customize entry (opens on Customize) and an Options entry (opens on Sound); the dialog is also opened
+from the pause menu's Options entry. Closing it returns to where it was opened, including a paused
 match. Switching tabs only hides and shows the panels, so nothing being edited is lost.
+
+**Names and main actions.** The name field starts with a random friendly name such as "Golden
+Giraffe" (at most 16 characters). Create new game, Create room, Join room and Start are blue
+(`button.primary`).
+
+**Touch layout.** On a phone in portrait the board sits in the upper part of the screen and the
+joystick (up to 220 px wide) and the bomb button fill the area below it.
 
 **Customize.** The player picks a colour, a head accessory, a face accessory and a costume
 (Scarf, Cape, Bow tie or Medal) with a live preview drawn by the WebAssembly module; the small
