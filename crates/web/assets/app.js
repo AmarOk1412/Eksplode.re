@@ -73,6 +73,8 @@ import {
 
 const DIRECTION_ACTIONS = { up: "Up", down: "Down", left: "Left", right: "Right" };
 const TICK_MS = 50;
+/** How long the finished match stays on screen before the scoreboard. */
+const RESULTS_DELAY_MS = 1000;
 const PROTOCOL_VERSION = 2;
 
 /** Keeps the held keys and turns them into one input per tick. */
@@ -930,6 +932,7 @@ function start() {
   let renderer = null;
   let pageFocused = true;
   let lastSnapshotAt = 0;
+  let resultsTimer = null;
   let logoKey = "";
   let lobbyCanvases = [];
   let bannerTimer = null;
@@ -1556,6 +1559,16 @@ function start() {
           else current.close();
           return;
         }
+        if (message.type === "Ended" && state.stage === "playing" && !state.away) {
+          // the scoreboard waits so the last explosion and the dying animation can be seen
+          const room = state.room_id;
+          clearTimeout(resultsTimer);
+          resultsTimer = setTimeout(() => {
+            if (socket === current && state.stage === "playing" && state.room_id === room) dispatch(message);
+          }, RESULTS_DELAY_MS);
+          return;
+        }
+        if (message.type === "Start") clearTimeout(resultsTimer);
         if (message.type === "Rooms") {
           if (message.request_id !== directoryRequest) return;
           directoryPages.push(...message.rooms);
@@ -2266,7 +2279,8 @@ function start() {
     requestAnimationFrame(draw);
     if (state.stage !== "playing" || !renderer || !state.observation) return;
     resize();
-    const alpha = Math.min(1, Math.max(0, (now - lastSnapshotAt) / TICK_MS));
+    // past 1 tick only the dying animation goes on (the snapshots stop when a match ends)
+    const alpha = Math.min(40, Math.max(0, (now - lastSnapshotAt) / TICK_MS));
     const commands = renderer.frame(el.canvas.width, el.canvas.height, alpha);
     ctx.clearRect(0, 0, el.canvas.width, el.canvas.height);
     paintCommands(ctx, commands);
