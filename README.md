@@ -8,6 +8,15 @@ Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, an
 terminal players share the same match. The rules, the bots, the network protocol and the
 pixel-art view are all small, tested crates.
 
+![A match in progress: bombs, flames and four players on the brick board](docs/screenshots/match.png)
+
+| | |
+|---|---|
+| ![The main menu with your character, your name, Create new game, Join a game and Options](docs/screenshots/main-menu.png) | ![The lobby with the owner and three bots on animated 3D cards](docs/screenshots/lobby.png) |
+| Pick a name and jump in. | The lobby: empty seats fill with bots, the owner starts. |
+| ![Options, Customize tab: colour, head, face and costume](docs/screenshots/customize.png) | ![The scoreboard after a match: kills and bombs placed](docs/screenshots/scoreboard.png) |
+| Dress your character up (or let the dice decide). | Who won, who blew up whom. |
+
 ## Features
 
 - Four players per match: any mix of people (terminal or browser) and bots.
@@ -50,10 +59,6 @@ The creator owns their room and starts its match (Enter or the Start button). Ot
 select that room from the directory; each room manages its own four participants and settings.
 Prefer to host from the terminal? `cargo run -p eksplode-re-cli -- host --bots 1 --web-port 8080`
 does the same and lets browsers join too.
-
-Screenshots are not committed yet; to see the game, run the steps above (or
-`node scripts/browser-smoke.mjs http://0.0.0.0:8080/ /tmp/shots` with a server running to
-capture PNGs).
 
 ## Modes
 
