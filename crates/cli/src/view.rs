@@ -82,6 +82,7 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
             PowerUpKind::Slow => "-S",
             PowerUpKind::HyperSpeed => "-H",
             PowerUpKind::SmallBomb => "-s",
+            PowerUpKind::AutoBomb => "-A",
         };
         let colour = if u.kind.is_malus() {
             Color::Red
@@ -202,6 +203,7 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
                 let name = match m.kind {
                     PowerUpKind::Slow => "slow",
                     PowerUpKind::HyperSpeed => "hyper",
+                    PowerUpKind::AutoBomb => "auto",
                     _ => "small",
                 };
                 let seconds = m.ticks_left.div_ceil(state.config.tick_hz.max(1));

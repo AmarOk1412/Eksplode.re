@@ -282,3 +282,65 @@ fn the_malus_clock_stops_with_the_round() {
         "an ended round does nothing"
     );
 }
+
+fn bombs_at(s: &GameState) -> Vec<(u8, u8)> {
+    s.bombs.iter().map(|b| (b.pos.x, b.pos.y)).collect()
+}
+
+#[test]
+fn auto_bomb_places_a_bomb_on_every_free_square_without_pressing_anything() {
+    let mut s = solo(1, 3);
+    s.players[0].bombs_max = 3;
+    let events = pick_up(&mut s, PowerUpKind::AutoBomb);
+    assert!(s.players[0].bombs_on_their_own());
+    assert!(
+        events.iter().any(|e| matches!(e, Event::BombPlaced { .. })),
+        "a bomb under the player in the pickup tick: {events:?}"
+    );
+    assert_eq!(bombs_at(&s), [(2, 3)]);
+    step(&mut s, &idle());
+    assert_eq!(bombs_at(&s), [(2, 3)], "never two bombs on one square");
+    s.players[0].cooldown_left = 0;
+    step(&mut s, &go(Dir::Right));
+    assert_eq!(
+        bombs_at(&s),
+        [(2, 3), (3, 3)],
+        "and one more on the next square"
+    );
+}
+
+#[test]
+fn auto_bomb_still_respects_the_bomb_limit() {
+    let mut s = solo(1, 3);
+    pick_up(&mut s, PowerUpKind::AutoBomb);
+    s.players[0].cooldown_left = 0;
+    step(&mut s, &go(Dir::Right));
+    assert_eq!(bombs_at(&s), [(2, 3)], "one bomb at a time with one bomb");
+}
+
+#[test]
+fn auto_bomb_lasts_ten_seconds_then_bombs_need_the_button_again() {
+    let mut s = solo(1, 3);
+    s.players[0].bombs_max = 3;
+    // the bombs stay put so the test player survives their own trail
+    s.config.fuse_ticks = 1000;
+    pick_up(&mut s, PowerUpKind::AutoBomb);
+    assert_eq!(s.players[0].malus.unwrap().ticks_left, 200);
+    for _ in 0..40 {
+        step(&mut s, &go(Dir::Right));
+    }
+    assert_eq!(s.bombs.len(), 3, "as many as the player may have");
+    for _ in 0..160 {
+        step(&mut s, &idle());
+    }
+    assert!(s.players[0].alive);
+    assert!(s.players[0].malus.is_none());
+    s.bombs.clear();
+    s.players[0].bombs_active = 0;
+    s.players[0].cooldown_left = 0;
+    step(&mut s, &go(Dir::Left));
+    assert!(
+        s.bombs.is_empty(),
+        "no bomb without the button once it is over"
+    );
+}

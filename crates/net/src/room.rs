@@ -1210,7 +1210,7 @@ impl RoomRuntime {
                 match request {
                     Request::DevPauseBots { paused, .. } => self.bots_paused = paused,
                     Request::DevSetDrops { chances, .. } => {
-                        let chances: [f32; 8] =
+                        let chances: [f32; 9] =
                             chances.try_into().map_err(|_| ErrorCode::BadRoom)?;
                         self.drops = DropTable::new(chances).map_err(|_| ErrorCode::BadRoom)?;
                     }

@@ -364,7 +364,7 @@ fn the_bonus_weights_follow_the_schedule_and_the_drop_table_has_no_effect() {
         &rows,
         [Some((3, 3)), Some((1, 5)), Some((5, 5)), None],
     );
-    s.set_drops(DropTable::new([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap())
+    s.set_drops(DropTable::new([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap())
         .unwrap();
     add_bomb(&mut s, 0, 3, 2, 1);
     let ev = step(&mut s, &idle());

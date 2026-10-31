@@ -13,7 +13,8 @@ use crate::team;
 /// Advances the round by one tick and returns what happened.
 ///
 /// Order: cooldowns, flame and fuse timers, malus timers, moves (rotating priority), bomb
-/// flights (hops and landings), slides (kicked bombs), punches, bomb placement, detonation with chain reactions (drops
+/// flights (hops and landings), slides (kicked bombs), punches, bomb placement (pressed, or forced
+/// by the auto-bomb malus), detonation with chain reactions (drops
 /// are decided for destroyed blocks), eliminations (with kills credited and the elimination order
 /// stamped), end-of-round check. Does nothing once the round has ended.
 pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<Event> {
@@ -58,7 +59,7 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
         }
     }
     for &i in &order {
-        if inputs[i].bomb {
+        if inputs[i].bomb || state.players[i].bombs_on_their_own() {
             bomb::place(state, i, &mut events);
         }
     }
@@ -139,7 +140,10 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
             }
             PowerUpKind::Punch => p.has_punch = true,
             PowerUpKind::Kick => p.has_kick = true,
-            PowerUpKind::Slow | PowerUpKind::HyperSpeed | PowerUpKind::SmallBomb => {
+            PowerUpKind::Slow
+            | PowerUpKind::HyperSpeed
+            | PowerUpKind::SmallBomb
+            | PowerUpKind::AutoBomb => {
                 p.malus = Some(ActiveMalus {
                     kind: power.kind,
                     ticks_left: cfg.malus_ticks,

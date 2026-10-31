@@ -303,7 +303,7 @@ fn f3_us2_as10_picking_up_the_kick_sets_has_kick_and_a_new_round_starts_without_
         }
     )));
     assert!(!PowerUpKind::Kick.is_malus());
-    assert_eq!(PowerUpKind::ALL.last(), Some(&PowerUpKind::Kick));
+    assert_eq!(PowerUpKind::ALL[7], PowerUpKind::Kick);
     let fresh = GameState::new(Config::default(), 3, [true; 4]).unwrap();
     assert!(fresh.players.iter().all(|pl| !pl.has_kick));
 }

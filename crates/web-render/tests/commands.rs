@@ -177,7 +177,7 @@ fn the_power_icons_are_distinct_per_kind() {
             "{kind:?} looks like another kind"
         );
     }
-    assert_eq!(seen.len(), 8);
+    assert_eq!(seen.len(), 9);
 }
 
 #[test]

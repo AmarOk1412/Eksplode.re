@@ -27,11 +27,13 @@ pub enum PowerUpKind {
     SmallBomb,
     /// Walking into a landed bomb makes it slide until the next square is blocked.
     Kick,
+    /// Malus: a bomb is placed on every free square the player stands on for a while.
+    AutoBomb,
 }
 
 impl PowerUpKind {
     /// Every kind, in the order the drop table uses.
-    pub const ALL: [PowerUpKind; 8] = [
+    pub const ALL: [PowerUpKind; 9] = [
         PowerUpKind::ExtraBomb,
         PowerUpKind::Range,
         PowerUpKind::Speed,
@@ -40,13 +42,17 @@ impl PowerUpKind {
         PowerUpKind::HyperSpeed,
         PowerUpKind::SmallBomb,
         PowerUpKind::Kick,
+        PowerUpKind::AutoBomb,
     ];
 
     /// Maluses are timed and hurt the player who takes them; bonuses last for the round.
     pub fn is_malus(self) -> bool {
         matches!(
             self,
-            PowerUpKind::Slow | PowerUpKind::HyperSpeed | PowerUpKind::SmallBomb
+            PowerUpKind::Slow
+                | PowerUpKind::HyperSpeed
+                | PowerUpKind::SmallBomb
+                | PowerUpKind::AutoBomb
         )
     }
 }
@@ -151,6 +157,11 @@ impl Participant {
             Some(m) if m.kind == PowerUpKind::SmallBomb => 1,
             _ => self.range,
         }
+    }
+
+    /// Whether the auto-bomb malus places a bomb for this player whatever they press.
+    pub fn bombs_on_their_own(&self) -> bool {
+        self.malus.is_some_and(|m| m.kind == PowerUpKind::AutoBomb)
     }
 }
 

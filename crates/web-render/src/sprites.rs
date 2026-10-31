@@ -46,6 +46,7 @@ pub const MALUS_FRAME: Rgb = [0.42, 0.06, 0.08];
 pub const MALUS_SLOW: Rgb = [0.25, 0.5, 0.95];
 pub const MALUS_HYPER: Rgb = [0.98, 0.85, 0.1];
 pub const MALUS_SMALL: Rgb = [0.9, 0.2, 0.2];
+pub const MALUS_AUTO: Rgb = [0.6, 0.25, 0.9];
 
 /// Characters of the front-facing character, top row first; `.` is transparent.
 ///
@@ -243,8 +244,9 @@ pub const ICON_BONUS_FILL: Rgb = [0.176, 0.227, 0.388];
 pub const ICON_MALUS_FILL: Rgb = [0.333, 0.314, 0.376];
 
 /// The pixel picture of a power: extra bomb (a bomb with a plus), roller (a rollerskate), flame,
-/// punch (a boxing glove), kick (a boot), slow (a snail), hyper speed (a lightning bolt) and
-/// small bomb (a tiny bomb with a minus). `.` is transparent.
+/// punch (a boxing glove), kick (a boot), slow (a snail), hyper speed (a lightning bolt),
+/// small bomb (a tiny bomb with a minus) and auto bomb (a trail of three bombs). `.` is
+/// transparent.
 pub fn icon(kind: PowerUpKind) -> [&'static str; ICON_SIZE] {
     match kind {
         PowerUpKind::ExtraBomb => [
@@ -342,6 +344,18 @@ pub fn icon(kind: PowerUpKind) -> [&'static str; ICON_SIZE] {
             "kkkkkk....",
             ".kkkk.....",
             "..........",
+        ],
+        PowerUpKind::AutoBomb => [
+            ".......f..",
+            "......kkk.",
+            "......kwk.",
+            "...f..kkk.",
+            "..kkk.....",
+            "..kwk.....",
+            "f.kkk.....",
+            "kkk.......",
+            "kwk.......",
+            "kkk.......",
         ],
     }
 }

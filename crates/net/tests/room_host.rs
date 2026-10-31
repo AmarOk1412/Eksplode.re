@@ -1325,7 +1325,7 @@ fn f4_us4_dev_commands_still_work_in_a_chaser_room() {
     a.send_value(&json!({"type":"DevPauseBots", "request_id":"pause", "room_id":room["room_id"], "paused":true}));
     a.send_value(
         &json!({"type":"DevSetDrops", "request_id":"drops", "room_id":room["room_id"],
-        "chances":[0.5,0,0,0,0,0,0,0]}),
+        "chances":[0.5,0,0,0,0,0,0,0,0]}),
     );
     let state = a.recv_until(|m| matches!(m, ServerMsg::DevState { drops, .. } if drops[0] == 0.5));
     match state {

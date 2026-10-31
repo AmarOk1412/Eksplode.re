@@ -46,7 +46,7 @@ fn f3_us2_as10_every_power_has_its_own_ten_by_ten_pixel_picture() {
             "{kind:?} looks like another kind"
         );
     }
-    assert_eq!(seen.len(), 8);
+    assert_eq!(seen.len(), 9);
 }
 
 #[test]

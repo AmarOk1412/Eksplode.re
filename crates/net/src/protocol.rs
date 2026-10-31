@@ -65,8 +65,8 @@ pub enum ClientMsg {
         paused: bool,
     },
     /// Developer mode, owner only: the drop chance of each power in the order
-    /// `ExtraBomb, Range, Speed, Punch, Slow, HyperSpeed, SmallBomb, Kick`; eight finite values in
-    /// `0.0..=1.0`, otherwise `Error{BadValue}`.
+    /// `ExtraBomb, Range, Speed, Punch, Slow, HyperSpeed, SmallBomb, Kick, AutoBomb`; nine finite
+    /// values in `0.0..=1.0`, otherwise `Error{BadValue}`.
     DevSetDrops {
         chances: Vec<f32>,
     },
@@ -157,7 +157,7 @@ pub enum ServerMsg {
     /// for a random one); sent to a joiner and to everybody when it changes.
     DevState {
         paused: bool,
-        drops: [f32; 8],
+        drops: [f32; 9],
         #[serde(default)]
         behaviour: Option<String>,
     },
@@ -723,7 +723,7 @@ pub mod v2 {
             #[serde(flatten)]
             reference: RoomRef,
             paused: bool,
-            drops: [f32; 8],
+            drops: [f32; 9],
             #[serde(default)]
             behaviour: Option<String>,
         },

@@ -6,7 +6,7 @@ use common::*;
 use eksplode_re_core::drops::{DropTable, DEFAULT_SHARES};
 use eksplode_re_core::{step, Config, CoreError, Event, PowerUpKind, Rng};
 
-const ALL: [PowerUpKind; 8] = [
+const ALL: [PowerUpKind; 9] = [
     PowerUpKind::ExtraBomb,
     PowerUpKind::Range,
     PowerUpKind::Speed,
@@ -15,17 +15,18 @@ const ALL: [PowerUpKind; 8] = [
     PowerUpKind::HyperSpeed,
     PowerUpKind::SmallBomb,
     PowerUpKind::Kick,
+    PowerUpKind::AutoBomb,
 ];
 
 fn only(kind: PowerUpKind) -> DropTable {
-    let mut chances = [0.0; 8];
+    let mut chances = [0.0; 9];
     let i = ALL.iter().position(|k| *k == kind).unwrap();
     chances[i] = 1.0;
     DropTable::new(chances).unwrap()
 }
 
 #[test]
-fn the_kinds_are_in_the_documented_order_and_three_of_them_are_maluses() {
+fn the_kinds_are_in_the_documented_order_and_four_of_them_are_maluses() {
     assert_eq!(PowerUpKind::ALL, ALL);
     let maluses: Vec<_> = ALL.iter().filter(|k| k.is_malus()).collect();
     assert_eq!(
@@ -33,17 +34,18 @@ fn the_kinds_are_in_the_documented_order_and_three_of_them_are_maluses() {
         [
             &PowerUpKind::Slow,
             &PowerUpKind::HyperSpeed,
-            &PowerUpKind::SmallBomb
+            &PowerUpKind::SmallBomb,
+            &PowerUpKind::AutoBomb
         ]
     );
 }
 
 #[test]
 fn every_chance_must_be_finite_and_between_zero_and_one() {
-    assert!(DropTable::new([0.0; 8]).is_ok());
-    assert!(DropTable::new([1.0; 8]).is_ok());
+    assert!(DropTable::new([0.0; 9]).is_ok());
+    assert!(DropTable::new([1.0; 9]).is_ok());
     for bad in [-0.01, 1.01, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
-        let mut chances = [0.1; 8];
+        let mut chances = [0.1; 9];
         chances[3] = bad;
         assert!(
             matches!(DropTable::new(chances), Err(CoreError::InvalidConfig(_))),
@@ -56,7 +58,7 @@ fn every_chance_must_be_finite_and_between_zero_and_one() {
 fn the_defaults_are_the_overall_rate_times_the_shares() {
     assert_eq!(
         DEFAULT_SHARES,
-        [0.19, 0.22, 0.22, 0.03, 0.10, 0.08, 0.11, 0.05]
+        [0.18, 0.21, 0.21, 0.03, 0.09, 0.07, 0.10, 0.05, 0.06]
     );
     let t = DropTable::defaults(0.3);
     for (i, kind) in ALL.iter().enumerate() {
@@ -68,9 +70,9 @@ fn the_defaults_are_the_overall_rate_times_the_shares() {
     assert!((DropTable::defaults(1.0).total() - 1.0).abs() < 1e-5);
 }
 
-fn counts(t: &DropTable, seed: u64, n: usize) -> ([usize; 8], usize) {
+fn counts(t: &DropTable, seed: u64, n: usize) -> ([usize; 9], usize) {
     let mut rng = Rng::new(seed);
-    let mut by_kind = [0; 8];
+    let mut by_kind = [0; 9];
     let mut none = 0;
     for _ in 0..n {
         match t.roll(&mut rng) {
@@ -105,7 +107,7 @@ fn f3_us2_as9_the_punch_is_at_most_5_percent_of_all_drops() {
     assert!(punch as f32 / drops as f32 <= 0.05, "{punch} of {drops}");
     assert!(punch > 0, "the punch is rare, not impossible");
     // each malus is rarer than each common bonus
-    for malus in [4, 5, 6] {
+    for malus in [4, 5, 6, 8] {
         for bonus in [0, 1, 2] {
             assert!(
                 by_kind[malus] < by_kind[bonus],
@@ -122,29 +124,29 @@ fn a_chance_of_one_for_one_power_drops_it_every_time_and_zero_never() {
         assert_eq!(by_kind[i], 200, "{kind:?}");
         assert_eq!(none, 0);
         // at 0% it never appears, even when every other power is at 100%
-        let mut chances = [1.0; 8];
+        let mut chances = [1.0; 9];
         chances[i] = 0.0;
         let (by_kind, _) = counts(&DropTable::new(chances).unwrap(), 5, 200);
         assert_eq!(by_kind[i], 0, "{kind:?} never drops at 0%");
     }
-    let (_, none) = counts(&DropTable::new([0.0; 8]).unwrap(), 1, 200);
+    let (_, none) = counts(&DropTable::new([0.0; 9]).unwrap(), 1, 200);
     assert_eq!(none, 200, "all zeros drops nothing");
 }
 
 #[test]
 fn chances_that_add_up_to_more_than_one_are_scaled_down() {
-    let t = DropTable::new([1.0; 8]).unwrap();
-    let (by_kind, none) = counts(&t, 3, 7000);
+    let t = DropTable::new([1.0; 9]).unwrap();
+    let (by_kind, none) = counts(&t, 3, 9000);
     assert_eq!(
         none, 0,
         "the total is capped at one, so something always drops"
     );
     for (i, n) in by_kind.iter().enumerate() {
-        let share = *n as f32 / 7000.0;
-        assert!((share - 1.0 / 7.0).abs() < 0.03, "kind {i}: {share}");
+        let share = *n as f32 / 9000.0;
+        assert!((share - 1.0 / 9.0).abs() < 0.03, "kind {i}: {share}");
     }
     // a sum just above one keeps the proportions
-    let t = DropTable::new([0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
+    let t = DropTable::new([0.5, 0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]).unwrap();
     let (by_kind, none) = counts(&t, 4, 3000);
     assert_eq!(none, 0);
     assert_eq!(by_kind[3] + by_kind[4] + by_kind[5] + by_kind[6], 0);
@@ -184,7 +186,7 @@ fn destroyed_blocks_drop_by_the_table_at_the_moment_they_break() {
 #[test]
 fn a_table_that_drops_nothing_drops_nothing() {
     let mut s = state(&BLOCKS, two_safe());
-    s.set_drops(DropTable::new([0.0; 8]).unwrap()).unwrap();
+    s.set_drops(DropTable::new([0.0; 9]).unwrap()).unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     step(&mut s, &idle());
     assert!(s.powerups.is_empty());
@@ -193,7 +195,7 @@ fn a_table_that_drops_nothing_drops_nothing() {
 #[test]
 fn the_table_can_change_between_ticks() {
     let mut s = state(&BLOCKS, two_safe());
-    s.set_drops(DropTable::new([0.0; 8]).unwrap()).unwrap();
+    s.set_drops(DropTable::new([0.0; 9]).unwrap()).unwrap();
     add_bomb(&mut s, 0, 3, 3, 1);
     step(&mut s, &idle());
     assert!(s.powerups.is_empty());
@@ -213,7 +215,7 @@ fn the_table_can_change_between_ticks() {
 fn an_invalid_table_is_refused_and_changes_nothing() {
     let mut s = state(&BLOCKS, two_safe());
     let before = s.drops.clone();
-    let mut chances = [0.1; 8];
+    let mut chances = [0.1; 9];
     chances[2] = 2.0;
     assert!(DropTable::new(chances).is_err());
     let bad = DropTable { chances };

@@ -2203,7 +2203,7 @@ impl Server {
             }
             DevCommand::Reset => self.set_drops(DropTable::defaults(self.cfg.game.powerup_chance)),
             DevCommand::Drops(chances) => {
-                let table = <[f32; 8]>::try_from(chances.as_slice())
+                let table = <[f32; 9]>::try_from(chances.as_slice())
                     .ok()
                     .and_then(|c| DropTable::new(c).ok());
                 match table {
@@ -2212,7 +2212,7 @@ impl Server {
                         return self.error(
                             id,
                             "BadValue",
-                            "send eight drop chances, each between 0 and 1",
+                            "send nine drop chances, each between 0 and 1",
                         )
                     }
                 }

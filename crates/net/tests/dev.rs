@@ -48,21 +48,21 @@ fn is_dev_state(m: &ServerMsg) -> bool {
     matches!(m, ServerMsg::DevState { .. })
 }
 
-fn dev_state(c: &Client) -> (bool, [f32; 8]) {
+fn dev_state(c: &Client) -> (bool, [f32; 9]) {
     match wait_for(c, is_dev_state) {
         Some(ServerMsg::DevState { paused, drops, .. }) => (paused, drops),
         other => panic!("expected DevState, got {other:?}"),
     }
 }
 
-fn set_drops(c: &Client, chances: [f32; 8]) {
+fn set_drops(c: &Client, chances: [f32; 9]) {
     c.send(ClientMsg::DevSetDrops {
         chances: chances.to_vec(),
     })
     .unwrap();
 }
 
-const DEFAULTS: fn() -> [f32; 8] = || DropTable::defaults(Config::default().powerup_chance).chances;
+const DEFAULTS: fn() -> [f32; 9] = || DropTable::defaults(Config::default().powerup_chance).chances;
 
 #[test]
 fn f3_us4_as5_every_dev_message_is_refused_when_the_host_is_not_in_developer_mode() {
@@ -75,7 +75,7 @@ fn f3_us4_as5_every_dev_message_is_refused_when_the_host_is_not_in_developer_mod
     for msg in [
         ClientMsg::DevPauseBots { paused: true },
         ClientMsg::DevSetDrops {
-            chances: vec![1.0; 8],
+            chances: vec![1.0; 9],
         },
         ClientMsg::DevResetDrops,
     ] {
@@ -101,7 +101,7 @@ fn f3_us4_as5_only_the_owner_may_use_the_dev_commands() {
         .send(ClientMsg::DevPauseBots { paused: true })
         .unwrap();
     assert!(wait_for(&guest, is_error("NotOwner")).is_some());
-    set_drops(&guest, [1.0; 8]);
+    set_drops(&guest, [1.0; 9]);
     assert!(wait_for(&guest, is_error("NotOwner")).is_some());
     guest.send(ClientMsg::DevResetDrops).unwrap();
     assert!(wait_for(&guest, is_error("NotOwner")).is_some());
@@ -142,10 +142,10 @@ fn dev_state_is_broadcast_to_everybody_when_it_changes() {
         .unwrap();
     assert!(dev_state(&owner).0);
     assert!(dev_state(&guest).0);
-    set_drops(&owner, [0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0]);
+    set_drops(&owner, [0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(
         dev_state(&guest).1,
-        [0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0]
+        [0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0]
     );
 }
 
@@ -190,7 +190,7 @@ fn bomb_and_watch(c: &Client) -> (usize, Vec<PowerUpKind>) {
     (destroyed, spawned)
 }
 
-fn start_and_bomb(c: &Client, chances: [f32; 8], before_start: bool) -> (usize, Vec<PowerUpKind>) {
+fn start_and_bomb(c: &Client, chances: [f32; 9], before_start: bool) -> (usize, Vec<PowerUpKind>) {
     welcome_slot(c);
     let _ = dev_state(c);
     c.send(ClientMsg::AddBot).unwrap();
@@ -211,7 +211,8 @@ fn start_and_bomb(c: &Client, chances: [f32; 8], before_start: bool) -> (usize, 
 fn f3_us4_as3_a_table_with_punch_at_100_percent_drops_punch_from_every_block() {
     let host = dev_host();
     let (c, _room) = create(&host, "Ann");
-    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], true);
+    let (destroyed, spawned) =
+        start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], true);
     assert!(destroyed >= 1, "the bomb must destroy a block");
     assert_eq!(spawned.len(), destroyed, "every block dropped something");
     assert!(
@@ -224,14 +225,15 @@ fn f3_us4_as3_a_table_with_punch_at_100_percent_drops_punch_from_every_block() {
 fn f3_us4_as3_a_table_of_zeroes_drops_nothing_and_punch_at_zero_never_drops_punch() {
     let host = dev_host();
     let (c, _room) = create(&host, "Ann");
-    let (destroyed, spawned) = start_and_bomb(&c, [0.0; 8], true);
+    let (destroyed, spawned) = start_and_bomb(&c, [0.0; 9], true);
     assert!(destroyed >= 1);
     assert!(spawned.is_empty(), "{spawned:?}");
 
     let host = dev_host();
     let (c, _room) = create(&host, "Ann");
     // everything but punch at 100 %: sums above 1.0 are scaled and punch never shows up
-    let (destroyed, spawned) = start_and_bomb(&c, [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0], true);
+    let (destroyed, spawned) =
+        start_and_bomb(&c, [1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0], true);
     assert!(destroyed >= 1);
     assert!(spawned.len() <= destroyed, "at most one item per block");
     assert!(!spawned.is_empty());
@@ -242,7 +244,8 @@ fn f3_us4_as3_a_table_of_zeroes_drops_nothing_and_punch_at_zero_never_drops_punc
 fn f3_us4_as4_a_table_set_mid_match_applies_to_blocks_destroyed_afterwards() {
     let host = dev_host();
     let (c, _room) = create(&host, "Ann");
-    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0], false);
+    let (destroyed, spawned) =
+        start_and_bomb(&c, [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0], false);
     assert!(destroyed >= 1);
     assert_eq!(spawned.len(), destroyed);
     assert!(spawned.iter().all(|k| *k == PowerUpKind::Punch));
@@ -254,8 +257,8 @@ fn f3_us4_as4_reset_restores_the_default_table() {
     let (c, _room) = create(&host, "Ann");
     welcome_slot(&c);
     let _ = dev_state(&c);
-    set_drops(&c, [0.5; 8]);
-    assert_eq!(dev_state(&c).1, [0.5; 8]);
+    set_drops(&c, [0.5; 9]);
+    assert_eq!(dev_state(&c).1, [0.5; 9]);
     c.send(ClientMsg::DevResetDrops).unwrap();
     assert_eq!(dev_state(&c).1, DEFAULTS());
 }
@@ -267,10 +270,10 @@ fn bad_values_are_refused_and_change_nothing() {
     welcome_slot(&c);
     let _ = dev_state(&c);
     for chances in [
-        vec![1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
-        vec![0.1; 7],
-        vec![0.1; 9],
+        vec![1.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        vec![0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.1],
+        vec![0.1; 8],
+        vec![0.1; 10],
     ] {
         c.send(ClientMsg::DevSetDrops {
             chances: chances.clone(),
@@ -405,11 +408,26 @@ fn f3_us4_as2_placed_bombs_keep_burning_while_the_bots_are_paused() {
 fn f3_us2_as10_a_table_with_kick_at_100_percent_drops_only_kicks() {
     let host = dev_host();
     let (c, _room) = create(&host, "Ann");
-    let (destroyed, spawned) = start_and_bomb(&c, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], true);
+    let (destroyed, spawned) =
+        start_and_bomb(&c, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0], true);
     assert!(destroyed >= 1);
     assert_eq!(spawned.len(), destroyed);
     assert!(
         spawned.iter().all(|k| *k == PowerUpKind::Kick),
+        "{spawned:?}"
+    );
+}
+
+#[test]
+fn a_table_with_auto_bomb_at_100_percent_drops_only_auto_bombs() {
+    let host = dev_host();
+    let (c, _room) = create(&host, "Ann");
+    let (destroyed, spawned) =
+        start_and_bomb(&c, [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], true);
+    assert!(destroyed >= 1);
+    assert_eq!(spawned.len(), destroyed);
+    assert!(
+        spawned.iter().all(|k| *k == PowerUpKind::AutoBomb),
         "{spawned:?}"
     );
 }

@@ -8,9 +8,9 @@ use crate::look::{default_for, runs_of, runs_view, Frame, Look, GRID_ROWS, OVERH
 use crate::sprites::{
     bomb_colour, icon, icon_colour, runs, Rgb, Run, BOARD, BOARD_EDGE, BOMB, BRICK_BASE,
     BRICK_LINE, CROWN_GOLD, DEATH_SMOKE, FLAME_CORE, FLAME_MID, FLAME_OUTER, HEART_RED,
-    ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW, MALUS_SMALL,
-    PLAYER, TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW, WALL_WINDOW_EDGE,
-    WARNING_FRAME, WARNING_SHADOW, WHITE,
+    ICON_BONUS_FILL, ICON_MALUS_FILL, ICON_SIZE, MALUS_AUTO, MALUS_FRAME, MALUS_HYPER, MALUS_SLOW,
+    MALUS_SMALL, PLAYER, TEAM_A_RING, TEAM_B_RING, WALL_BASE, WALL_SHADE, WALL_WINDOW,
+    WALL_WINDOW_EDGE, WARNING_FRAME, WARNING_SHADOW, WHITE,
 };
 use crate::view::{fit, View, EDGE};
 
@@ -324,6 +324,7 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
                 let tint = match kind {
                     PowerUpKind::Slow => MALUS_SLOW,
                     PowerUpKind::HyperSpeed => MALUS_HYPER,
+                    PowerUpKind::AutoBomb => MALUS_AUTO,
                     _ => MALUS_SMALL,
                 };
                 let pulse = 0.5 * (1.0 + (phase * 0.5).sin());

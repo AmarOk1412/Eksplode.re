@@ -168,7 +168,7 @@ fn v2_hello_and_private_results_round_trip() {
         ),
         ("PlayerLeft", json!({"slot":1,"replaced_by_bot":true})),
         ("Ended", json!({"outcome":Outcome::Draw})),
-        ("DevState", json!({"paused":true,"drops":vec![0.0; 8]})),
+        ("DevState", json!({"paused":true,"drops":vec![0.0; 9]})),
     ] {
         let mut value = reference.clone();
         value["type"] = json!(kind);
@@ -533,7 +533,7 @@ fn every_server_message_round_trips() {
     });
     roundtrip(ServerMsg::DevState {
         paused: true,
-        drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2, 0.3],
+        drops: [0.0, 0.25, 0.5, 1.0, 0.0, 0.1, 0.2, 0.3, 0.4],
         behaviour: Some("protective".into()),
     });
     roundtrip(ServerMsg::Rejected {
@@ -788,7 +788,7 @@ fn old_config_json_without_the_new_values_still_decodes() {
 fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
     roundtrip(ClientMsg::DevPauseBots { paused: true });
     roundtrip(ClientMsg::DevSetDrops {
-        chances: vec![0.1; 8],
+        chances: vec![0.1; 9],
     });
     roundtrip(ClientMsg::DevResetDrops);
     roundtrip(ClientMsg::DevSetBotBehaviour {
@@ -798,7 +798,7 @@ fn every_dev_message_round_trips_and_old_welcomes_mean_no_dev() {
         behaviour: serde_json::Value::Null,
     });
     // a DevState from an older host has no behaviour: random
-    let old = r#"{"type":"DevState","paused":false,"drops":[0,0,0,0,0,0,0,0]}"#;
+    let old = r#"{"type":"DevState","paused":false,"drops":[0,0,0,0,0,0,0,0,0]}"#;
     assert!(matches!(
         decode::<ServerMsg>(old.as_bytes()),
         Ok(ServerMsg::DevState {
