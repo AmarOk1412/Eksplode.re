@@ -1907,3 +1907,71 @@ fn f12_us3_as6_old_clients_get_medium() {
         "medium"
     );
 }
+
+fn v2_join(host: &Host, room: &Value, name: &str) -> (Raw, Value) {
+    let mut raw = Raw::connect(host.addr());
+    raw.hello_v2().unwrap();
+    raw.join_room_v2("join", room, name);
+    let welcome = v2_reply(&mut raw, "Welcome");
+    (raw, welcome)
+}
+
+/// The next `RoomUpdated` whose owner is no longer `slot`.
+fn owner_change(raw: &mut Raw, slot: u8) -> Value {
+    let deadline = Instant::now() + WAIT;
+    while Instant::now() < deadline {
+        let value = v2_reply(raw, "RoomUpdated");
+        if value["owner_slot"] != slot {
+            return value;
+        }
+    }
+    panic!("the owner never changed");
+}
+
+#[test]
+fn the_next_player_to_have_joined_owns_the_room_when_the_owner_leaves() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Ann", 4);
+    let (mut second, joined) = v2_join(&host, &room, "Bob");
+    let (_third, _) = v2_join(&host, &room, "Cid");
+    owner.send_value(&json!({"type":"LeaveRoom","request_id":"leave","room_id":room["room_id"]}));
+    let update = owner_change(&mut second, 0);
+    assert_eq!(update["owner_slot"], joined["slot"]);
+    assert_eq!(update["owner_membership_id"], joined["membership_id"]);
+    let bots = |value: &Value| {
+        value["lobby"]["slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|slot| slot["controller"] == "Bot")
+            .count()
+    };
+    let before = bots(&update);
+    second.send_value(&json!({"type":"RemoveBot","request_id":"bot","room_id":room["room_id"]}));
+    loop {
+        let reply = second.recv_value().unwrap();
+        assert_ne!(
+            reply["type"], "Error",
+            "the new owner manages the room: {reply}"
+        );
+        if reply["type"] == "RoomUpdated" && bots(&reply) < before {
+            break;
+        }
+    }
+}
+
+#[test]
+fn a_disconnected_owner_hands_the_room_over_during_a_match() {
+    let host = host();
+    let (mut owner, room) = v2_create(&host, "Ann", 4);
+    let (mut second, joined) = v2_join(&host, &room, "Bob");
+    second.send_value(
+        &json!({"type":"SetReady","request_id":"ready","room_id":room["room_id"],"ready":true}),
+    );
+    v2_reply(&mut owner, "RoomUpdated");
+    owner.send_value(&json!({"type":"Start","request_id":"start","room_id":room["room_id"]}));
+    v2_reply(&mut second, "Start");
+    drop(owner);
+    let update = owner_change(&mut second, 0);
+    assert_eq!(update["owner_slot"], joined["slot"]);
+}
