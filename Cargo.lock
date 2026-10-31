@@ -287,14 +287,14 @@ checksum = "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
 
 [[package]]
 name = "eksplode-re-bots"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "eksplode-re-core",
 ]
 
 [[package]]
 name = "eksplode-re-cli"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "eksplode-re-bots",
  "eksplode-re-core",
@@ -305,7 +305,7 @@ dependencies = [
 
 [[package]]
 name = "eksplode-re-core"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -313,7 +313,7 @@ dependencies = [
 
 [[package]]
 name = "eksplode-re-net"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "argon2",
  "eksplode-re-bots",
@@ -326,7 +326,7 @@ dependencies = [
 
 [[package]]
 name = "eksplode-re-web"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "ctrlc",
  "eksplode-re-bots",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "eksplode-re-web-render"
-version = "0.1.0"
+version = "1.0.1"
 dependencies = [
  "eksplode-re-core",
  "serde_json",
