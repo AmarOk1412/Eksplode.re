@@ -1,6 +1,27 @@
 # Changelog
 
 All notable changes to this project are documented in this file.
+## v1.1.0 - 2026-11-02
+
+### Build
+
+- Build: set the version to 1.0.1 (c8a1f06)
+
+
+### Core
+
+- Core: add revenge kart so player can come back (b8321cd)
+
+
+### Documentation
+
+- Docs: update CHANGELOG.md for v1.0.1 (f70beb6)
+
+
+### Web
+
+- Web: Redraw bonus icons at 32x32 (missiles, gloves, fire, bolt) (dbb9e5c)
+
 ## v1.0.1 - 2026-10-31
 
 ### Build
