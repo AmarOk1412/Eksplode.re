@@ -80,6 +80,7 @@ fn us2_as2_bots_escape_in_at_least_95_percent_of_scripted_scenarios() {
         let me = s.players[0].pos;
         let range = s.players[1].range;
         s.bombs.push(eksplode_re_core::Bomb {
+            revenge_stint: None,
             owner: pid(1),
             pos: me,
             ticks_left: 30,

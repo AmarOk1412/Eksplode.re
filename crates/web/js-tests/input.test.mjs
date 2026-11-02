@@ -3,6 +3,50 @@ import assert from "node:assert/strict";
 import { KeyTracker } from "../assets/app.js";
 import { DEFAULT_BINDINGS } from "../assets/controls.js";
 
+test("f13_us1_as3_kart_keys_keep_horizontal_intent_and_cancel_opposites", () => {
+  const keys = new KeyTracker();
+  keys.press("ArrowLeft");
+  keys.press("ArrowRight");
+  assert.equal(keys.take(true).mv, null);
+  keys.release("ArrowLeft");
+  keys.press("ArrowUp");
+  assert.equal(keys.take(true).mv, "Right");
+  keys.clear();
+  assert.equal(keys.take(true).mv, null);
+});
+
+test("f13_us1_as1_kart_is_not_only_a_dead_hud_row", async () => {
+  const { hudRows } = await import("../assets/app.js");
+  const rows = hudRows({ slot: 0, lobby: { slots: [{controller: "Local"}] }, observation: {
+    config: { tick_hz: 20 }, players: [{alive: false, kart: {index: 0}, bombs_active: 0, bombs_max: 1, range: 2, move_cooldown: 4}]
+  }});
+  assert.equal(rows[0].kart, true);
+});
+
+test("f13_us2_as3_stun_is_visible_without_replacing_other_effects", async () => {
+  const { hudRows } = await import("../assets/app.js");
+  const rows = hudRows({slot: 0, lobby: {slots: [{controller: "Local"}]}, observation: {
+    config: {tick_hz: 20}, players: [{alive: true, immobilized_left: 20, has_punch: true, bombs_active: 0, bombs_max: 1, range: 2, move_cooldown: 4}]
+  }});
+  assert.ok(rows[0].effects.includes("stunned 1s"));
+  assert.ok(rows[0].effects.includes("punch"));
+});
+
+test("f13_us1_as3_opposing_devices_are_neutral_before_wire_reduction", async () => {
+  const { mergeGameplayInputs } = await import("../assets/app.js");
+  assert.equal(mergeGameplayInputs([{mv: "Left"}, {mv: "Right", bomb: true}], true).mv, null);
+  assert.equal(mergeGameplayInputs([{mv: "Left"}, {mv: "Right", bomb: true}], true).bomb, true);
+  assert.equal(mergeGameplayInputs([{mv: "Left"}, {mv: "Right"}], false).mv, "Left");
+});
+
+test("f13_us4_as5_a_human_kart_is_still_participating_in_the_match", async () => {
+  const { hubActions } = await import("../assets/app.js");
+  const state = {stage: "playing", lobby: {slots: [{controller: "Remote"}, {controller: "Bot"}]}, observation: {players: [{alive: false, kart: {index: 0}}, {alive: true}]}};
+  assert.equal(hubActions(state).lobby.enabled, false);
+  state.observation.players[0].kart = null;
+  assert.equal(hubActions(state).lobby.enabled, true);
+});
+
 test("us1_as4_arrow_keys_and_space", () => {
   const k = new KeyTracker();
   k.press("ArrowLeft");

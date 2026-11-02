@@ -22,6 +22,7 @@ pub struct DefaultBot {
     last: PlayerInput,
     /// Ticks left before the next decision.
     waiting: u32,
+    participation: (bool, Option<u32>),
 }
 
 impl DefaultBot {
@@ -38,6 +39,7 @@ impl DefaultBot {
             skill: Skill::of(profile.difficulty),
             last: PlayerInput::default(),
             waiting: 0,
+            participation: (false, None),
         }
     }
 
@@ -104,7 +106,13 @@ impl DefaultBot {
 impl Bot for DefaultBot {
     fn decide(&mut self, obs: &Observation) -> PlayerInput {
         let me = &obs.players[obs.me.index()];
-        if !me.alive || obs.phase != Phase::Playing {
+        let participation = (me.alive, me.kart.map(|kart| kart.entered_tick));
+        if participation != self.participation {
+            self.last = PlayerInput::default();
+            self.waiting = 0;
+            self.participation = participation;
+        }
+        if (!me.alive && me.kart.is_none()) || obs.phase != Phase::Playing {
             return PlayerInput::default();
         }
         if self.waiting > 0 {
@@ -131,8 +139,71 @@ impl Bot for DefaultBot {
 }
 
 impl DefaultBot {
+    fn plan_kart(&self, obs: &Observation) -> PlayerInput {
+        let me = &obs.players[obs.me.index()];
+        let Some(kart) = me.kart else {
+            return PlayerInput::default();
+        };
+        let length = eksplode_re_core::kart::perimeter_len(obs.arena.width(), obs.arena.height());
+        if length == 0 || kart.index >= length {
+            return PlayerInput::default();
+        }
+        let target = (0..length)
+            .filter(|index| {
+                let Some(landing) = eksplode_re_core::kart::predict_throw_landing(
+                    &obs.arena,
+                    &obs.players,
+                    &obs.bombs,
+                    *index,
+                ) else {
+                    return false;
+                };
+                let hit = blast(&obs.arena, landing, obs.config.start_range);
+                let enemy = obs
+                    .players
+                    .iter()
+                    .any(|other| is_enemy(me, other) && hit.tiles.contains(&other.pos));
+                let teammate = obs.players.iter().any(|other| {
+                    other.alive
+                        && other.id != me.id
+                        && !is_enemy(me, other)
+                        && hit.tiles.contains(&other.pos)
+                });
+                enemy && !teammate
+            })
+            .min_by_key(|index| {
+                let clockwise = (*index + length - kart.index) % length;
+                let counterclockwise = (kart.index + length - *index) % length;
+                (clockwise.min(counterclockwise), clockwise)
+            });
+        let Some(target) = target else {
+            return PlayerInput::default();
+        };
+        if target == kart.index {
+            return PlayerInput {
+                bomb: !obs.bombs.iter().any(|bomb| {
+                    bomb.owner == me.id && bomb.revenge_stint == Some(kart.entered_tick)
+                }),
+                ..PlayerInput::default()
+            };
+        }
+        let clockwise = (target + length - kart.index) % length;
+        let counterclockwise = (kart.index + length - target) % length;
+        PlayerInput {
+            mv: Some(if clockwise <= counterclockwise {
+                Dir::Right
+            } else {
+                Dir::Left
+            }),
+            ..PlayerInput::default()
+        }
+    }
+
     /// Between two decisions: keep walking the same way unless that square burns or is blocked.
     fn held(&self, obs: &Observation, me: &Participant) -> PlayerInput {
+        if me.kart.is_some() {
+            return self.last;
+        }
         let mv = self.last.mv.filter(|d| {
             me.pos
                 .step(*d, obs.arena.width(), obs.arena.height())
@@ -163,6 +234,12 @@ impl DefaultBot {
         if planned.bomb {
             return PlayerInput::default();
         }
+        if obs.players[obs.me.index()].kart.is_some() {
+            return PlayerInput {
+                mv: planned.mv.map(Dir::opposite),
+                ..PlayerInput::default()
+            };
+        }
         let me = &obs.players[obs.me.index()];
         let in_danger = !DangerMap::from_observation(obs).safe_from(me.pos, 1);
         if in_danger || self.rng.chance(0.5) {
@@ -185,6 +262,9 @@ impl DefaultBot {
     /// The best input for what the bot sees.
     fn plan(&mut self, obs: &Observation) -> PlayerInput {
         let me = &obs.players[obs.me.index()];
+        if me.kart.is_some() && obs.phase == Phase::Playing {
+            return self.plan_kart(obs);
+        }
         if !me.alive || obs.phase != Phase::Playing {
             return PlayerInput::default();
         }
@@ -523,6 +603,9 @@ fn can_bomb_here(obs: &Observation, me: &Participant) -> bool {
     // The bomb is placed during the next tick and explodes `fuse_ticks` ticks later.
     let danger = DangerMap::with_bomb(obs, me.pos, me.placed_range(), obs.config.fuse_ticks + 1);
     let mut req = PathRequest::new(obs, &danger);
-    req.earliest_move = me.cooldown_left.max(2);
+    req.earliest_move = me
+        .cooldown_left
+        .max(2)
+        .max(me.immobilized_left.saturating_add(1));
     find_path(&req, &|_| true).is_some()
 }

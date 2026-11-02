@@ -20,6 +20,22 @@ fn fixture_json() -> Vec<u8> {
 }
 
 #[test]
+fn f13_invalid_added_kart_state_is_inert_or_rejected_without_panics() {
+    let mut value: serde_json::Value = serde_json::from_slice(&fixture_json()).unwrap();
+    value["players"][0]["alive"] = serde_json::json!(false);
+    assert_eq!(load(value.to_string().as_bytes()), 0);
+    let baseline = eksplode_re_frame(800.0, 600.0, 1.0);
+    for (index, entered_tick, travel) in [(65535, 0, "Right"), (0, 999, "Left"), (0, 0, "Up")] {
+        value["players"][0]["kart"] = serde_json::json!({"index":index,"entered_tick":entered_tick,
+            "cooldown_left":0,"travel":travel,"pending_return":null});
+        assert_eq!(load(value.to_string().as_bytes()), 0);
+        assert_eq!(eksplode_re_frame(800.0, 600.0, 1.0), baseline);
+    }
+    value["players"][0]["kart"]["travel"] = serde_json::json!("Teleport");
+    assert_eq!(load(value.to_string().as_bytes()), 2);
+}
+
+#[test]
 fn allocation_limits() {
     assert!(eksplode_re_alloc(0).is_null());
     assert!(eksplode_re_alloc(2_000_000).is_null());

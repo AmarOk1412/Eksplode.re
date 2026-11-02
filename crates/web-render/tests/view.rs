@@ -2,6 +2,19 @@ use eksplode_re_web_render::sprites::*;
 use eksplode_re_web_render::view::{fit, MARGIN};
 
 #[test]
+fn f13_us1_as1_the_fixed_gutter_fits_desktop_and_mobile() {
+    for (width, height) in [(15, 13), (19, 15), (25, 19)] {
+        for canvas in [(1280.0, 800.0), (390.0, 500.0)] {
+            let view = fit(width, height, canvas);
+            let start = view.project(-1.0, -1.0);
+            let end = view.project(f32::from(width) + 1.0, f32::from(height) + 1.18);
+            assert!(start.0 >= MARGIN - 1.0 && start.1 >= MARGIN - 1.0);
+            assert!(end.0 <= canvas.0 - MARGIN + 1.0 && end.1 <= canvas.1 - MARGIN + 1.0);
+        }
+    }
+}
+
+#[test]
 fn fit_centres_the_arena_with_a_whole_number_scale() {
     let v = fit(15, 13, (800.0, 600.0));
     assert_eq!(v.scale.fract(), 0.0);

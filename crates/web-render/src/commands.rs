@@ -192,6 +192,115 @@ pub fn build_with_looks(
     for it in draw_list(obs, interp, alpha, phase) {
         emit(&mut out, &view, &it, looks, phase);
     }
+    for (slot, player) in obs.players.iter().enumerate() {
+        if player.alive && player.immobilized_left > 0 {
+            let (column, row) = interp.position(slot, alpha);
+            let mut pen = Pen {
+                view: &view,
+                out: &mut out,
+                layer: 999.0,
+            };
+            pen.rect(
+                WARNING_FRAME,
+                column + 0.06,
+                row + 0.06,
+                column + 0.94,
+                row + 0.12,
+            );
+            pen.rect(
+                WARNING_FRAME,
+                column + 0.06,
+                row + 0.88,
+                column + 0.94,
+                row + 0.94,
+            );
+            pen.rect(
+                WARNING_FRAME,
+                column + 0.06,
+                row + 0.12,
+                column + 0.12,
+                row + 0.88,
+            );
+            pen.rect(
+                WARNING_FRAME,
+                column + 0.88,
+                row + 0.12,
+                column + 0.94,
+                row + 0.88,
+            );
+        }
+        let Some(kart) = player.kart else {
+            continue;
+        };
+        let Some((_, direction)) = eksplode_re_core::kart::track_position(w, h, kart.index) else {
+            continue;
+        };
+        let (column, row) = interp.position(slot, alpha);
+        let (center_x, center_y) = (column + 0.5, row + 0.5);
+        let overlap = obs.players[..slot]
+            .iter()
+            .filter(|other| other.kart.is_some_and(|other| other.index == kart.index))
+            .count() as f32;
+        let offset = overlap * 0.10 - 0.10;
+        let (center_x, center_y) = match direction {
+            eksplode_re_core::Dir::Down | eksplode_re_core::Dir::Up => {
+                (center_x + offset, center_y)
+            }
+            _ => (center_x, center_y + offset),
+        };
+        let skin = crate::look::skin(&looks[slot]);
+        let mut pen = Pen {
+            view: &view,
+            out: &mut out,
+            layer: 1000.0 + slot as f32,
+        };
+        let vehicle = [
+            ".ww..ww.", ".wwbbww.", "bbbbbbbb", "bbhhhhbb", "bbhhhhbb", "bbbbbbbb", ".wwbbww.",
+            ".ww..ww.",
+        ];
+        let pixels = runs(&vehicle, 8, |pixel| match pixel {
+            'w' => Some([0.08, 0.09, 0.10]),
+            'b' => Some(skin.body),
+            'h' => Some(skin.helmet),
+            _ => None,
+        });
+        let (pixel_x, pixel_y) = view.project(center_x - 0.40, center_y - 0.40);
+        pen.sprite_fit(&pixels, view.scale * 0.10, pixel_x, pixel_y);
+        let driver = runs_view(
+            &looks[slot],
+            crate::look::View::from_dir(direction),
+            Frame::Idle,
+            GRID_ROWS - 4,
+        );
+        let (driver_x, driver_y) = view.project(center_x - 0.36, center_y - 0.48);
+        pen.sprite_fit(&driver, view.scale * 0.06, driver_x, driver_y);
+        pen.rect(
+            skin.body,
+            center_x - 0.30,
+            center_y + 0.12,
+            center_x + 0.30,
+            center_y + 0.32,
+        );
+        let (delta_x, delta_y) = direction.delta();
+        let nose_x = center_x + f32::from(delta_x) * 0.30;
+        let nose_y = center_y + f32::from(delta_y) * 0.30;
+        pen.rect(
+            WHITE,
+            nose_x - 0.07,
+            nose_y - 0.07,
+            nose_x + 0.07,
+            nose_y + 0.07,
+        );
+        if let Some(team) = player.team {
+            pen.rect(
+                if team == 0 { TEAM_A_RING } else { TEAM_B_RING },
+                center_x - 0.20,
+                center_y + 0.18,
+                center_x + 0.20,
+                center_y + 0.25,
+            );
+        }
+    }
     out
 }
 
@@ -284,7 +393,7 @@ fn emit(out: &mut Vec<Command>, view: &View, it: &Item, looks: &[Look; 4], phase
             let size = if fit >= ICON_SIZE as f32 {
                 (fit / ICON_SIZE as f32).floor() * ICON_SIZE as f32
             } else {
-                fit.floor().max(8.0)
+                fit.floor().max(1.0)
             };
             let list = runs(&icon(kind), ICON_SIZE, |c| icon_colour(kind, c));
             let (px, py) = view.project(cx, cy + dy);

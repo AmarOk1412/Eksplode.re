@@ -24,6 +24,99 @@ where
 }
 
 #[test]
+fn f13_snapshot_preserves_additive_kart_state() {
+    let state = GameState::new(Config::default(), 7, [true; 4]).unwrap();
+    let mut value = serde_json::to_value(state.observe(PlayerId::new(0).unwrap())).unwrap();
+    value["tick"] = serde_json::json!(12);
+    value["players"][0]["alive"] = serde_json::json!(false);
+    let kart = serde_json::json!({"index": 4, "entered_tick": 10,
+        "cooldown_left": 0, "travel": "Right", "pending_return": null});
+    value["players"][0]["kart"] = kart.clone();
+    let observation: eksplode_re_core::Observation = serde_json::from_value(value).unwrap();
+    let encoded = serde_json::to_value(observation).unwrap();
+    assert_eq!(encoded["players"][0]["kart"], kart);
+}
+
+#[test]
+fn f13_snapshot_rejects_malformed_kart_fields() {
+    let state = GameState::new(Config::default(), 7, [true; 4]).unwrap();
+    let mut value = serde_json::to_value(state.observe(PlayerId::new(0).unwrap())).unwrap();
+    value["players"][0]["kart"] = serde_json::json!({"index": 4, "entered_tick": 0,
+        "cooldown_left": 0, "travel": "Teleport", "pending_return": null});
+    assert!(serde_json::from_value::<eksplode_re_core::Observation>(value).is_err());
+}
+
+#[test]
+fn f13_snapshot_preserves_bomb_and_flame_sources() {
+    let mut state = GameState::new(Config::default(), 7, [true; 4]).unwrap();
+    let mut inputs = [eksplode_re_core::PlayerInput::default(); 4];
+    inputs[0].bomb = true;
+    eksplode_re_core::step(&mut state, &inputs);
+    let mut value = serde_json::to_value(state.observe(PlayerId::new(0).unwrap())).unwrap();
+    value["bombs"][0]["revenge_stint"] = serde_json::json!(0);
+    value["flames"] = serde_json::json!([{"pos":{"x":1,"y":1},"ticks_left":5,
+        "owners":1,"revenge_stints":[0,null,null,null]}]);
+    let observation: eksplode_re_core::Observation = serde_json::from_value(value).unwrap();
+    let encoded = serde_json::to_value(observation).unwrap();
+    assert_eq!(encoded["bombs"][0]["revenge_stint"], 0);
+    assert_eq!(encoded["flames"][0]["revenge_stints"][0], 0);
+}
+
+#[test]
+fn f13_snapshot_sources_are_fixed_width_and_fit_the_existing_wire_limit() {
+    let mut state = GameState::new(
+        Config {
+            width: 25,
+            height: 19,
+            block_density: 0.0,
+            ..Config::default()
+        },
+        7,
+        [true; 4],
+    )
+    .unwrap();
+    state.tick = 10;
+    for player in &mut state.players {
+        player.alive = false;
+        player.kart = Some(eksplode_re_core::KartState {
+            index: player.id.index() as u16,
+            entered_tick: 8,
+            cooldown_left: 0,
+            travel: None,
+            pending_return: None,
+        });
+    }
+    for row in 1..18 {
+        for column in 1..24 {
+            state.flames.push(eksplode_re_core::Flame {
+                pos: Pos::new(column, row),
+                ticks_left: 10,
+                owners: 15,
+                revenge_stints: [Some(8); 4],
+            });
+        }
+    }
+    let observation = state.observe(PlayerId::new(0).unwrap());
+    let message = ServerMsg::Snapshot {
+        tick: 10,
+        state: Box::new(observation.clone()),
+        events: vec![],
+    };
+    assert!(encode(&message).unwrap().len() < MAX_LINE);
+    roundtrip(message);
+    for invalid in [
+        serde_json::json!([]),
+        serde_json::json!([8, 8, 8]),
+        serde_json::json!([8, 8, 8, 8, 8]),
+        serde_json::json!(["bad", null, null, null]),
+    ] {
+        let mut value = serde_json::to_value(&observation).unwrap();
+        value["flames"][0]["revenge_stints"] = invalid;
+        assert!(serde_json::from_value::<eksplode_re_core::Observation>(value).is_err());
+    }
+}
+
+#[test]
 fn room_fixtures_share_monotonic_time_credentials_and_captured_events() {
     let clock = common::FakeClock::default();
     let shared_clock = clock.clone();
@@ -703,6 +796,7 @@ fn the_observation_carries_punch_malus_and_flight() {
         ticks_left: 120,
     });
     let bomb = eksplode_re_core::Bomb {
+        revenge_stint: None,
         owner: PlayerId::new(1).unwrap(),
         pos: Pos::new(3, 1),
         ticks_left: 30,
@@ -717,6 +811,7 @@ fn the_observation_carries_punch_malus_and_flight() {
     s.bombs.push(bomb);
     s.players[2].has_kick = true;
     s.bombs.push(eksplode_re_core::Bomb {
+        revenge_stint: None,
         owner: PlayerId::new(2).unwrap(),
         pos: Pos::new(5, 5),
         ticks_left: 30,

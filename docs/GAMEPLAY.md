@@ -18,7 +18,7 @@ stay for the rematch. The room closes when the last person leaves.
 
 | Setting | Values | Default |
 |---------|--------|---------|
-| Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x20, 40x22 and 52x26) | small |
+| Board size | small 15 x 13, medium 19 x 15, large 25 x 19 (every size has the corner start areas, is fully reachable and fits the page; the terminal needs 40x22, 44x24 and 56x28 including the kart gutter) | small |
 | Round time | 2, 3, 5 or 10 minutes | 3 |
 | Friendly fire | on or off (Team mode only) | on |
 | Bot difficulty | Easy, Medium or Hard, for every bot of the room (only the owner chooses it; local terminal games keep Medium) | Medium |
@@ -66,6 +66,22 @@ The round never ends by time while two players are alive. The page plays a warni
 impact sound and shows "The walls close in!"; the clock then says `CLOSING`.
 
 A round with a single participant (practice) has no end pattern and ends at the time limit.
+
+## Revenge karts
+
+Before the first wall-closing warning in Normal and Team mode, an eliminated participant becomes a small kart outside the nearest board edge if the round continues. Karts retain their player identity and team; they cannot be hit by on-board explosions, collect items, block players or count as living survivors. They can overlap and pass. Chaser and a finished practice round never grant karts.
+
+- Left/right drives counterclockwise/clockwise, follows corners automatically and stops on release; opposing inputs are neutral. Up/down and punch have no kart effect. Keyboard, controller, touch and terminal use their existing bindings.
+- Bomb throws perpendicular inward toward the second interior square; the border wall does not count. A throw uses the ordinary starting fuse and range, with one active current-stint kart bomb at a time even if old ordinary bombs remain.
+- Walls, destructible blocks, bombs and survivors are jumped over until the first free square, like a punch. At the far edge the bomb searches backward toward the launch square. A fully blocked line refuses launch without consuming capacity; if occupancy changes after launch, the bomb can remain airborne until a landing opens or its fuse ends.
+- A survivor reached at a candidate landing square cannot move for one second, but can still bomb or punch. Impact does not itself kill. Another hit restarts the second rather than adding time. With Team friendly fire off, teammates are protected from both this stun and teammate blast damage. Initial flight over square one and backward fallback searching do not stun players.
+- An opponent kill credited to a bomb thrown during the player's current kart stint earns one return. Teammate kills, other owners' blasts in chain reactions, pre-death bombs and earlier-stint bombs/flames do not qualify. Normal kill statistics retain their existing ownership rules.
+- Return uses the victim's square if safe, otherwise the nearest free square without a wall, block, bomb, survivor or active flame; ties are top-to-bottom then left-to-right. Simultaneous owners return in slot order and never overlap. If no square is safe, one pending return waits while the round continues; extra kills do not stockpile lives.
+- A returned player keeps identity, team, statistics and outstanding bomb ownership, but gets round-start powers/capacity, no malus/stun and no new protective shield. Owned bombs still count against that reset capacity. Further elimination can grant another kart before closing.
+
+Earned returns are resolved before checking the winner. Karts and pending returns without an available square never keep a round alive. At the first closing warning, all karts and pending returns disappear before actions or returns on that same tick; no subsequent death creates a kart or kill grants a return. Already thrown bombs finish normally, and already returned living players stay on the board. Round end/rematch clears every temporary kart/return/stun state. A bot replacing a disconnected human inherits that state, rather than receiving a fresh life.
+
+Both views reserve the perimeter gutter for the whole round. Terminal karts are `K1` through `K4`; stunned survivors are marked and their status shows `stunned 1s`. The browser shows a compact inward-facing vehicle, the player/team identity, and a stun marker/countdown. No room option, binding, power-up or new mode is added.
 
 ## Team mode
 

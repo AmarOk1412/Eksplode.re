@@ -252,6 +252,7 @@ fn elimination_clears_the_malus() {
     pick_up(&mut s, PowerUpKind::Slow);
     let at = s.players[0].pos;
     s.flames.push(Flame {
+        revenge_stints: [None; 4],
         pos: at,
         ticks_left: 5,
         owners: 0,

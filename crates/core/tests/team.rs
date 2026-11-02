@@ -21,6 +21,7 @@ fn team_state(config: Config) -> GameState {
 
 fn flame(s: &mut GameState, x: u8, y: u8, owners: u8) {
     s.flames.push(Flame {
+        revenge_stints: [None; 4],
         pos: pos(x, y),
         ticks_left: 3,
         owners,

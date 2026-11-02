@@ -21,6 +21,7 @@ pub struct Interp {
     /// Who was alive in the latest snapshot, and the tick each player was seen dying.
     alive: [bool; 4],
     died_at: [Option<u32>; 4],
+    kart_stints: [Option<u32>; 4],
 }
 
 impl Interp {
@@ -30,7 +31,17 @@ impl Interp {
         let mut now = [(0.0, 0.0); 4];
         let mut alive = [false; 4];
         for (slot, p) in obs.players.iter().enumerate().take(4) {
-            now[slot] = (f32::from(p.pos.x), f32::from(p.pos.y));
+            now[slot] = p
+                .kart
+                .and_then(|kart| {
+                    eksplode_re_core::kart::view_position(
+                        obs.arena.width(),
+                        obs.arena.height(),
+                        kart.index,
+                    )
+                })
+                .map(|(column, row)| (column - 0.5, row - 0.5))
+                .unwrap_or((f32::from(p.pos.x), f32::from(p.pos.y)));
             alive[slot] = p.alive;
         }
         for (slot, p) in obs.players.iter().enumerate().take(4) {
@@ -58,6 +69,21 @@ impl Interp {
                 self.steps = [0; 4];
                 self.died_at = [None; 4];
             }
+        }
+        for (slot, player) in obs.players.iter().enumerate() {
+            let stint = player.kart.map(|kart| kart.entered_tick);
+            if stint != self.kart_stints[slot]
+                || (player.alive && !self.alive[slot])
+                || self
+                    .tick
+                    .is_some_and(|tick| obs.tick > tick.saturating_add(1))
+            {
+                self.prev[slot] = now[slot];
+            }
+            if stint.is_some() {
+                self.died_at[slot] = None;
+            }
+            self.kart_stints[slot] = stint;
         }
         self.cur = now;
         self.alive = alive;

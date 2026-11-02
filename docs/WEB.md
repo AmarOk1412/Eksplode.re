@@ -264,6 +264,12 @@ are cleared when the window loses focus or becomes hidden. Messages from the ser
 (`Only Ann can start the match`, `Player 3 left, a bot took over`, `You won!`), and when the
 connection drops the page says so and offers a Retry button.
 
+## Revenge karts
+
+Normal and Team participants eliminated before closing remain in the match as perimeter karts, shown by the shared WASM renderer. Existing horizontal keyboard/gamepad/touch controls drive around the board; the bomb action throws inward. The HUD distinguishes a kart from permanent elimination, retains identity/team, and shows authoritative one-second stun. A human kart still counts as participating for in-match menu navigation. No new binding or room option is required; full rules are in [GAMEPLAY.md](GAMEPLAY.md#revenge-karts).
+
+The canvas reserves a fixed one-tile exterior gutter, keeping the board stable when participants enter/leave karts. Return and reconnect transitions snap to current positions; lap/corner motion stays outside the board. Terminal clients use the same rules and need 40x22, 44x24 or 56x28 for small, medium or large boards. Only updated clients render this additive snapshot state; older clients remain wire-compatible with their previous eliminated-player display.
+
 ## The WebAssembly module
 
 The module has no imports and no JavaScript glue. `app.js` copies the latest `Observation` (as

@@ -21,6 +21,45 @@ fn random_inputs(rng: &mut Rng) -> [PlayerInput; 4] {
     inputs
 }
 
+#[test]
+fn f13_us3_as6_kart_return_and_second_stint_replay_on_every_board_size() {
+    for (width, height) in [(15, 13), (19, 15), (25, 19)] {
+        let config = Config {
+            width,
+            height,
+            block_density: 0.0,
+            fuse_ticks: 6,
+            flame_ticks: 2,
+            punch_hop_ticks: 1,
+            ..Config::default()
+        };
+        let mut first = GameState::new(config, 7, [true; 4]).unwrap();
+        first.players[1].pos = pos(1, 3);
+        add_bomb(&mut first, 2, 1, 1, 1);
+        first.bombs[0].range = 0;
+        let mut second = first.clone();
+        let mut stints = BTreeSet::new();
+        let mut returned = false;
+        for _ in 0..100 {
+            let mut inputs = idle();
+            inputs[0].bomb = true;
+            let first_events = step(&mut first, &inputs);
+            let second_events = step(&mut second, &inputs);
+            assert_eq!(first_events, second_events);
+            assert_eq!(first, second);
+            if let Some(kart) = first.players[0].kart {
+                stints.insert(kart.entered_tick);
+            }
+            returned |= first.players[0].alive && first.players[0].kills > 0;
+        }
+        assert!(returned, "earned a return on {width}x{height}");
+        assert!(
+            stints.len() >= 2,
+            "entered a second kart stint on {width}x{height}"
+        );
+    }
+}
+
 fn check_invariants(s: &GameState) {
     let mut seen = BTreeSet::new();
     for p in s.players.iter().filter(|p| p.alive) {
@@ -35,11 +74,17 @@ fn check_invariants(s: &GameState) {
             "bomb accounting for {:?}",
             p.id
         );
-        assert!(p.bombs_active <= p.bombs_max);
+        if !s
+            .bombs
+            .iter()
+            .any(|bomb| bomb.owner == p.id && bomb.revenge_stint.is_some())
+        {
+            assert!(p.bombs_active <= p.bombs_max);
+        }
         assert!(p.range <= s.config.max_range && p.bombs_max <= s.config.max_bombs);
     }
     let mut bomb_tiles = BTreeSet::new();
-    for b in &s.bombs {
+    for b in s.bombs.iter().filter(|bomb| bomb.flight.is_none()) {
         assert!(bomb_tiles.insert(b.pos), "two bombs on {:?}", b.pos);
     }
 }
@@ -128,7 +173,13 @@ fn fingerprint(seed: u64) -> (u64, u64) {
     let mut rng = Rng::new(seed ^ 0x5EED);
     let mut log = String::new();
     for _ in 0..300 {
-        log.push_str(&format!("{:?}\n", step(&mut s, &random_inputs(&mut rng))));
+        let mut inputs = random_inputs(&mut rng);
+        for (slot, player) in s.players.iter().enumerate() {
+            if !player.alive {
+                inputs[slot] = PlayerInput::default();
+            }
+        }
+        log.push_str(&format!("{:?}\n", step(&mut s, &inputs)));
     }
     (arena, fnv(&log))
 }

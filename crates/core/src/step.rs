@@ -5,6 +5,7 @@ use crate::arena::Tile;
 use crate::bomb;
 use crate::chaser;
 use crate::closing;
+use crate::kart;
 use crate::kick;
 use crate::punch;
 use crate::state::{ActiveMalus, Event, GameState, Outcome, Phase, PowerUpKind, Role};
@@ -23,6 +24,11 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
         return events;
     }
     let was_alive: [bool; MAX_PLAYERS] = std::array::from_fn(|i| state.players[i].alive);
+    if !kart::enabled(state) {
+        for player in &mut state.players {
+            player.kart = None;
+        }
+    }
 
     if state.tick == 0 && chaser::applies(state) {
         for p in state.players.iter().filter(|p| p.alive) {
@@ -50,6 +56,10 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
     let order = [0, 1, 2, 3].map(|i| (first + i) % MAX_PLAYERS);
     for &i in &order {
         move_player(state, i, inputs[i], &mut events);
+        kart::move_kart(state, i, inputs[i].mv);
+    }
+    for player in &mut state.players {
+        player.immobilized_left = player.immobilized_left.saturating_sub(1);
     }
     punch::advance(state, &mut events);
     kick::advance(state, &mut events);
@@ -61,18 +71,36 @@ pub fn step(state: &mut GameState, inputs: &[PlayerInput; MAX_PLAYERS]) -> Vec<E
     for &i in &order {
         if inputs[i].bomb || state.players[i].bombs_on_their_own() {
             bomb::place(state, i, &mut events);
+            kart::launch(state, i, &mut events);
         }
     }
 
     bomb::detonate(state, &mut events);
     closing::advance(state, &mut events);
     chaser::spawn_bonus(state, &mut events);
-    eliminate(state, &mut events);
+    let earned_returns = eliminate(state, &mut events);
     stamp_eliminations(state, &was_alive);
+    for (slot, alive) in was_alive.iter().enumerate() {
+        if *alive && !state.players[slot].alive {
+            kart::enter(state, slot);
+        }
+    }
+    for (slot, preferred) in earned_returns.iter().enumerate() {
+        if let Some(kart) = state.players[slot].kart.as_mut() {
+            if kart.pending_return.is_none() {
+                kart.pending_return = *preferred;
+            }
+        }
+    }
+    kart::resolve_returns(state);
 
     state.tick += 1;
     if let Some(outcome) = outcome(state) {
         state.phase = Phase::Ended(outcome);
+        for player in &mut state.players {
+            player.kart = None;
+            player.immobilized_left = 0;
+        }
         events.push(Event::RoundEnded(outcome));
     }
     events
@@ -105,7 +133,7 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
         return;
     };
     state.players[i].facing = dir;
-    if cooldown_left > 0 {
+    if cooldown_left > 0 || state.players[i].immobilized_left > 0 {
         return;
     }
     let Some(to) = from.step(dir, state.arena.width(), state.arena.height()) else {
@@ -162,12 +190,15 @@ fn move_player(state: &mut GameState, i: usize, input: PlayerInput, events: &mut
     }
 }
 
-fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
+fn eliminate(state: &mut GameState, events: &mut Vec<Event>) -> [Option<crate::Pos>; MAX_PLAYERS] {
+    let mut earned_returns = [None; MAX_PLAYERS];
+    let kart_eligible = kart::enabled(state);
     for i in 0..MAX_PLAYERS {
         let p = &state.players[i];
         let mut burning = false;
         // the slots whose bombs lit a flame that hurts `p` on its tile
         let mut owners = 0u8;
+        let mut revenge_stints = [None; MAX_PLAYERS];
         for f in state
             .flames
             .iter()
@@ -175,6 +206,9 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
         {
             burning = true;
             owners |= f.owners;
+            for (source, contribution) in revenge_stints.iter_mut().zip(f.revenge_stints) {
+                *source = (*source).max(contribution);
+            }
         }
         if p.alive && burning {
             if p.role == Role::Chaser && p.hearts > 1 {
@@ -193,16 +227,31 @@ fn eliminate(state: &mut GameState, events: &mut Vec<Event>) {
             if p.role == Role::Chaser && p.shield_left > 0 {
                 continue;
             }
+            let victim_pos = p.pos;
+            let victim_team = p.team;
             events.push(Event::PlayerEliminated { player: p.id });
             state.players[i].alive = false;
             state.players[i].malus = None;
+            state.players[i].immobilized_left = 0;
             for (j, killer) in state.players.iter_mut().enumerate() {
                 if j != i && owners & (1 << j) != 0 {
                     killer.kills = killer.kills.saturating_add(1);
+                    let opponent =
+                        state.config.mode != crate::Mode::Team || killer.team != victim_team;
+                    if kart_eligible
+                        && opponent
+                        && earned_returns[j].is_none()
+                        && killer
+                            .kart
+                            .is_some_and(|kart| revenge_stints[j] == Some(kart.entered_tick))
+                    {
+                        earned_returns[j] = Some(victim_pos);
+                    }
                 }
             }
         }
     }
+    earned_returns
 }
 
 /// Gives every participant eliminated during this tick (by a blast or a landing block) the next

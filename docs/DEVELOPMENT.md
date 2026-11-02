@@ -46,6 +46,14 @@ Game modes and room settings use the prefix `f4_` (`f4_us2_as3_...`), the manual
 terminal host asks for the room settings on a setup screen unless a settings option or
 `--no-setup` is given, so `scripts/pty-enter-check.py` and other scripts pass `--no-setup`.
 
+## Revenge kart validation
+
+Feature 013 acceptance tests use `f13_usN_asM_`. Core fixtures are consolidated in existing `crates/core/tests/round_end.rs`, with deterministic all-size/multi-stint replay in `determinism.rs`; input, bot, view, codec and mixed-transport tests live beside their existing neighbors. Run focused packages with `cargo test -p eksplode-re-core --features serde f13_`, then the corresponding bots/net/CLI/web/web-render packages, and check that each selected prefix has a nonzero registered/executed test count.
+
+`bash scripts/check-scenarios.sh` now checks all 26 feature-013 prefixes against registered Rust test names as well as retaining the existing feature checks. `F13_ONLY="f13_us1 f13_us2_as3" bash scripts/check-scenarios.sh` limits the new feature checks; unknown selectors are errors. Registration checks do not replace executing the suites. Existing observation JSON fixtures remain legacy compatibility cases; new optional fields omit neutral values. No new event variant or network input type is necessary.
+
+After rebuilding WASM, exercise desktop/mobile browser views, keyboard/controller/touch input, a live TCP/WebSocket match, return/cutoff, and terminal resizing at the new 40x22/44x24/56x28 minima. The old browser smoke script's `#join` selector predates the current menu; use the current browser flow and assert canvas pixels/screenshots. The feature quickstart in the planning workspace records acceptance evidence and the separate five-person comprehension playtest.
+
 ## Gates
 
 Everything below must pass before a change is merged (CI runs the same):

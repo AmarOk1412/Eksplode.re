@@ -153,6 +153,21 @@ Examples:
 {"type":"Ended","outcome":{"Winner":1}}
 ```
 
+### Revenge kart snapshot fields
+
+The existing version-1 game envelopes (also used inside version-2 room routing), `Input`, `Snapshot`, and event variants are unchanged. Additive observation fields use neutral serde defaults:
+
+| Object | Field | Default / Meaning |
+|--------|-------|-------------------|
+| Player | `kart` | absent/null, or `{index: u16, entered_tick: u32, cooldown_left: u32, travel: "Left"/"Right"/null, pending_return: {x,y}/null}`. `alive` remains false for a kart. |
+| Player | `immobilized_left` | absent/0; subsequent movement passes blocked, at most `config.tick_hz`. |
+| Bomb | `revenge_stint` | absent/null; throwing owner's kart entry tick, retained after landing/kick/punch. |
+| Flame | `revenge_stints` | absent/four nulls; newest contributing kart entry tick for each of the four owner slots. Existing `owners` bits retain normal damage/kill semantics. |
+
+The perimeter index is less than `2 * (width + height) - 4`, computed with widened arithmetic. A kart cannot coexist with `alive = true`; only horizontal travel is valid. Pending positions must be interior, source ticks cannot be future ticks, and a flame source requires its owner bit. Invalid added state is rejected when structurally malformed or made inert at public observation/render boundaries. Clients cannot assign any of these authoritative fields through `Input`.
+
+Old observations decode with no karts/stun/sources. Older typed clients can ignore added object fields but keep their old dead-player presentation; updated clients are required to display karts. No new event enum variants are emitted, so legacy enum decoding remains valid. Entry/movement/return/cutoff effects derive from snapshots; gaps/reconnects display current authoritative state, not guessed transitions. The 64 KiB message limit is unchanged.
+
 An `Observation` is what any participant, human or bot, may see: the arena, the four players,
 bombs, flames and the power-ups lying on the board. It never contains the random generator or
 the drop table. Players carry `has_punch`, `has_kick` and `malus` (`{"kind":"Slow","ticks_left":120}` or

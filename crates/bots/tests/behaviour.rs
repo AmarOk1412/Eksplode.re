@@ -8,6 +8,66 @@ fn decide(s: &GameState) -> PlayerInput {
     DefaultBot::new(1).decide(&obs(s, 0))
 }
 
+#[test]
+fn f13_us3_as6_bot_earns_a_return_and_resumes_with_the_same_profile() {
+    let mut state = state(
+        &OPEN,
+        [Some((1, 1)), Some((1, 3)), Some((5, 5)), Some((5, 1))],
+    );
+    state.config.fuse_ticks = 6;
+    state.config.punch_hop_ticks = 1;
+    state.players[0].alive = false;
+    state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 1,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    let mut bot = DefaultBot::new(1);
+    let profile = bot.profile();
+    for _ in 0..12 {
+        let mut inputs = [PlayerInput::default(); 4];
+        inputs[0] = bot.decide(&obs(&state, 0));
+        step(&mut state, &inputs);
+        if state.players[0].alive {
+            break;
+        }
+    }
+    assert!(state.players[0].alive);
+    assert!(state.players[0].kart.is_none());
+    assert_eq!(bot.profile(), profile);
+    let mut inputs = [PlayerInput::default(); 4];
+    inputs[0] = bot.decide(&obs(&state, 0));
+    step(&mut state, &inputs);
+    assert!(state.players[0].alive);
+}
+
+#[test]
+fn f13_us4_as6_kart_bot_can_aim_throw_and_keep_travelling() {
+    let mut state = state(&OPEN, [Some((1, 1)), Some((1, 3)), Some((5, 5)), None]);
+    state.players[0].alive = false;
+    state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 1,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    assert!(
+        decide(&state).bomb,
+        "current inward lane threatens an opponent"
+    );
+    state.players[1].pos = pos(5, 2);
+    let movement = decide(&state).mv;
+    assert!(matches!(movement, Some(Dir::Left | Dir::Right)));
+    state.config.mode = eksplode_re_core::Mode::Team;
+    state.players[0].team = Some(0);
+    state.players[1].team = Some(0);
+    state.players[2].alive = false;
+    assert!(!decide(&state).bomb, "never deliberately target a teammate");
+}
+
 /// Runs the bot as player 0 and everything else idle.
 fn run_bot(s: &mut GameState, ticks: u32) -> Vec<Event> {
     let mut bot = DefaultBot::new(1);
@@ -779,6 +839,7 @@ fn f12_us2_think_interval_holds_the_last_move() {
         bot.decide(&obs(&s, 0));
         let mut burning = s.clone();
         burning.flames.push(eksplode_re_core::Flame {
+            revenge_stints: [None; 4],
             pos: target(pos(1, 3), dir),
             ticks_left: 5,
             owners: 0,
@@ -823,6 +884,7 @@ fn f12_us2_as5_mistakes_never_step_into_fire() {
         let mut s = duel(&OPEN, (3, 3), (5, 5));
         for (x, y) in [(3, 2), (2, 3)] {
             s.flames.push(eksplode_re_core::Flame {
+                revenge_stints: [None; 4],
                 pos: pos(x, y),
                 ticks_left: 8,
                 owners: 0,

@@ -170,6 +170,7 @@ fn player_action(code: KeyCode, binding: KeyBindings) -> Option<PlayerAction> {
 pub struct InputState {
     hold_ticks: u32,
     held: [Option<(Dir, u32)>; 4],
+    horizontal: [[u32; 2]; 4],
     bomb: [bool; 4],
     punch: [bool; 4],
 }
@@ -179,6 +180,7 @@ impl InputState {
         Self {
             hold_ticks,
             held: [None; 4],
+            horizontal: [[0; 2]; 4],
             bomb: [false; 4],
             punch: [false; 4],
         }
@@ -190,7 +192,14 @@ impl InputState {
             return;
         }
         match action {
-            PlayerAction::Move(d) => self.held[slot] = Some((d, self.hold_ticks)),
+            PlayerAction::Move(d) => {
+                self.held[slot] = Some((d, self.hold_ticks));
+                match d {
+                    Dir::Left => self.horizontal[slot][0] = self.hold_ticks.max(1),
+                    Dir::Right => self.horizontal[slot][1] = self.hold_ticks.max(1),
+                    _ => {}
+                }
+            }
             PlayerAction::Bomb => self.bomb[slot] = true,
             PlayerAction::Punch => self.punch[slot] = true,
         }
@@ -198,12 +207,25 @@ impl InputState {
 
     /// Inputs for the next tick; bomb presses are consumed, directions age by one tick.
     pub fn take(&mut self) -> [PlayerInput; 4] {
+        self.take_for_karts([false; 4])
+    }
+
+    /// Keeps opposing horizontal holds neutral for kart participants only.
+    pub fn take_for_karts(&mut self, karts: [bool; 4]) -> [PlayerInput; 4] {
         let mut out = [PlayerInput::default(); 4];
         for (slot, input) in out.iter_mut().enumerate() {
             if let Some((dir, left)) = self.held[slot] {
                 input.mv = Some(dir);
                 self.held[slot] = left.checked_sub(1).filter(|l| *l > 0).map(|l| (dir, l));
             }
+            if karts[slot] {
+                input.mv = match self.horizontal[slot].map(|ticks| ticks > 0) {
+                    [true, false] => Some(Dir::Left),
+                    [false, true] => Some(Dir::Right),
+                    _ => None,
+                };
+            }
+            self.horizontal[slot] = self.horizontal[slot].map(|ticks| ticks.saturating_sub(1));
             input.bomb = std::mem::take(&mut self.bomb[slot]);
             input.punch = std::mem::take(&mut self.punch[slot]);
         }
@@ -213,6 +235,7 @@ impl InputState {
     /// Forgets everything, e.g. when pausing or restarting.
     pub fn clear(&mut self) {
         self.held = [None; 4];
+        self.horizontal = [[0; 2]; 4];
         self.bomb = [false; 4];
         self.punch = [false; 4];
     }

@@ -71,7 +71,7 @@ pub unsafe extern "C" fn eksplode_re_load(ptr: *const u8, len: usize) -> i32 {
     let Ok(text) = std::str::from_utf8(bytes) else {
         return 1;
     };
-    let Ok(obs) = serde_json::from_str::<Observation>(text) else {
+    let Ok(mut obs) = serde_json::from_str::<Observation>(text) else {
         return 2;
     };
     if !obs.arena.is_valid() {
@@ -80,6 +80,7 @@ pub unsafe extern "C" fn eksplode_re_load(ptr: *const u8, len: usize) -> i32 {
     if obs.arena.width() > MAX_ARENA || obs.arena.height() > MAX_ARENA {
         return 3;
     }
+    obs.sanitize_participation();
     STATE.with(|s| {
         let mut s = s.borrow_mut();
         s.interp.update(&obs);

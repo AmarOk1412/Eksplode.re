@@ -1,5 +1,27 @@
 #![allow(clippy::unwrap_used)]
 
+#[test]
+fn f13_us1_as1_fixed_gutter_has_the_documented_terminal_sizes() {
+    for (width, height, expected) in [(15, 13, (40, 22)), (19, 15, (44, 24)), (25, 19, (56, 28))] {
+        let state = eksplode_re_core::GameState::new(
+            eksplode_re_core::Config {
+                width,
+                height,
+                ..eksplode_re_core::Config::default()
+            },
+            7,
+            [true; 4],
+        )
+        .unwrap();
+        assert_eq!(
+            eksplode_re_cli::view::required_size(
+                &state.observe(eksplode_re_core::PlayerId::new(0).unwrap())
+            ),
+            expected
+        );
+    }
+}
+
 use eksplode_re_cli::view::{render, required_size, ViewContext};
 use eksplode_re_core::{
     Arena, Bomb, Config, Flame, GameState, Outcome, Phase, PlayerId, Pos, PowerUp, PowerUpKind,
@@ -48,6 +70,74 @@ fn screen(state: &GameState, ctx: &ViewContext) -> String {
 }
 
 #[test]
+fn f13_us4_as5_overlapping_kart_fixture_keeps_every_identity_visible() {
+    let mut state = GameState::new(Config::default(), 7, [true; 4]).unwrap();
+    for player in &mut state.players {
+        player.alive = false;
+        player.kart = Some(eksplode_re_core::KartState {
+            index: 2,
+            entered_tick: 0,
+            cooldown_left: 0,
+            travel: None,
+            pending_return: None,
+        });
+    }
+    let rendered = screen(&state, &ctx());
+    for glyph in ["K1", "K2", "K3", "K4"] {
+        assert!(rendered.contains(glyph), "{glyph}");
+    }
+    assert!(state
+        .players
+        .iter()
+        .all(|player| player.kart.unwrap().index == 2));
+}
+
+#[test]
+fn f13_malformed_wire_kart_index_is_not_rendered() {
+    let mut observation = base().observe(pid(0));
+    observation.players[0].alive = false;
+    observation.players[0].kart = Some(eksplode_re_core::KartState {
+        index: u16::MAX,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal
+        .draw(|frame| render(frame, &observation, &ctx()))
+        .unwrap();
+    let buffer = terminal.backend().buffer();
+    let screen = (0..24)
+        .flat_map(|row| (0..80).map(move |column| buffer[(column, row)].symbol()))
+        .collect::<String>();
+    assert!(!screen.contains("K1"));
+}
+
+#[test]
+fn f13_us2_as3_stunned_survivor_is_visible_in_terminal_status() {
+    let mut state = base();
+    state.players[0].immobilized_left = 20;
+    assert!(screen(&state, &ctx()).contains("stunned 1s"));
+}
+
+#[test]
+fn f13_us1_as1_kart_is_drawn_outside_the_board_with_identity() {
+    let mut state = base();
+    state.players[0].alive = false;
+    state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 1,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    let lines = draw(&state, &ctx(), 80, 24);
+    assert!(lines[1].contains("K1"), "{}", lines.join("\n"));
+    assert!(screen(&state, &ctx()).contains("kart"));
+}
+
+#[test]
 fn draws_terrain_and_players() {
     let s = screen(&base(), &ctx());
     assert!(s.contains("##"), "wall");
@@ -61,6 +151,7 @@ fn draws_terrain_and_players() {
 fn draws_bombs_flames_and_powerups() {
     let mut st = base();
     st.bombs.push(Bomb {
+        revenge_stint: None,
         owner: pid(0),
         pos: Pos::new(3, 3),
         ticks_left: 30,
@@ -69,6 +160,7 @@ fn draws_bombs_flames_and_powerups() {
         slide: None,
     });
     st.flames.push(Flame {
+        revenge_stints: [None; 4],
         pos: Pos::new(4, 3),
         ticks_left: 5,
         owners: 0,
@@ -147,7 +239,7 @@ fn minimum_size_is_enough() {
 #[test]
 fn default_arena_fits_the_minimum_size() {
     let st = GameState::new(Config::default(), 1, [true; 4]).unwrap();
-    assert_eq!(required_size(&st.observe(pid(0))), (40, 20));
+    assert_eq!(required_size(&st.observe(pid(0))), (40, 22));
 }
 
 #[test]
@@ -169,6 +261,7 @@ fn f3_us2_as9_every_power_has_its_letter() {
 fn f3_us2_as9_a_bomb_in_flight_looks_different_from_a_landed_one() {
     let mut st = base();
     st.bombs.push(Bomb {
+        revenge_stint: None,
         owner: pid(0),
         pos: Pos::new(3, 3),
         ticks_left: 30,
@@ -219,6 +312,7 @@ fn f3_us2_as12_a_sliding_bomb_shows_its_direction() {
     ] {
         let mut st = base();
         st.bombs.push(Bomb {
+            revenge_stint: None,
             owner: pid(0),
             pos: Pos::new(3, 3),
             ticks_left: 30,
@@ -300,9 +394,9 @@ fn state_of(size: eksplode_re_core::BoardSize) -> GameState {
 fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
     use eksplode_re_core::BoardSize;
     let need = |size| required_size(&state_of(size).observe(pid(0)));
-    assert_eq!(need(BoardSize::Small), (40, 20));
-    assert_eq!(need(BoardSize::Medium), (40, 22));
-    assert_eq!(need(BoardSize::Large), (52, 26));
+    assert_eq!(need(BoardSize::Small), (40, 22));
+    assert_eq!(need(BoardSize::Medium), (44, 24));
+    assert_eq!(need(BoardSize::Large), (56, 28));
 
     let large = state_of(BoardSize::Large);
     let small_terminal = draw(&large, &ctx(), 40, 20).join("\n");
@@ -310,11 +404,11 @@ fn f4_us1_as6_the_terminal_needs_room_for_the_chosen_board_and_says_so() {
         small_terminal.contains("terminal too small"),
         "{small_terminal}"
     );
-    assert!(small_terminal.contains("need 52x26"), "{small_terminal}");
+    assert!(small_terminal.contains("need 56x28"), "{small_terminal}");
     assert!(small_terminal.contains("have 40x20"), "{small_terminal}");
 
     // a terminal of the needed size draws the whole board
-    let fits = draw(&large, &ctx(), 52, 26).join("\n");
+    let fits = draw(&large, &ctx(), 56, 28).join("\n");
     assert!(!fits.contains("terminal too small"), "{fits}");
     assert!(fits.contains("P1") && fits.contains("P4"));
 }

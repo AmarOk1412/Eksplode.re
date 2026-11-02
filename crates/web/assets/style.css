@@ -528,6 +528,9 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     position: fixed;
     inset: 0;
     z-index: 5;
+    grid-template-areas: "timer" "hud" "arena";
+    grid-template-rows: 24px auto minmax(0, 1fr);
+    align-content: stretch;
     width: 100vw;
     height: 100vh;
     height: 100dvh;
@@ -535,9 +538,9 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     overflow: hidden;
     background: var(--bg);
   }
-  #view { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #timer { position: absolute; z-index: 2; top: max(4px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 1.3rem; }
-  #hud { position: absolute; z-index: 2; top: max(28px, calc(env(safe-area-inset-top) + 22px)); left: 50%; transform: translateX(-50%); gap: 4px 10px; margin: 0; font-size: 0.75rem; }
+  #view { position: static; grid-area: arena; min-height: 0; width: 100%; height: 100%; }
+  #timer { position: static; grid-area: timer; justify-self: center; z-index: 2; transform: none; font-size: 1.3rem; }
+  #hud { position: static; grid-area: hud; justify-self: center; z-index: 2; width: calc(100% - 80px); max-width: 100%; transform: none; gap: 4px 10px; margin: 0; font-size: 0.75rem; }
   #hud li { gap: 4px; font-size: inherit; }
   #hud .chip { width: 18px; height: 18px; }
   .touch-controls { position: absolute; inset: 0; z-index: 4; pointer-events: none; }
@@ -587,6 +590,9 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
 @media (orientation: portrait) and (max-width: 600px) {
   .touch-device #game-panel {
     --touch-pad: calc(min(46vw, 220px) + 28px + env(safe-area-inset-bottom));
+    grid-template-areas: "timer" "hud" "arena" "controls";
+    grid-template-rows: 24px auto minmax(0, 1fr) var(--touch-pad);
+    align-content: stretch;
     position: fixed;
     inset: 0;
     z-index: 5;
@@ -597,9 +603,9 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
     overflow: hidden;
     background: var(--bg);
   }
-  .touch-device #view { position: absolute; inset: 0 0 auto 0; width: 100%; height: calc(100% - var(--touch-pad)); }
-  .touch-device #timer { position: absolute; z-index: 2; top: max(4px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 1.3rem; }
-  .touch-device #hud { position: absolute; z-index: 2; top: max(28px, calc(env(safe-area-inset-top) + 22px)); left: 50%; transform: translateX(-50%); gap: 4px 10px; margin: 0; font-size: 0.75rem; }
+  .touch-device #view { position: static; grid-area: arena; min-height: 0; width: 100%; height: 100%; }
+  .touch-device #timer { position: static; grid-area: timer; justify-self: center; z-index: 2; transform: none; font-size: 1.3rem; }
+  .touch-device #hud { position: static; grid-area: hud; justify-self: center; z-index: 2; width: calc(100% - 56px); max-width: 100%; transform: none; gap: 4px 10px; margin: 0; font-size: 0.75rem; }
   .touch-device #hud li { gap: 4px; font-size: inherit; }
   .touch-device #hud .chip { width: 18px; height: 18px; }
   .touch-device .touch-controls { position: absolute; inset: 0; z-index: 4; pointer-events: none; }

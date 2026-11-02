@@ -29,6 +29,13 @@ const gamepad = ({ index = 0, mapping = "standard", buttons = [], axes = [0, 0] 
   axes,
 });
 
+test("f13_us1_as3_kart_gamepad_uses_horizontal_and_neutralizes_opposing_dpad", () => {
+  const tracker = new GamepadTracker();
+  assert.equal(tracker.sample([gamepad({buttons: [14, 15]})], true).mv, null);
+  assert.equal(tracker.sample([gamepad({buttons: [12, 15]})], true).mv, "Right");
+  assert.equal(tracker.sample([gamepad({axes: [0.6, 0.9]})], true).mv, "Right");
+});
+
 test("defaults preserve all existing keyboard aliases", () => {
   assert.deepEqual(DEFAULT_BINDINGS, {
     up: ["ArrowUp", "KeyW"],

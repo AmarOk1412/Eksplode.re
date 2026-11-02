@@ -5,6 +5,24 @@ use eksplode_re_cli::input::{
 use eksplode_re_core::Dir;
 use ratatui::crossterm::event::KeyCode;
 
+#[test]
+fn f13_us1_as3_opposing_kart_keys_are_neutral_in_a_local_session() {
+    let lobby = eksplode_re_core::Lobby::from_counts(1, 2).unwrap();
+    let mut session = eksplode_re_cli::app::Session::from_lobby(&lobby, 7).unwrap();
+    session.state.players[0].alive = false;
+    session.state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 0,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    session.handle_key(KeyCode::Left);
+    session.handle_key(KeyCode::Right);
+    session.tick();
+    assert_eq!(session.state.players[0].kart.unwrap().index, 0);
+}
+
 fn player(slot: usize, action: PlayerAction) -> Option<KeyAction> {
     Some(KeyAction::Player { slot, action })
 }

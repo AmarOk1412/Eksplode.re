@@ -40,6 +40,7 @@ pub fn obs(s: &GameState) -> Observation {
 
 pub fn bomb(s: &mut GameState, x: u8, y: u8, ticks_left: u32) {
     s.bombs.push(Bomb {
+        revenge_stint: None,
         owner: pid(0),
         pos: Pos::new(x, y),
         ticks_left,
@@ -51,6 +52,7 @@ pub fn bomb(s: &mut GameState, x: u8, y: u8, ticks_left: u32) {
 
 pub fn flame(s: &mut GameState, x: u8, y: u8) {
     s.flames.push(Flame {
+        revenge_stints: [None; 4],
         pos: Pos::new(x, y),
         ticks_left: 5,
         owners: 0,

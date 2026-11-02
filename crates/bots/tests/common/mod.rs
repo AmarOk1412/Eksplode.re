@@ -34,6 +34,7 @@ pub fn duel(rows: &[&str], me: (u8, u8), other: (u8, u8)) -> GameState {
 pub fn add_bomb(s: &mut GameState, owner: u8, x: u8, y: u8, ticks_left: u32) {
     let range = s.players[usize::from(owner)].range;
     s.bombs.push(Bomb {
+        revenge_stint: None,
         owner: pid(owner),
         pos: pos(x, y),
         ticks_left,

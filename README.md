@@ -20,6 +20,7 @@ pixel-art view are all small, tested crates.
 ## Features
 
 - Four players per match: any mix of people (terminal or browser) and bots.
+- **Revenge karts:** eliminated Normal/Team players drive around the perimeter and throw inward until walls start closing. Direct hits stop movement for one second; eliminating an opponent with a current kart bomb earns a return to the board. Chaser rules are unchanged.
 - **Rooms and modes:** the owner of a room chooses the mode (Normal, Team, Chaser), the board size (small,
   medium, large), the round time (2, 3, 5 or 10 minutes), for Team friendly fire, and the bot
   difficulty (Easy, Medium or Hard; Medium by default), on a creation menu (page) or setup screen
@@ -120,7 +121,7 @@ same six-key order for the joining player only. `host`, `host:port` and web addr
 `http://host:8080/` work; for a web address only the host is kept. A refused or full match ends
 with a one-line explanation and exit status 1.
 
-The terminal must be at least 40x20; a medium board needs 40x22 and a large one 52x26 (the game says so when the terminal is too small). Wrong usage exits with status 2.
+The terminal must be at least 40x22; a medium board needs 44x24 and a large one 56x28, including the fixed kart gutter (the game says so when the terminal is too small). Wrong usage exits with status 2.
 
 ### Server options
 
@@ -130,6 +131,8 @@ The terminal must be at least 40x20; a medium board needs 40x22 and a large one 
 `--size`, `--time`, `--friendly-fire`); the table and examples are in [docs/WEB.md](docs/WEB.md).
 
 ## Controls
+
+In a kart, existing left/right controls drive counterclockwise/clockwise around the board, releasing stops, and the bomb action throws inward toward square two. Up/down and punch do nothing; opposing left/right holds are neutral. Team friendly fire also governs direct-hit stun. A return resets powers, not statistics or outstanding bombs. Karts disappear at the first closing warning; they never postpone the existing winner/draw result. See [docs/GAMEPLAY.md](docs/GAMEPLAY.md#revenge-karts).
 
 | Where | Move | Bomb | Punch |
 |-------|------|------|-------|

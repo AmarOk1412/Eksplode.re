@@ -192,7 +192,7 @@ export class GamepadTracker {
 		this.suppressHeldActions = suppressHeldActions;
 	}
 
-	sample(gamepads) {
+	sample(gamepads, inKart = false) {
 		const pads = Array.from(gamepads ?? []);
 		const available = compatibleGamepads(pads);
 		if (available.length === 0) {
@@ -215,17 +215,21 @@ export class GamepadTracker {
 
 		const bombDown = pressed(gamepad.buttons?.[0]);
 		const punchDown = pressed(gamepad.buttons?.[1]);
-		const mv = gamepadDirection(gamepad, this.deadZone);
+		const horizontal = [];
+		if (pressed(gamepad.buttons?.[14]) || Number(gamepad.axes?.[0]) < -this.deadZone) horizontal.push("Left");
+		if (pressed(gamepad.buttons?.[15]) || Number(gamepad.axes?.[0]) > this.deadZone) horizontal.push("Right");
+		const mv = inKart ? horizontal.length === 1 ? horizontal[0] : null : gamepadDirection(gamepad, this.deadZone);
 		if (this.suppressHeldActions) {
 			this.previousBomb = bombDown;
 			this.previousPunch = punchDown;
 			this.suppressHeldActions = false;
-			return { mv, bomb: false, punch: false };
+			return { mv, bomb: false, punch: false, ...(inKart ? { horizontal } : {}) };
 		}
 		const input = {
 			mv,
 			bomb: bombDown && !this.previousBomb,
 			punch: punchDown && !this.previousPunch,
+			...(inKart ? { horizontal } : {}),
 		};
 		this.previousBomb = bombDown;
 		this.previousPunch = punchDown;

@@ -20,3 +20,21 @@ fn the_observation_fixture_is_up_to_date() {
         "run with UPDATE_FIXTURES=1 to refresh"
     );
 }
+
+#[test]
+fn f13_legacy_observation_fixture_defaults_to_no_karts_or_sources() {
+    let observation: eksplode_re_core::Observation =
+        serde_json::from_str(include_str!("fixtures/observation.json")).unwrap();
+    assert!(observation
+        .players
+        .iter()
+        .all(|player| player.kart.is_none() && player.immobilized_left == 0));
+    assert!(observation
+        .bombs
+        .iter()
+        .all(|bomb| bomb.revenge_stint.is_none()));
+    assert!(observation
+        .flames
+        .iter()
+        .all(|flame| flame.revenge_stints == [None; 4]));
+}

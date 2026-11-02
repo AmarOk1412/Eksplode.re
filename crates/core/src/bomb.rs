@@ -23,6 +23,7 @@ pub(crate) fn place(state: &mut GameState, i: usize, events: &mut Vec<Event>) {
         range: p.placed_range(),
         flight: None,
         slide: None,
+        revenge_stint: None,
     };
     events.push(Event::BombPlaced {
         player: p.id,
@@ -42,6 +43,7 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
 
     // burning tile -> slots of the bombs that light it
     let mut tiles: BTreeMap<Pos, u8> = BTreeMap::new();
+    let mut revenge_tiles: BTreeMap<Pos, [Option<u32>; 4]> = BTreeMap::new();
     let mut destroyed = BTreeSet::new();
     let mut done = vec![false; exploding.len()];
     loop {
@@ -65,6 +67,10 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
             }
             for tile in hit.tiles {
                 *tiles.entry(tile).or_insert(0) |= 1 << b.owner.index();
+                if let Some(stint) = b.revenge_stint {
+                    let sources = revenge_tiles.entry(tile).or_insert([None; 4]);
+                    sources[b.owner.index()] = sources[b.owner.index()].max(Some(stint));
+                }
             }
             destroyed.extend(hit.destroyed);
         }
@@ -113,15 +119,20 @@ pub(crate) fn detonate(state: &mut GameState, events: &mut Vec<Event>) {
     }
 
     for (pos, owners) in tiles {
+        let revenge_stints = revenge_tiles.remove(&pos).unwrap_or([None; 4]);
         match state.flames.iter_mut().find(|f| f.pos == pos) {
             Some(f) => {
                 f.ticks_left = state.config.flame_ticks;
                 f.owners |= owners;
+                for (source, contribution) in f.revenge_stints.iter_mut().zip(revenge_stints) {
+                    *source = (*source).max(contribution);
+                }
             }
             None => state.flames.push(Flame {
                 pos,
                 ticks_left: state.config.flame_ticks,
                 owners,
+                revenge_stints,
             }),
         }
     }

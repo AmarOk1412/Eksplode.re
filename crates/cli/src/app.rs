@@ -161,7 +161,9 @@ impl Session {
         if self.paused {
             return Vec::new();
         }
-        let mut inputs = self.input.take();
+        let mut inputs = self.input.take_for_karts(std::array::from_fn(|slot| {
+            self.state.players[slot].kart.is_some()
+        }));
         let ids = PlayerId::all();
         for (i, bot) in self.bots.iter_mut().enumerate() {
             if let Some(bot) = bot {

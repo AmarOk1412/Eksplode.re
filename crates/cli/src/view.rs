@@ -23,8 +23,8 @@ pub struct ViewContext {
 
 /// Terminal size needed to draw the observation.
 pub fn required_size(state: &Observation) -> (u16, u16) {
-    let w = u16::from(state.arena.width()) * 2 + 2;
-    let h = u16::from(state.arena.height()) + 2 + STATUS_LINES + 1;
+    let w = (u16::from(state.arena.width()) + 2) * 2 + 2;
+    let h = u16::from(state.arena.height()) + 4 + STATUS_LINES + 1;
     (w.max(MIN_WIDTH), h.max(MIN_HEIGHT))
 }
 
@@ -41,6 +41,9 @@ pub fn cell(state: &Observation, pos: Pos) -> (String, Style) {
         }
         if p.role == eksplode_re_core::Role::Chaser {
             style = style.bg(Color::Yellow).fg(Color::Black);
+        }
+        if p.immobilized_left > 0 {
+            style = style.add_modifier(Modifier::REVERSED);
         }
         return (format!("P{}", p.id.index() + 1), style);
     }
@@ -132,15 +135,55 @@ pub fn render(frame: &mut Frame, state: &Observation, ctx: &ViewContext) {
         return;
     }
 
-    let arena_w = u16::from(state.arena.width()) * 2 + 2;
-    let arena_h = u16::from(state.arena.height()) + 2;
+    let arena_w = (u16::from(state.arena.width()) + 2) * 2 + 2;
+    let arena_h = u16::from(state.arena.height()) + 4;
     let x = area.x + (area.width - arena_w) / 2;
     let arena_rect = Rect::new(x, area.y, arena_w, arena_h);
-    let lines: Vec<Line> = (0..state.arena.height())
+    let mut kart_cells = std::collections::BTreeMap::new();
+    let length = eksplode_re_core::kart::perimeter_len(state.arena.width(), state.arena.height());
+    for player in &state.players {
+        let Some(kart) = player.kart else {
+            continue;
+        };
+        if kart.index >= length {
+            continue;
+        }
+        for offset in 0..length {
+            let Some((column, row)) = eksplode_re_core::kart::view_position(
+                state.arena.width(),
+                state.arena.height(),
+                (kart.index + offset) % length,
+            ) else {
+                continue;
+            };
+            let coordinate = ((column + 1.0).floor() as u16, (row + 1.0).floor() as u16);
+            if let std::collections::btree_map::Entry::Vacant(entry) = kart_cells.entry(coordinate)
+            {
+                entry.insert((
+                    format!("K{}", player.id.index() + 1),
+                    Style::default()
+                        .fg(player_color(player.id))
+                        .add_modifier(Modifier::BOLD),
+                ));
+                break;
+            }
+        }
+    }
+    let lines: Vec<Line> = (0..u16::from(state.arena.height()) + 2)
         .map(|y| {
-            let spans: Vec<Span> = (0..state.arena.width())
+            let spans: Vec<Span> = (0..u16::from(state.arena.width()) + 2)
                 .map(|x| {
-                    let (text, style) = cell(state, Pos::new(x, y));
+                    let (text, style) = if let Some(kart) = kart_cells.get(&(x, y)) {
+                        kart.clone()
+                    } else if x > 0
+                        && y > 0
+                        && x <= u16::from(state.arena.width())
+                        && y <= u16::from(state.arena.height())
+                    {
+                        cell(state, Pos::new((x - 1) as u8, (y - 1) as u8))
+                    } else {
+                        ("  ".to_string(), Style::default())
+                    };
                     Span::styled(text, style)
                 })
                 .collect();
@@ -193,6 +236,12 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
         let detail = if p.alive {
             let speed = state.config.base_move_cooldown + 1 - p.move_cooldown;
             let mut effects = String::new();
+            if p.immobilized_left > 0 {
+                effects.push_str(&format!(
+                    " stunned {}s",
+                    p.immobilized_left.div_ceil(state.config.tick_hz.max(1))
+                ));
+            }
             if p.has_punch {
                 effects.push_str(" punch");
             }
@@ -221,6 +270,8 @@ fn status_lines<'a>(state: &Observation, ctx: &ViewContext) -> Vec<Line<'a>> {
                 "{tag:<6} bombs {}/{} range {} speed {speed}{effects}{role}",
                 p.bombs_active, p.bombs_max, p.range
             )
+        } else if p.kart.is_some() {
+            format!("{tag:<6} kart")
         } else {
             format!("{tag:<6} eliminated")
         };

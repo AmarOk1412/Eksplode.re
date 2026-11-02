@@ -47,6 +47,7 @@ pub fn two_safe() -> [Option<(u8, u8)>; 4] {
 pub fn add_bomb(s: &mut GameState, owner: u8, x: u8, y: u8, ticks_left: u32) {
     let range = s.players[usize::from(owner)].range;
     s.bombs.push(eksplode_re_core::Bomb {
+        revenge_stint: None,
         owner: pid(owner),
         pos: pos(x, y),
         ticks_left,

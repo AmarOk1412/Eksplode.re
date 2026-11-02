@@ -752,7 +752,15 @@ impl Online {
         if self.stage != Stage::Playing {
             return;
         }
-        let i = self.input.take()[0];
+        let in_kart = self
+            .slot
+            .and_then(|slot| {
+                self.observation
+                    .as_ref()
+                    .and_then(|obs| obs.players.get(slot))
+            })
+            .is_some_and(|player| player.kart.is_some());
+        let i = self.input.take_for_karts([in_kart, false, false, false])[0];
         self.send_action(ClientMsg::Input {
             tick: self.tick,
             mv: i.mv,

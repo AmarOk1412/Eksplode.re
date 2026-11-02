@@ -9,6 +9,78 @@ use eksplode_re_web_render::view::fit;
 
 const CANVAS: (f32, f32) = (800.0, 600.0);
 
+#[test]
+fn f13_kart_has_a_visible_driver_with_the_players_custom_look() {
+    use eksplode_re_web_render::commands::build_with_looks;
+    use eksplode_re_web_render::look::{default_for, skin, Costume, Face, Head, CAP, SCARF};
+
+    let mut state = standard();
+    state.players[0].alive = false;
+    let mut looks = [0, 1, 2, 3].map(default_for);
+    looks[0].colour = 4;
+    looks[0].head = Head::Cap;
+    looks[0].face = Face::Glasses;
+    looks[0].costume = Costume::Scarf;
+    for index in [2, 14, 26, 40] {
+        state.players[0].kart = Some(eksplode_re_core::KartState {
+            index,
+            entered_tick: 0,
+            cooldown_left: 0,
+            travel: None,
+            pending_return: None,
+        });
+        let observation = obs(&state);
+        let mut interpolation = Interp::default();
+        interpolation.update(&observation);
+        let list = build_with_looks(&observation, &interpolation, 1.0, CANVAS, &looks);
+        for colour in [skin(&looks[0]).helmet, CAP, SCARF] {
+            assert!(
+                !quads_with(&list, colour).is_empty(),
+                "driver detail missing at {index}"
+            );
+        }
+        if index == 2 {
+            let board_top = fit(state.arena.width(), state.arena.height(), CANVAS)
+                .project(0.0, 0.0)
+                .1;
+            for colour in [skin(&looks[0]).face, skin(&looks[0]).eyes] {
+                assert!(
+                    quads_with(&list, colour)
+                        .iter()
+                        .any(|command| command.points.iter().all(|point| point.1 < board_top)),
+                    "driver face missing above the board"
+                );
+            }
+        }
+        assert!(list
+            .iter()
+            .all(|command| command.points.iter().all(|point| point.0 >= 0.0
+                && point.1 >= 0.0
+                && point.0 <= CANVAS.0
+                && point.1 <= CANVAS.1)));
+    }
+}
+
+#[test]
+fn f13_us1_as1_kart_sprite_appears_in_the_exterior_gutter() {
+    let mut state = standard();
+    state.players[0].alive = false;
+    state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 2,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    let list = commands(&state);
+    let board_top = fit(state.arena.width(), state.arena.height(), CANVAS)
+        .project(0.0, 0.0)
+        .1;
+    assert!(quads_with(&list, player_skin(0).helmet)
+        .iter()
+        .any(|command| command.points.iter().all(|point| point.1 < board_top)));
+}
+
 fn commands(s: &GameState) -> Vec<Command> {
     let o = obs(s);
     let mut i = Interp::default();
@@ -16,10 +88,67 @@ fn commands(s: &GameState) -> Vec<Command> {
     build(&o, &i, 1.0, CANVAS)
 }
 
+#[test]
+fn f13_us3_as2_return_snaps_without_sliding_through_the_board() {
+    let mut state = standard();
+    state.players[0].alive = false;
+    state.players[0].kart = Some(eksplode_re_core::KartState {
+        index: 2,
+        entered_tick: 0,
+        cooldown_left: 0,
+        travel: None,
+        pending_return: None,
+    });
+    let mut interpolation = Interp::default();
+    interpolation.update(&obs(&state));
+    state.tick += 1;
+    state.players[0].alive = true;
+    state.players[0].kart = None;
+    state.players[0].pos = Pos::new(5, 5);
+    interpolation.update(&obs(&state));
+    assert_eq!(interpolation.position(0, 0.0), (5.0, 5.0));
+    assert_eq!(interpolation.position(0, 0.5), (5.0, 5.0));
+    assert!(interpolation.dying(0, 0.0).is_none());
+}
+
 fn quads_with(list: &[Command], rgb: Rgb) -> Vec<&Command> {
     list.iter()
         .filter(|c| c.kind == Kind::Quad && c.color[..3] == rgb && c.color[3] == 1.0)
         .collect()
+}
+
+#[test]
+fn f13_us4_as5_overlapping_kart_fixture_keeps_four_coloured_sprites_in_bounds() {
+    let mut state = standard();
+    for index in [0, 14, 26, 40] {
+        for player in &mut state.players {
+            player.alive = false;
+            player.kart = Some(eksplode_re_core::KartState {
+                index,
+                entered_tick: 0,
+                cooldown_left: 0,
+                travel: None,
+                pending_return: None,
+            });
+        }
+        let list = commands(&state);
+        for slot in 0..4 {
+            assert!(!quads_with(&list, player_skin(slot).helmet).is_empty());
+        }
+        assert!(list
+            .iter()
+            .all(|command| command.points.iter().all(|point| point.0 >= 0.0
+                && point.1 >= 0.0
+                && point.0 <= CANVAS.0
+                && point.1 <= CANVAS.1)));
+    }
+}
+
+#[test]
+fn f13_us2_as3_stunned_survivor_has_a_visible_marker() {
+    let mut state = standard();
+    state.players[0].immobilized_left = 20;
+    assert!(!quads_with(&commands(&state), WARNING_FRAME).is_empty());
 }
 
 fn texts(list: &[Command]) -> Vec<char> {

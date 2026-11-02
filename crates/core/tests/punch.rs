@@ -230,6 +230,7 @@ fn a_flame_or_a_power_up_on_the_landing_square_does_not_stop_the_bomb() {
         kind: PowerUpKind::Speed,
     });
     s.flames.push(eksplode_re_core::Flame {
+        revenge_stints: [None; 4],
         pos: p(3, 3),
         ticks_left: 50,
         owners: 0,

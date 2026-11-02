@@ -112,6 +112,23 @@ pub(crate) fn advance(state: &mut GameState, events: &mut Vec<Event>) {
             Some(next) => {
                 state.bombs[idx].pos = next;
                 events.push(Event::BombHopped { pos: next });
+                if state.bombs[idx].revenge_stint.is_some() {
+                    let owner = state.bombs[idx].owner;
+                    let owner_team = state
+                        .players
+                        .get(owner.index())
+                        .and_then(|player| player.team);
+                    for player in &mut state.players {
+                        let protected_teammate = state.config.mode == crate::Mode::Team
+                            && !state.config.friendly_fire
+                            && player.id != owner
+                            && player.team.is_some()
+                            && player.team == owner_team;
+                        if player.alive && player.pos == next && !protected_teammate {
+                            player.immobilized_left = state.config.tick_hz;
+                        }
+                    }
+                }
                 if is_free(state, idx, next) {
                     land(state, idx, next, events);
                 } else {

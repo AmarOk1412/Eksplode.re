@@ -65,6 +65,7 @@ fn walls_and_blocks_shield_tiles() {
 fn existing_flames_are_dangerous_until_they_expire() {
     let mut s = duel(&OPEN, (1, 5), (5, 1));
     s.flames.push(eksplode_re_core::Flame {
+        revenge_stints: [None; 4],
         pos: pos(2, 2),
         ticks_left: 4,
         owners: 0,

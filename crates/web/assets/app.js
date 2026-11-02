@@ -121,14 +121,27 @@ export class KeyTracker {
   }
 
   /** The latest pressed direction that is still held; bomb and punch presses fire once. */
-  take() {
+  take(inKart = false) {
     const last = this.held[this.held.length - 1];
     const action = last ? this.actionFor(last) : null;
     const input = { mv: action ? DIRECTION_ACTIONS[action] : null, bomb: this.bomb, punch: this.punch };
     this.bomb = false;
     this.punch = false;
+    if (inKart) {
+      const horizontal = [...new Set(this.held.map((code) => this.actionFor(code)).filter((held) => held === "left" || held === "right").map((held) => DIRECTION_ACTIONS[held]))];
+      return { ...input, mv: horizontal.length === 1 ? horizontal[0] : null, horizontal };
+    }
     return input;
   }
+}
+
+export function mergeGameplayInputs(inputs, inKart = false) {
+  const horizontal = new Set(inputs.flatMap((input) => input.horizontal ?? (input.mv === "Left" || input.mv === "Right" ? [input.mv] : [])));
+  return {
+    mv: inKart ? horizontal.size === 1 ? [...horizontal][0] : null : inputs.find((input) => input.mv)?.mv ?? null,
+    bomb: inputs.some((input) => input.bomb),
+    punch: inputs.some((input) => input.punch),
+  };
 }
 
 export function initialState() {
@@ -380,7 +393,7 @@ export function hubActions(state) {
     .map((s, i) => (s.controller === "Local" || s.controller === "Remote" ? i : -1))
     .filter((i) => i >= 0);
   const players = state.observation?.players ?? [];
-  const onlyBots = people.length > 0 && people.every((i) => players[i]?.alive !== true);
+  const onlyBots = people.length > 0 && people.every((i) => players[i]?.alive !== true && !players[i]?.kart);
   return {
     options: { visible: true, tab: "sound" },
     lobby: { visible: inMatch, enabled: state.stage === "results" || (state.stage === "playing" && onlyBots) },
@@ -624,6 +637,7 @@ export function hudRows(state) {
       kind,
       label,
       alive: p.alive,
+      ...(p.kart ? { kart: true } : {}),
       bombs: `${p.bombs_active}/${p.bombs_max}`,
       range: p.range,
       speed: base + 1 - p.move_cooldown,
@@ -684,6 +698,7 @@ export function resultRows(state) {
 /** Short names of what is active on a player: the punch and the malus with the seconds left. */
 export function effectsOf(player, hz) {
   const effects = [];
+  if (player.immobilized_left > 0) effects.push(`stunned ${Math.ceil(player.immobilized_left / hz)}s`);
   if (player.has_punch) effects.push("punch");
   const m = player.malus;
   if (m && typeof m.ticks_left === "number") {
@@ -1480,7 +1495,7 @@ function start() {
           cross.type = "button";
           cross.className = "seat-control seat-remove";
           cross.dataset.navKey = `seat-remove-${c.slot}`;
-          cross.textContent = "\u00d7";
+          cross.innerHTML = "\u00d7";
           const what = c.remove.type === "RemoveBot" ? `Remove the bot from seat ${c.slot + 1}` : `Kick ${c.name} from the room`;
           cross.setAttribute("aria-label", what);
           cross.title = what;
@@ -1521,7 +1536,7 @@ function start() {
     el.hud.replaceChildren(
       ...hudRows(state).map((row) => {
         const li = document.createElement("li");
-        li.className = row.alive ? "" : "dead";
+        li.className = row.alive ? "" : row.kart ? "kart" : "dead";
         const chip = document.createElement("span");
         chip.className = `chip slot-${row.slot}`;
         chip.style.backgroundColor = COLOUR_CSS[state.looks[row.slot]?.colour] ?? "";
@@ -1530,7 +1545,7 @@ function start() {
         const roleText = row.role === "chaser" ? ` [chaser ${"\u2665".repeat(row.hearts)}${row.shield ? " protected" : ""}]` : row.role === "runner" ? " [runner]" : "";
         text.textContent = row.alive
           ? `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
-          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: eliminated`;
+          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: ${row.kart ? "kart" : "eliminated"}`;
         if (row.role) li.classList.add(`role-${row.role}`);
         if (row.team) li.classList.add(`team-${row.team}`);
         li.append(chip, text);
@@ -2280,14 +2295,11 @@ function start() {
       return;
     }
     if (state.stage !== "playing") return;
-    const controllerInput = gamepads.sample(readGamepads().gamepads);
-    const touchKeys = touchInput.take();
-    const keyboardInput = keys.take();
-    send(inputMessage(state, {
-      mv: controllerInput.mv ?? touchKeys.mv ?? keyboardInput.mv,
-      bomb: controllerInput.bomb || touchKeys.bomb || keyboardInput.bomb,
-      punch: controllerInput.punch || touchKeys.punch || keyboardInput.punch,
-    }));
+    const inKart = Boolean(state.observation?.players?.[state.slot]?.kart);
+    const controllerInput = gamepads.sample(readGamepads().gamepads, inKart);
+    const touchKeys = touchInput.take(inKart);
+    const keyboardInput = keys.take(inKart);
+    send(inputMessage(state, mergeGameplayInputs([controllerInput, touchKeys, keyboardInput], inKart)));
   }, TICK_MS);
   setInterval(() => {
     if (document.hidden) send({ type: "Ping", nonce: Date.now() });

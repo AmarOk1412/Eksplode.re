@@ -27,7 +27,7 @@ impl<'a> PathRequest<'a> {
         Self {
             obs,
             danger,
-            earliest_move: me.cooldown_left.max(1),
+            earliest_move: me.cooldown_left.max(me.immobilized_left.saturating_add(1)),
             order: Dir::ALL,
             max_depth: 14,
             avoid_malus: true,

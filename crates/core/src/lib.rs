@@ -11,6 +11,7 @@ pub mod closing;
 pub mod config;
 pub mod drops;
 pub mod error;
+pub mod kart;
 pub mod kick;
 pub mod lobby;
 pub mod observation;
@@ -32,7 +33,7 @@ pub use observation::Observation;
 pub use rng::Rng;
 pub use room::{BoardSize, BotDifficulty, Mode, RoomSettings, MINUTES, PLAYABLE};
 pub use state::{
-    ActiveMalus, Bomb, Closing, Event, Falling, Flame, Flight, GameState, Outcome, Participant,
-    Phase, PowerUp, PowerUpKind, Role, Slide,
+    ActiveMalus, Bomb, Closing, Event, Falling, Flame, Flight, GameState, KartState, Outcome,
+    Participant, Phase, PowerUp, PowerUpKind, Role, Slide,
 };
 pub use step::step;

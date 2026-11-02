@@ -7,7 +7,12 @@ pub const EDGE: f32 = 0.18;
 
 /// View-space bounding box `(min_x, min_y, max_x, max_y)` of a `width` x `height` arena including its edge.
 pub fn arena_bounds(width: u8, height: u8) -> (f32, f32, f32, f32) {
-    (0.0, 0.0, f32::from(width), f32::from(height) + EDGE)
+    (
+        -1.0,
+        -1.0,
+        f32::from(width) + 1.0,
+        f32::from(height) + EDGE + 1.0,
+    )
 }
 
 /// Scale and offset that map tile coordinates to canvas pixels.

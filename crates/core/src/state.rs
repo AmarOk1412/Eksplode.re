@@ -87,6 +87,22 @@ pub enum Role {
     Runner,
 }
 
+/// An eliminated participant's position and earned return on the outside track.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct KartState {
+    /// Clockwise index on the virtual perimeter.
+    pub index: u16,
+    /// Elimination tick identifying this kart stint within the round.
+    pub entered_tick: u32,
+    /// Ticks until the next perimeter move.
+    pub cooldown_left: u32,
+    /// Requested horizontal travel, independent of inward aim.
+    pub travel: Option<Dir>,
+    /// Preferred victim square for one earned return.
+    pub pending_return: Option<Pos>,
+}
+
 /// One of the four player slots.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -132,6 +148,25 @@ pub struct Participant {
     /// alive (and for whoever is still alive at the end).
     #[cfg_attr(feature = "serde", serde(default))]
     pub eliminated_order: Option<u32>,
+    /// Outside-board participation; never present while alive.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub kart: Option<KartState>,
+    /// Subsequent movement passes blocked by a direct kart-bomb hit.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_zero"))]
+    pub immobilized_left: u32,
+}
+
+#[cfg(feature = "serde")]
+fn is_zero(value: &u32) -> bool {
+    *value == 0
+}
+
+#[cfg(feature = "serde")]
+fn no_sources(value: &[Option<u32>; MAX_PLAYERS]) -> bool {
+    value.iter().all(Option::is_none)
 }
 
 #[cfg(feature = "serde")]
@@ -199,6 +234,12 @@ pub struct Bomb {
     /// Set while the bomb slides after a kick; it still blocks and flames still reach it.
     #[cfg_attr(feature = "serde", serde(default))]
     pub slide: Option<Slide>,
+    /// Kart entry tick of this owner's throw; absent for ordinary bombs.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub revenge_stint: Option<u32>,
 }
 
 /// One burning tile.
@@ -210,6 +251,9 @@ pub struct Flame {
     /// Bit `i` is set when a bomb of slot `i` lit this tile; used by friendly fire.
     #[cfg_attr(feature = "serde", serde(default))]
     pub owners: u8,
+    /// Newest contributing kart stint per owner, retained for this flame's lifetime.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "no_sources"))]
+    pub revenge_stints: [Option<u32>; MAX_PLAYERS],
 }
 
 impl Flame {
@@ -476,6 +520,8 @@ impl GameState {
             kills: 0,
             bombs_placed: 0,
             eliminated_order: None,
+            kart: None,
+            immobilized_left: 0,
         });
         Ok(GameState {
             bonus_in: config.bonus_every_ticks,

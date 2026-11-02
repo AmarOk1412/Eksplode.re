@@ -4,6 +4,14 @@ use common::*;
 use eksplode_re_bots::{find_path, DangerMap, PathRequest};
 use eksplode_re_core::Dir;
 
+#[test]
+fn f13_us2_as3_stunned_bot_cannot_plan_an_escape_before_it_can_move() {
+    let mut state = duel(&OPEN, (3, 3), (5, 5));
+    state.players[0].immobilized_left = 20;
+    add_bomb(&mut state, 1, 3, 3, 10);
+    assert_eq!(path(&state, &|_| true), None);
+}
+
 fn path(
     s: &eksplode_re_core::GameState,
     goal: &dyn Fn(eksplode_re_core::Pos) -> bool,

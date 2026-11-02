@@ -1,3 +1,13 @@
+test("f13_us1_as3_kart_touch_retains_horizontal_diagonal_intent", async () => {
+  const { TouchInputTracker } = await import("../assets/touch.js");
+  const tracker = new TouchInputTracker();
+  tracker.startJoystick(1, 0, 0);
+  tracker.moveJoystick(1, 30, 80);
+  assert.equal(tracker.take(true).mv, "Right");
+  tracker.endJoystick(1);
+  assert.equal(tracker.take(true).mv, null);
+});
+
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TouchInputTracker, directionFromVector, isTouchCapable } from "../assets/touch.js";

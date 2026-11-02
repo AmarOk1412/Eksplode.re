@@ -30,6 +30,22 @@ f4_us2_as1 f4_us2_as2 f4_us2_as3 f4_us2_as4 f4_us2_as5 f4_us2_as6 f4_us2_as7
 f4_us3_as1 f4_us3_as2 f4_us3_as3 f4_us3_as4 f4_us3_as5 f4_us3_as6
 f4_us4_as1 f4_us4_as2 f4_us4_as3 f4_us4_as4 f4_us4_as5 f4_us4_as6 f4_us4_as7 f4_us4_as8 f4_us4_as9"
 
+ids_013="f13_us1_as1 f13_us1_as2 f13_us1_as3 f13_us1_as4 f13_us1_as5 f13_us1_as6
+f13_us2_as1 f13_us2_as2 f13_us2_as3 f13_us2_as4 f13_us2_as5 f13_us2_as6 f13_us2_as7
+f13_us3_as1 f13_us3_as2 f13_us3_as3 f13_us3_as4 f13_us3_as5 f13_us3_as6 f13_us3_as7
+f13_us4_as1 f13_us4_as2 f13_us4_as3 f13_us4_as4 f13_us4_as5 f13_us4_as6"
+
+for selector in ${F13_ONLY:-}; do
+    found=0
+    for id in $ids_013; do
+        case "$selector" in "$id" | "${id%_as*}") found=1 ;; esac
+    done
+    if [ "$found" -eq 0 ]; then
+        echo "unknown feature-013 selector: $selector" >&2
+        exit 1
+    fi
+done
+
 missing=0
 
 in_tests() {
@@ -82,6 +98,19 @@ for id in $ids_004; do
     in_manual_ticked "$id" "$MANUAL_004" && continue
     echo "missing: $id has no test name and no manual check"
     missing=$((missing + 1))
+done
+
+registered_f13=$(cargo test -p eksplode-re-core --test round_end -- --list &&
+    cargo test -p eksplode-re-bots --test behaviour -- --list &&
+    cargo test -p eksplode-re-web --test mixed -- --list)
+for id in $ids_013; do
+    if [ -n "${F13_ONLY:-}" ]; then
+        case " $F13_ONLY " in *" ${id%_as*} "* | *" $id "*) ;; *) continue ;; esac
+    fi
+    if ! printf '%s\n' "$registered_f13" | grep -qE "^${id}_[^:]*: test$"; then
+        echo "missing: $id has zero registered automated tests" >&2
+        missing=$((missing + 1))
+    fi
 done
 
 if [ "$missing" -gt 0 ]; then

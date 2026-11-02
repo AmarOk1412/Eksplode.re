@@ -262,6 +262,7 @@ fn f4_us2_as2_a_landing_block_crushes_a_player_and_destroys_bombs_and_powerups()
         kind: PowerUpKind::Speed,
     });
     s.flames.push(Flame {
+        revenge_stints: [None; 4],
         pos: pos(4, 1),
         ticks_left: 100,
         owners: 0,

@@ -1703,6 +1703,39 @@ mod bot_profile_tests {
     }
 
     #[test]
+    fn f13_us4_as6_takeover_preserves_kart_pending_return_sources_and_state() {
+        let mut room = make_room(false, BotDifficulty::Medium);
+        start(&mut room);
+        let game = room.running.as_mut().unwrap();
+        game.state.tick = 10;
+        game.state.players[1].alive = false;
+        game.state.players[1].kart = Some(eksplode_re_core::KartState {
+            index: 4,
+            entered_tick: 8,
+            cooldown_left: 2,
+            travel: Some(eksplode_re_core::Dir::Right),
+            pending_return: Some(eksplode_re_core::Pos::new(3, 3)),
+        });
+        game.state.players[0].immobilized_left = 12;
+        game.state.bombs.push(eksplode_re_core::Bomb {
+            owner: PlayerId::new(1).unwrap(),
+            pos: eksplode_re_core::Pos::new(3, 3),
+            ticks_left: 20,
+            range: 2,
+            flight: None,
+            slide: None,
+            revenge_stint: Some(8),
+        });
+        game.state.players[1].bombs_active = 1;
+        let before = game.state.clone();
+        room.remove_connection(GUEST);
+        let game = room.running.as_ref().unwrap();
+        assert_eq!(game.state, before);
+        assert!(game.bots[1].is_some());
+        assert_eq!(room.lobby.slots[1].controller, Controller::Bot);
+    }
+
+    #[test]
     fn f12_us1_as7_dev_forced_behaviour_applies_to_new_bots() {
         let mut room = make_room(true, BotDifficulty::Medium);
         force(&mut room, OWNER, json!("aggressive")).unwrap();

@@ -36,6 +36,91 @@ fn is_snapshot(m: &ServerMsg) -> bool {
     matches!(m, ServerMsg::Snapshot { .. })
 }
 
+#[test]
+fn f13_us4_as5_kart_throw_snapshot_is_identical_over_tcp_and_websocket() {
+    let server = server(|options| {
+        options.dev = true;
+        options.tick = Duration::from_millis(20);
+        options.game.fuse_ticks = 4;
+        options.game.block_density = 0.0;
+    });
+    let (mut browser, terminal) = mixed(&server);
+    browser.send(&ClientMsg::DevPauseBots { paused: true });
+    browser.send(&ClientMsg::Start);
+    let Some(ServerMsg::Snapshot { tick, .. }) = browser.recv_until(is_snapshot) else {
+        panic!("initial snapshot");
+    };
+    browser.send(&ClientMsg::Input {
+        tick,
+        mv: None,
+        bomb: true,
+        punch: false,
+    });
+    let Some(ServerMsg::Snapshot { tick, .. }) = browser.recv_until(|message| {
+        matches!(message,
+        ServerMsg::Snapshot { state, .. } if state.players[0].kart.is_some())
+    }) else {
+        panic!("kart snapshot");
+    };
+    browser.send(&ClientMsg::Input {
+        tick,
+        mv: None,
+        bomb: true,
+        punch: false,
+    });
+    let Some(ServerMsg::Snapshot { tick, state: web, .. }) = browser.recv_until(|message| matches!(message,
+        ServerMsg::Snapshot { state, .. } if state.bombs.iter().any(|bomb| bomb.revenge_stint.is_some()))) else { panic!("kart throw snapshot"); };
+    let Some(ServerMsg::Snapshot { state: tcp, .. }) = tcp_game(&terminal, |message| {
+        matches!(message,
+        ServerMsg::Snapshot { tick: received, .. } if *received == tick)
+    }) else {
+        panic!("matching terminal snapshot");
+    };
+    assert_eq!(without_me(*web), without_me(*tcp));
+    let mut latest = tick;
+    loop {
+        browser.send(&ClientMsg::Input {
+            tick: latest,
+            mv: Some(eksplode_re_core::Dir::Right),
+            bomb: false,
+            punch: false,
+        });
+        let Some(ServerMsg::Snapshot { tick, state, .. }) = browser.recv_until(is_snapshot) else {
+            panic!("travelling kart snapshot");
+        };
+        latest = tick;
+        if state.players[0].kart.is_some_and(|kart| kart.index == 13) {
+            break;
+        }
+        assert!(tick < 200, "kart reaches the opponent lane");
+    }
+    browser.send(&ClientMsg::Input {
+        tick: latest,
+        mv: None,
+        bomb: true,
+        punch: false,
+    });
+    let Some(ServerMsg::Snapshot {
+        tick,
+        state: returned,
+        ..
+    }) = browser.recv_until(|message| {
+        matches!(message,
+        ServerMsg::Snapshot { state, .. } if state.players[0].alive && !state.players[1].alive)
+    })
+    else {
+        panic!("earned return snapshot");
+    };
+    let Some(ServerMsg::Snapshot { state: tcp, .. }) = tcp_game(&terminal, |message| {
+        matches!(message,
+        ServerMsg::Snapshot { tick: received, .. } if *received == tick)
+    }) else {
+        panic!("terminal earned return snapshot");
+    };
+    assert!(returned.players[0].kart.is_none());
+    assert_eq!(without_me(*returned), without_me(*tcp));
+}
+
 fn tcp_game(c: &Client, mut pred: impl FnMut(&ServerMsg) -> bool) -> Option<ServerMsg> {
     tcp_wait(c, |message| pred(&message.clone().into_game_message()))
         .map(ServerMsg::into_game_message)
