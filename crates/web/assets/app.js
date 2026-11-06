@@ -6,6 +6,7 @@
 
 import { TouchInputTracker, isTouchCapable } from "./touch.js";
 import { AudioEngine, tuneForStage } from "./audio.js";
+import { applyTranslations, isSupportedLanguage, loadLanguage, saveLanguage, translate } from "./language.js";
 import {
   DEFAULT_BINDINGS,
   GamepadTracker,
@@ -45,6 +46,7 @@ import {
   loadLook,
   looksJson,
   lookMessage,
+  lookOptionLabel,
   previewCommands,
   sanitizeLook,
   saveLook,
@@ -54,6 +56,11 @@ import {
   MODES,
   MODE_HINTS,
   MODE_LABELS,
+  BOT_DIFFICULTIES,
+  localizedBotDifficultyLabel,
+  localizedModeHint,
+  localizedModeLabel,
+  localizedSizeLabel,
   PLAYABLE_MODES,
   SIZES,
   SIZE_DIMENSIONS,
@@ -156,6 +163,9 @@ export function initialState() {
     slot: null,
     lobby: null,
     notice: "",
+    noticeKey: null,
+    noticeValues: null,
+    noticeErrorCode: null,
     observation: null,
     result: null,
     tick: 0,
@@ -192,60 +202,98 @@ function looksOf(event, previous) {
   return [0, 1, 2, 3].map((i) => sanitizeLook(event.looks[i], i));
 }
 
-export function rejectText(reason) {
-  switch (reason) {
-    case "Full":
-      return "The match is full (4 players). Try again when someone leaves.";
-    case "BadName":
-      return "Your name is not valid: use 1 to 16 printable characters.";
-    case "InMatch":
-      return "A match is running. Wait for it to finish, then join.";
-    case "BadVersion":
-      return "This page and the server use incompatible versions. Reload the page.";
-    default:
-      return "The server refused the join.";
-  }
+const REJECTION_KEYS = {
+  Full: "reject.full",
+  BadName: "reject.bad_name",
+  InMatch: "reject.in_match",
+  BadVersion: "reject.bad_version",
+};
+
+const ERROR_KEYS = {
+  BadVersion: "reject.bad_version",
+  BadName: "reject.bad_name",
+  BadRoom: "error.invalid_request",
+  BadPassword: "error.bad_password",
+  Full: "reject.full",
+  InMatch: "reject.in_match",
+  RoomNotFound: "error.room_not_found",
+  RoomClosed: "error.room_closed",
+  AlreadyInRoom: "error.already_in_room",
+  NotInRoom: "error.not_in_room",
+  NotOwner: "error.permission",
+  LookAdjusted: "error.look_adjusted",
+  StaleRevision: "error.room_changed",
+  CapacityConflict: "error.room_changed",
+  ModeNeedsPlayers: "error.need_players",
+  ResumeExpired: "error.resume_failed",
+  ResumeDenied: "error.resume_failed",
+  RequestExpired: "error.request_finished",
+  Cancelled: "error.request_finished",
+  Busy: "error.busy",
+  RateLimited: "error.busy",
+  ServerFull: "reject.full",
+  Unsupported: "error.unsupported",
+  Unavailable: "error.unavailable",
+  BadSlot: "error.invalid_request",
+  NotABot: "error.invalid_request",
+  SlotTaken: "error.invalid_request",
+  BadValue: "error.invalid_request",
+  WrongPhase: "error.invalid_request",
+  HostLeft: "notice.server_stopped",
+};
+
+export function rejectText(reason, language = "en") {
+  return translate(language, REJECTION_KEYS[reason] ?? "reject.generic");
+}
+
+export function serverErrorText(code, fallback = "", language = "en") {
+  const key = ERROR_KEYS[code];
+  return key ? translate(language, key) : fallback || translate(language, "error.unavailable");
 }
 
 const TEAM_LETTERS = ["A", "B"];
 
 /** The name shown for a slot in messages. */
-function slotName(lobby, i) {
+function slotName(lobby, i, language = "en") {
   const s = lobby?.slots?.[i];
-  if (s?.controller === "Bot") return `Bot ${i + 1}`;
-  return s?.name || `Player ${i + 1}`;
+  if (s?.controller === "Bot") return translate(language, "result.bot", { slot: i + 1 });
+  return s?.name || translate(language, "result.player", { slot: i + 1 });
 }
 
-function outcomeText(outcome, slot, lobby, observation) {
-  if (outcome === "Draw") return "Draw";
+function outcomeText(outcome, slot, lobby, observation, language = "en") {
+  if (outcome === "Draw") return translate(language, "result.draw");
   if (outcome === "ChaserWins") {
     const chaser = observation?.players?.findIndex((p) => p.role === "Chaser") ?? -1;
-    if (chaser >= 0 && chaser === slot) return "You won! The chaser wins";
-    return chaser >= 0 ? `The chaser wins (${slotName(lobby, chaser)})` : "The chaser wins";
+    if (chaser >= 0 && chaser === slot) return translate(language, "result.you_won_chaser");
+    return chaser >= 0 ? translate(language, "result.chaser_wins_named", { name: slotName(lobby, chaser, language) }) : translate(language, "result.chaser_wins");
   }
   if (outcome === "RunnersWin") {
     const chaser = observation?.players?.findIndex((p) => p.role === "Chaser") ?? -1;
-    return chaser >= 0 && chaser !== slot ? "You survived! The runners win" : "The runners win";
+    return chaser >= 0 && chaser !== slot ? translate(language, "result.you_survived") : translate(language, "result.runners_win");
   }
   if (outcome !== null && typeof outcome === "object" && "TeamWin" in outcome) {
     const team = outcome.TeamWin === 1 ? 1 : 0;
-    const members = [0, 1, 2, 3].filter((i) => i >> 1 === team).map((i) => slotName(lobby, i));
-    const mine = slot !== null && slot >> 1 === team ? " - your team!" : "";
-    return `Team ${TEAM_LETTERS[team]} wins (${members.join(", ")})${mine}`;
+    const members = [0, 1, 2, 3].filter((i) => i >> 1 === team).map((i) => slotName(lobby, i, language));
+    const mine = slot !== null && slot >> 1 === team ? translate(language, "result.your_team") : "";
+    return translate(language, "result.team_win", { team: TEAM_LETTERS[team], members: members.join(", "), mine });
   }
   const winner = outcome?.Winner;
-  if (winner === slot) return "You won!";
-  return `Player ${winner + 1} won`;
+  if (winner === slot) return translate(language, "result.you_won");
+  return translate(language, "result.player_won", { player: winner + 1 });
 }
 
 /** The scoreboard's heading: who won, fixed when the round ended. */
-export function resultsTitle(state) {
-  return state.result?.title || "Round complete";
+export function resultsTitle(state, language = "en") {
+  if (!state.result) return translate(language, "results.title");
+  return outcomeText(state.result.outcome, state.slot, state.result.lobby, state.result.observation, language);
 }
 
 /** The line at the top of the page; empty on the scoreboard, whose heading already says it all. */
-export function topNotice(state) {
-  return state.stage === "results" ? "" : state.notice;
+export function topNotice(state, language = "en") {
+  if (state.stage === "results") return "";
+  if (state.noticeErrorCode) return serverErrorText(state.noticeErrorCode, state.notice, language);
+  if (state.noticeKey) return translate(language, state.noticeKey, state.noticeValues ?? {});
+  return state.notice;
 }
 
 /** Pure state machine of the page: `event` is a server message or a local event (lower case). */
@@ -255,7 +303,8 @@ export function reduce(state, event) {
   switch (event.type) {
     case "Hello":
       if (event.version !== 2 || !event.capabilities?.includes("rooms")) {
-        return { ...state, stage: "closed", notice: "This server needs a compatible room protocol version." };
+        return { ...state, stage: "closed", notice: "This server needs a compatible room protocol version.",
+          noticeKey: "notice.protocol_version", noticeErrorCode: null };
       }
       return { ...state, protocol: 2, server_id: event.server_id, server_epoch: event.server_epoch,
         stage: "directory", notice: "" };
@@ -289,7 +338,8 @@ export function reduce(state, event) {
       return { ...state, stage: "joining" };
     case "socket-closed":
       if (state.stage === "closed") return state;
-      return { ...state, stage: "closed", notice: "Connection lost. The server may have stopped." };
+      return { ...state, stage: "closed", notice: "Connection lost. The server may have stopped.",
+        noticeKey: "notice.connection_lost", noticeErrorCode: null };
     case "retry":
       return initialState();
     case "return-to-lobby":
@@ -316,7 +366,8 @@ export function reduce(state, event) {
       return { ...state, devState: { paused: event.paused === true, drops: event.drops,
         behaviour: typeof event.behaviour === "string" ? event.behaviour : null } };
     case "Rejected":
-      return { ...state, stage: "closed", notice: rejectText(event.reason) };
+      return { ...state, stage: "closed", notice: rejectText(event.reason),
+        noticeKey: REJECTION_KEYS[event.reason] ?? "reject.generic", noticeErrorCode: null };
     case "RoomUpdated":
     case "Lobby": {
       const stage = state.stage === "playing" || state.stage === "closed" || state.stage === "results" ? state.stage : "lobby";
@@ -324,6 +375,8 @@ export function reduce(state, event) {
       const promoted = state.lobby && state.slot !== null && lobbyOwner(state.lobby) !== state.slot && lobbyOwner(lobby) === state.slot;
       return { ...state, stage, lobby, looks: looksOf(event, state.looks),
         notice: promoted ? "You are now the room owner" : state.notice,
+        noticeKey: promoted ? "notice.room_owner" : state.noticeKey,
+        noticeErrorCode: promoted ? null : state.noticeErrorCode,
         memberships: Array.isArray(event.memberships) ? event.memberships : state.memberships,
         revision: event.revision ?? state.revision, capacity: event.capacity ?? state.capacity,
         password_required: event.password_required ?? state.password_required };
@@ -334,7 +387,8 @@ export function reduce(state, event) {
       if (state.away) return { ...state, observation: event.state, tick: event.tick };
       return { ...state, stage: "playing", observation: event.state, tick: event.tick };
     case "PlayerLeft":
-      return { ...state, notice: `Player ${event.slot + 1} left, a bot took over` };
+      return { ...state, notice: `Player ${event.slot + 1} left, a bot took over`,
+        noticeKey: "notice.player_left", noticeValues: { player: event.slot + 1 }, noticeErrorCode: null };
     case "Ended": {
       if (state.away) return { ...state, away: false, result: null };
       const title = outcomeText(event.outcome, state.slot, state.lobby, state.observation);
@@ -347,10 +401,11 @@ export function reduce(state, event) {
     }
     case "Error":
       if (event.code === "HostLeft") {
-        return { ...state, stage: "closed", notice: "The server stopped (server gone)." };
+        return { ...state, stage: "closed", notice: "The server stopped (server gone).",
+          noticeKey: "notice.server_stopped", noticeErrorCode: null };
       }
       return { ...state, stage: state.protocol === 2 && state.stage === "joining" && !state.room_id ? "directory" : state.stage,
-        notice: event.message };
+        notice: event.message, noticeKey: null, noticeErrorCode: event.code };
     default:
       return state;
   }
@@ -364,6 +419,17 @@ export const MAIN_MENU_ACTIONS = [
   { id: "menu-customize", label: "Customize", event: { type: "open-customize" } },
   { id: "menu-options", label: "Options", event: { type: "open-options", tab: "sound" } },
 ];
+
+export function mainMenuActions(language = "en") {
+  const keys = ["menu.create", "menu.join", "menu.customize", "menu.options"];
+  return MAIN_MENU_ACTIONS.map((action, index) => ({ ...action, label: translate(language, keys[index]) }));
+}
+
+export function applyLanguageToDocument(root, language) {
+  if (!root?.documentElement || !isSupportedLanguage(language)) return;
+  root.documentElement.lang = language;
+  applyTranslations(root, language);
+}
 
 const NAME_ADJECTIVES = ["Golden", "Yellow", "Crimson", "Sneaky", "Brave", "Lucky", "Fuzzy", "Jolly", "Sleepy", "Cosmic",
   "Rusty", "Mighty", "Wobbly", "Zesty", "Dizzy", "Grumpy", "Happy", "Silly", "Tiny", "Wild", "Pink", "Blue", "Salty",
@@ -457,15 +523,16 @@ export function hudVisible(state) {
 }
 
 /** `Version: <text>` for the server's `/version` answer, or nothing when it looks wrong. */
-export function versionLabel(text) {
+export function versionLabel(text, language = "en") {
   if (typeof text !== "string") return "";
   const version = text.trim();
-  return /^[0-9A-Za-z.+-]{1,40}$/.test(version) ? `Version: ${version}` : "";
+  return /^[0-9A-Za-z.+-]{1,40}$/.test(version) ? translate(language, "app.version", { version }) : "";
 }
 
 /** The seven powers in the order of `DevSetDrops.chances`. */
 export const DROP_KINDS = ["ExtraBomb", "Range", "Speed", "Punch", "Slow", "HyperSpeed", "SmallBomb", "Kick", "AutoBomb"];
 export const DROP_LABELS = ["Extra bomb", "Flame", "Roller", "Punch", "Slow", "Hyper speed", "Small bomb", "Kick", "Auto bomb"];
+const DROP_KEYS = ["extra_bomb", "flame", "roller", "punch", "slow", "hyper_speed", "small_bomb", "kick", "auto_bomb"];
 
 const unit = (v) => (typeof v === "number" && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0);
 
@@ -491,7 +558,7 @@ const forcedBehaviour = (name) =>
   BOT_BEHAVIOURS.some((b) => b.value === name && name !== "random") ? name : null;
 
 /** What the developer panel shows, or `null` when the host is not in developer mode. */
-export function devPanel(state) {
+export function devPanel(state, language = "en") {
   if (!state.dev) return null;
   const owner = lobbyOwner(state.lobby);
   const enabled = owner !== null && owner === state.slot;
@@ -500,16 +567,16 @@ export function devPanel(state) {
   // Chaser mode has its own bonuses: blocks hide nothing, so the drop chances do nothing
   const mode = state.observation?.config?.mode ?? state.lobby?.settings?.mode;
   const noDropEffect = mode === "chaser";
-  const base = enabled ? "Developer mode: testing only." : "Only the lobby owner can use the developer panel.";
+  const base = translate(language, enabled ? "dev.testing_only" : "dev.owner_only");
   return {
-    marker: "DEV MODE",
+    marker: translate(language, "dev.marker"),
     enabled,
     noDropEffect,
-    hint: noDropEffect ? `${base} Chaser mode: bonuses appear on their own, the drop sliders have no effect.` : base,
-    pause: { paused, label: paused ? "Resume bots" : "Pause bots" },
-    behaviour: { value: forcedBehaviour(state.devState?.behaviour) ?? "random", options: BOT_BEHAVIOURS },
-    sliders: DROP_KINDS.map((kind, i) => ({ kind, label: DROP_LABELS[i], percent: percents[i] })),
-    reset: { label: "Reset drops" },
+    hint: noDropEffect ? `${base} ${translate(language, "dev.chaser_no_drops")}` : base,
+    pause: { paused, label: translate(language, paused ? "dev.resume_bots" : "dev.pause_bots") },
+    behaviour: { value: forcedBehaviour(state.devState?.behaviour) ?? "random", options: BOT_BEHAVIOURS.map((item) => ({ ...item, label: translate(language, `dev.${item.value}`) })) },
+    sliders: DROP_KINDS.map((kind, i) => ({ kind, label: translate(language, `drop.${DROP_KEYS[i]}`), percent: percents[i] })),
+    reset: { label: translate(language, "dev.reset_drops") },
   };
 }
 
@@ -530,6 +597,7 @@ export function devMessages() {
  * `context` carries the room capacity and the memberships (to name the human to kick).
  */
 export function lobbyCards(lobby, you, context = {}) {
+  const language = context.language ?? "en";
   const owner = lobbyOwner(lobby);
   const youOwn = owner !== null && owner === you;
   const capacity = Number.isInteger(context.capacity) ? context.capacity : 4;
@@ -546,14 +614,14 @@ export function lobbyCards(lobby, you, context = {}) {
       }
     }
     const add = empty && !closed && occupied < capacity ? { type: "AddBot", slot: i } : null;
-    const name = empty ? "empty" : slot.controller === "Bot" ? "bot" : slot.name || `player ${i + 1}`;
+    const name = empty ? translate(language, "lobby.empty") : slot.controller === "Bot" ? translate(language, "lobby.bot") : slot.name || translate(language, "lobby.player", { slot: i + 1 });
     const team = lobby?.settings?.mode === "team" ? TEAM_LETTERS[i >> 1] : null;
-    const marks = [i === you ? "you" : "", i === owner ? "owner" : "", slot.ready ? "ready" : "", team ? `team ${team}` : ""].filter(Boolean);
+    const marks = [i === you ? translate(language, "lobby.you") : "", i === owner ? translate(language, "lobby.owner") : "", slot.ready ? translate(language, "lobby.ready") : "", team ? translate(language, "lobby.team", { team }) : ""].filter(Boolean);
     return {
       slot: i,
       team,
       empty,
-      banner: closed ? "CLOSED" : empty ? "EMPTY" : `PLAYER ${i + 1}`,
+      banner: closed ? translate(language, "lobby.closed") : empty ? translate(language, "lobby.banner_empty") : translate(language, "lobby.banner_player", { slot: i + 1 }),
       name,
       marks,
       caption: marks.length ? `${name} (${marks.join(", ")})` : name,
@@ -566,7 +634,7 @@ export function lobbyCards(lobby, you, context = {}) {
 
 /** The lobby action row: Ready for everybody but the owner, who gets Start instead; Start stays
  * disabled until every other occupied seat is ready (bots always are). */
-export function lobbyActions(state) {
+export function lobbyActions(state, language = "en") {
   const owner = lobbyOwner(state.lobby);
   const isOwner = owner !== null && owner === state.slot;
   const slots = state.lobby?.slots ?? [];
@@ -574,8 +642,8 @@ export function lobbyActions(state) {
   const everybodyReady = slots.every((s, i) =>
     i === owner || s.controller === "Empty" || s.controller === "Bot" || s.ready === true);
   return [
-    { id: "ready", label: "Ready", visible: !isOwner, pressed: mine, message: { type: "SetReady", ready: !mine } },
-    { id: "start", label: "Start", visible: isOwner, disabled: !everybodyReady || state.away === true, message: { type: "Start" } },
+    { id: "ready", label: translate(language, "room.ready"), visible: !isOwner, pressed: mine, message: { type: "SetReady", ready: !mine } },
+    { id: "start", label: translate(language, "room.start"), visible: isOwner, disabled: !everybodyReady || state.away === true, message: { type: "Start" } },
   ];
 }
 
@@ -728,13 +796,26 @@ export function graphicsFailure(state, detail) {
   return { ...state, graphicsError: `Graphics unavailable: ${detail}` };
 }
 
+export function localizedGraphicsDetail(detail, language = "en") {
+  const keys = {
+    "invalid text": "graphics.detail.invalid_text",
+    "invalid game data": "graphics.detail.invalid_data",
+    "arena too large": "graphics.detail.arena_too_large",
+    "out of memory": "graphics.detail.out_of_memory",
+    "unknown error": "graphics.detail.unknown",
+  };
+  if (detail === "The graphics module and the page are out of sync") return translate(language, "graphics.detail.module_mismatch");
+  const key = keys[detail];
+  return key ? translate(language, key) : detail;
+}
+
 /** One row per participant for the status list next to the canvas. */
 export function punchPowerActive(state) {
   return Number.isInteger(state?.slot) && state.observation?.players?.[state.slot]?.has_punch === true;
 }
 
 /** One row per participant for the status list next to the canvas. */
-export function hudRows(state) {
+export function hudRows(state, language = "en") {
   const players = state.observation?.players;
   const slots = state.lobby?.slots;
   if (!players || !slots) return [];
@@ -746,7 +827,8 @@ export function hudRows(state) {
     const p = players[i];
     const you = i === state.slot;
     const kind = you ? "you" : slot.controller === "Bot" ? "bot" : "player";
-    const label = you ? "You" : kind === "bot" ? "Bot" : `${slot.name || `Player ${i + 1}`} (player)`;
+    const label = you ? translate(language, "hud.you") : kind === "bot" ? translate(language, "hud.bot") :
+      slot.name ? translate(language, "hud.named_player", { name: slot.name }) : translate(language, "hud.player", { slot: i + 1 });
     rows.push({
       slot: i,
       kind,
@@ -756,7 +838,7 @@ export function hudRows(state) {
       bombs: `${p.bombs_active}/${p.bombs_max}`,
       range: p.range,
       speed: base + 1 - p.move_cooldown,
-      effects: effectsOf(p, hz),
+      effects: effectsOf(p, hz, language),
       team: typeof p.team === "number" ? TEAM_LETTERS[p.team] ?? null : null,
       role: p.role === "Chaser" ? "chaser" : p.role === "Runner" ? "runner" : null,
       hearts: p.role === "Chaser" ? p.hearts : 0,
@@ -811,14 +893,14 @@ export function resultRows(state) {
 }
 
 /** Short names of what is active on a player: the punch and the malus with the seconds left. */
-export function effectsOf(player, hz) {
+export function effectsOf(player, hz, language = "en") {
   const effects = [];
-  if (player.immobilized_left > 0) effects.push(`stunned ${Math.ceil(player.immobilized_left / hz)}s`);
-  if (player.has_punch) effects.push("punch");
+  if (player.immobilized_left > 0) effects.push(translate(language, "hud.stunned", { seconds: Math.ceil(player.immobilized_left / hz) }));
+  if (player.has_punch) effects.push(translate(language, "hud.punch"));
   const m = player.malus;
   if (m && typeof m.ticks_left === "number") {
-    const name = { Slow: "slow", HyperSpeed: "hyper", SmallBomb: "small", AutoBomb: "auto" }[m.kind] ?? "malus";
-    effects.push(`${name} ${Math.ceil(m.ticks_left / hz)}s`);
+    const key = { Slow: "hud.slow", HyperSpeed: "hud.hyper", SmallBomb: "hud.small", AutoBomb: "hud.auto" }[m.kind];
+    effects.push(key ? translate(language, key, { seconds: Math.ceil(m.ticks_left / hz) }) : translate(language, "error.invalid_request"));
   }
   return effects;
 }
@@ -828,26 +910,26 @@ export function inputMessage(state, keys) {
 }
 
 /** The banner shown for two seconds when the end pattern starts; empty for any other events. */
-export function patternBanner(events) {
-  return Array.isArray(events) && events.includes("PatternStarted") ? "The walls close in!" : "";
+export function patternBanner(events, language = "en") {
+  return Array.isArray(events) && events.includes("PatternStarted") ? translate(language, "game.pattern_closing") : "";
 }
 
 /** "You are the Chaser" when the round's role draw names slot `me` the chaser; empty otherwise. */
-export function roleBanner(events, me) {
+export function roleBanner(events, me, language = "en") {
   if (!Array.isArray(events) || !Number.isInteger(me)) return "";
   const chaser = events.some((e) => e?.RoleAssigned?.player === me && e.RoleAssigned.role === "Chaser");
-  return chaser ? "You are the Chaser" : "";
+  return chaser ? translate(language, "game.role_chaser") : "";
 }
 
 /** Time left in the round as `MM:SS`, `CLOSING` while the end pattern runs, or an empty string. */
-export function timerText(obs) {
+export function timerText(obs, language = "en") {
   const limit = obs?.config?.round_limit_ticks;
   const hz = obs?.config?.tick_hz;
   if (!(limit > 0) || !(hz > 0) || typeof obs.tick !== "number") return "";
   const closing = obs.config.closing_ticks;
   const mode = obs.config.mode;
   const pattern = (mode === undefined || mode === "normal" || mode === "team") && closing > 0 && closing < limit;
-  if (pattern && obs.tick >= limit - closing) return "CLOSING";
+  if (pattern && obs.tick >= limit - closing) return translate(language, "game.timer_closing");
   const left = Math.max(0, Math.ceil((limit - obs.tick) / hz));
   const two = (n) => String(n).padStart(2, "0");
   return `${two(Math.floor(left / 60))}:${two(left % 60)}`;
@@ -994,6 +1076,7 @@ function start() {
     hubCustomize: $("hub-customize"),
     customizePanel: $("customize-panel"),
     customizeClose: $("customize-close"),
+    language: $("language"),
     hubLobby: $("hub-lobby"),
     hubMain: $("hub-main"),
     gameMenu: $("game-menu"),
@@ -1096,6 +1179,9 @@ function start() {
       return undefined;
     }
   })();
+  let language = loadLanguage(storage);
+  applyLanguageToDocument(document, language);
+  el.language.value = language;
   const ctx = el.canvas.getContext("2d");
   let keyboardBindings = loadBindings(storage);
   const keys = new KeyTracker(keyboardBindings);
@@ -1318,7 +1404,7 @@ function start() {
     }
     if (event.type === "Snapshot") {
       audio.handleEvents(event.events);
-      const text = patternBanner(event.events);
+      const text = patternBanner(event.events, language);
       if (text) {
         el.banner.textContent = text;
         el.banner.hidden = false;
@@ -1327,7 +1413,7 @@ function start() {
           el.banner.hidden = true;
         }, 2000);
       }
-      const role = roleBanner(event.events, state.slot);
+      const role = roleBanner(event.events, state.slot, language);
       if (role) {
         el.roleBanner.textContent = role;
         el.roleBanner.hidden = false;
@@ -1341,7 +1427,8 @@ function start() {
     if (["Welcome", "Lobby", "RoomUpdated"].includes(event.type) && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
       const code = renderer.load(JSON.stringify({ ...event.state, events: event.events ?? [] }));
-      if (code !== 0) state = { ...state, notice: `Graphics error: ${renderer.describe(code)}` };
+      if (code !== 0) state = { ...state, notice: `Graphics error: ${renderer.describe(code)}`,
+        noticeKey: "notice.graphics", noticeValues: { detail: localizedGraphicsDetail(renderer.describe(code), language) }, noticeErrorCode: null };
       lastSnapshotAt = performance.now();
     }
     updateUi();
@@ -1352,7 +1439,7 @@ function start() {
   const devRows = DROP_KINDS.map((kind, i) => {
     const li = document.createElement("li");
     const label = document.createElement("label");
-    label.textContent = DROP_LABELS[i];
+    label.textContent = translate(language, `drop.${DROP_KEYS[i]}`);
     const input = document.createElement("input");
     input.type = "range";
     input.min = "0";
@@ -1370,14 +1457,14 @@ function start() {
     return { input, value };
   });
   el.devPause.addEventListener("click", () => {
-    const panel = devPanel(state);
+    const panel = devPanel(state, language);
     if (panel) send(devSend.pause(!panel.pause.paused));
   });
   el.devReset.addEventListener("click", () => send(devSend.reset()));
   el.devBehaviour.addEventListener("change", () => send(devSend.behaviour(el.devBehaviour.value)));
 
   function renderDev() {
-    const panel = devPanel(state);
+    const panel = devPanel(state, language);
     el.devPanel.hidden = !panel || !(state.stage === "lobby" || state.stage === "playing");
     if (!panel) return;
     el.devHint.textContent = panel.hint;
@@ -1439,10 +1526,7 @@ function start() {
           button.dataset.oskValue = key.value;
           button.textContent = oskState.shift ? key.value.toUpperCase() : key.value;
         } else {
-          button.textContent = key.type === "backspace" ? "Backspace"
-            : key.type === "space" ? "Space"
-            : key.type === "shift" ? "Shift"
-            : key.type[0].toUpperCase() + key.type.slice(1);
+          button.textContent = translate(language, `osk.key.${key.type}`);
         }
         button.setAttribute("aria-label", button.textContent);
         if (rowIndex === oskState.cursor.row && columnIndex === oskState.cursor.column) button.setAttribute("aria-current", "true");
@@ -1458,7 +1542,7 @@ function start() {
     oskTarget = target;
     oskState = createOskState(target.id, target.value, target.maxLength > 0 ? target.maxLength : 24);
     const label = target.labels?.[0]?.textContent?.trim();
-    el.oskTitle.textContent = label ? `Enter ${label.toLowerCase()}` : "Enter text";
+    el.oskTitle.textContent = label ? translate(language, "osk.enter_field", { field: label.toLowerCase() }) : translate(language, "osk.title");
     renderOsk();
     if (!openNavigationLayer("osk", el.osk, target)) return false;
     focusFirst(el.osk);
@@ -1572,8 +1656,12 @@ function start() {
 
   function updateUi() {
     const previousKey = focusKey(document.activeElement);
+    applyLanguageToDocument(document, language);
+    refreshControlLabels();
+    if (document.activeElement !== el.language) el.language.value = language;
     renderDev();
-    el.notice.textContent = topNotice(state) || (["lobby", "playing", "results"].includes(state.stage) ? state.graphicsError ?? "" : "");
+    el.notice.textContent = topNotice(state, language) || (["lobby", "playing", "results"].includes(state.stage) && state.graphicsError
+      ? translate(language, "graphics.unavailable", { detail: localizedGraphicsDetail(String(state.graphicsError).replace(/^Graphics unavailable:\s*/, ""), language) }) : "");
     const playing = state.stage === "playing";
     el.app.classList.toggle("match-view", playing && !mobileControls());
     const inLobby = state.stage === "lobby";
@@ -1586,7 +1674,7 @@ function start() {
     el.lobbyPanel.hidden = !visible.lobbyPanel;
     el.gamePanel.hidden = !visible.gamePanel;
     el.resultsPanel.hidden = !visible.resultsPanel;
-    el.resultsTitle.textContent = resultsTitle(state);
+    el.resultsTitle.textContent = resultsTitle(state, language);
     el.resultsRows.replaceChildren(...resultRows(state).map((row) => {
       const tr = document.createElement("tr");
       const values = [row.label, String(row.kills), String(row.bombsPlaced)];
@@ -1613,7 +1701,7 @@ function start() {
     el.hubMain.hidden = !hubView.main.visible;
     renderDirectory();
 
-    const [readyAction, startAction] = lobbyActions(state);
+    const [readyAction, startAction] = lobbyActions(state, language);
     el.ready.hidden = !readyAction.visible;
     el.ready.setAttribute("aria-pressed", String(readyAction.pressed));
     el.start.hidden = !startAction.visible;
@@ -1626,7 +1714,7 @@ function start() {
     }
     lobbyCanvases = [];
     el.slots.replaceChildren(
-      ...lobbyCards(state.lobby, state.slot, { capacity: state.capacity, memberships: state.memberships }).map((c) => {
+      ...lobbyCards(state.lobby, state.slot, { capacity: state.capacity, memberships: state.memberships, language }).map((c) => {
         const li = document.createElement("li");
         li.className = "slot";
         const card = document.createElement("div");
@@ -1655,7 +1743,9 @@ function start() {
           cross.className = "seat-control seat-remove";
           cross.dataset.navKey = `seat-remove-${c.slot}`;
           cross.innerHTML = "\u00d7";
-          const what = c.remove.type === "RemoveBot" ? `Remove the bot from seat ${c.slot + 1}` : `Kick ${c.name} from the room`;
+          const what = c.remove.type === "RemoveBot"
+            ? translate(language, "lobby.remove_bot", { slot: c.slot + 1 })
+            : translate(language, "lobby.kick_player", { name: c.name });
           cross.setAttribute("aria-label", what);
           cross.title = what;
           const message = c.remove;
@@ -1668,7 +1758,7 @@ function start() {
           plus.className = "seat-control seat-add";
           plus.dataset.navKey = `seat-add-${c.slot}`;
           plus.textContent = "+";
-          const what = `Add a bot to seat ${c.slot + 1}`;
+          const what = translate(language, "lobby.add_bot", { slot: c.slot + 1 });
           plus.setAttribute("aria-label", what);
           plus.title = what;
           const message = c.add;
@@ -1689,10 +1779,10 @@ function start() {
     // canvases need a layout before their size is known, so paint once they are in the page
     paintLobby(0);
     animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion());
-    el.timer.textContent = timerText(state.observation);
+    el.timer.textContent = timerText(state.observation, language);
     el.hud.hidden = !hudVisible(state);
     el.hud.replaceChildren(
-      ...hudRows(state).map((row) => {
+      ...hudRows(state, language).map((row) => {
         const li = document.createElement("li");
         li.className = row.alive ? "" : row.kart ? "kart" : "dead";
         const chip = document.createElement("span");
@@ -1700,10 +1790,11 @@ function start() {
         chip.style.backgroundColor = COLOUR_CSS[state.looks[row.slot]?.colour] ?? "";
         chip.textContent = String(row.slot + 1);
         const text = document.createElement("span");
-        const roleText = row.role === "chaser" ? ` [chaser ${"\u2665".repeat(row.hearts)}${row.shield ? " protected" : ""}]` : row.role === "runner" ? " [runner]" : "";
+        const roleText = row.role === "chaser" ? ` [${translate(language, "hud.chaser")} ${"\u2665".repeat(row.hearts)}${row.shield ? ` ${translate(language, "hud.protected")}` : ""}]` : row.role === "runner" ? ` [${translate(language, "hud.runner")}]` : "";
+        const teamText = row.team ? ` [${translate(language, "hud.team", { team: row.team })}]` : "";
         text.textContent = row.alive
-          ? `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: bombs ${row.bombs}, range ${row.range}, speed ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
-          : `${row.label}${row.team ? ` [team ${row.team}]` : ""}${roleText}: ${row.kart ? "kart" : "eliminated"}`;
+          ? `${row.label}${teamText}${roleText}: ${translate(language, "hud.bombs")} ${row.bombs}, ${translate(language, "hud.range")} ${row.range}, ${translate(language, "hud.speed")} ${row.speed}${row.effects.map((e) => `, ${e}`).join("")}`
+          : `${row.label}${teamText}${roleText}: ${translate(language, row.kart ? "hud.kart" : "hud.eliminated")}`;
         if (row.role) li.classList.add(`role-${row.role}`);
         if (row.team) li.classList.add(`team-${row.team}`);
         li.append(chip, text);
@@ -1808,8 +1899,9 @@ function start() {
     if (el.directoryPanel.hidden) return;
     el.directoryRefresh.disabled = state.protocol !== 2 || directoryRequest !== null || state.stage === "closed";
     el.directoryCreate.disabled = state.protocol !== 2 || state.stage === "joining" || state.stage === "closed";
-    el.directoryStatus.textContent = state.protocol !== 2 ? "Connecting..." : directoryRequest ? "Refreshing..." :
-      state.rooms.length === 0 ? "No rooms available" : `${state.rooms.length} room${state.rooms.length === 1 ? "" : "s"}`;
+    el.directoryStatus.textContent = state.protocol !== 2 ? translate(language, "directory.connecting") : directoryRequest ? translate(language, "directory.refreshing") :
+      state.rooms.length === 0 ? translate(language, "directory.no_rooms") : state.rooms.length === 1
+        ? translate(language, "directory.room_count_one") : translate(language, "directory.room_count", { count: state.rooms.length });
     const key = JSON.stringify([state.rooms, state.selectedRoom?.room_id]);
     if (key === directoryRenderKey) return;
     directoryRenderKey = key;
@@ -1825,8 +1917,10 @@ function start() {
       name.textContent = room.name;
       const detail = document.createElement("span");
       const humans = Number.isInteger(room.connected_humans) ? room.connected_humans + (room.reserved_humans ?? 0) : room.occupied;
-      const bots = room.bots > 0 ? ` + ${room.bots} bot${room.bots === 1 ? "" : "s"}` : "";
-      detail.textContent = `${MODE_LABELS[room.mode] ?? room.mode} - ${humans}/${room.capacity} players${bots} - ${room.phase}${room.password_required ? " - password" : ""} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
+      const bots = room.bots > 0 ? ` + ${translate(language, "directory.bots", { count: room.bots })}` : "";
+      const phase = ["lobby", "playing", "ended", "match"].includes(room.phase)
+        ? translate(language, `directory.phase.${room.phase}`) : room.phase;
+      detail.textContent = `${localizedModeLabel(room.mode, language)} - ${humans}/${room.capacity} ${translate(language, "directory.players")}${bots} - ${phase}${room.password_required ? ` - ${translate(language, "directory.password")}` : ""} - ${room.server_id} / ${room.room_id.slice(0, 8)}`;
       select.append(name, detail);
       select.addEventListener("click", () => dispatch({ type: "select-room", room }));
       item.append(select);
@@ -1869,9 +1963,10 @@ function start() {
   }
 
   // ---- the room: the creation menu before joining and the settings in the lobby ----
-  const modeLabel = (m) => MODE_LABELS[m] ?? m;
-  const sizeText = (s) => `${SIZE_LABELS[s]} (${SIZE_DIMENSIONS[s][0]} x ${SIZE_DIMENSIONS[s][1]})`;
+  const modeLabel = (m) => localizedModeLabel(m, language);
+  const sizeText = (s) => `${localizedSizeLabel(s, language)} (${SIZE_DIMENSIONS[s][0]} x ${SIZE_DIMENSIONS[s][1]})`;
   function fillOptions(select, values, text) {
+    const selected = select.value;
     select.replaceChildren(
       ...values.map((v) => {
         const o = document.createElement("option");
@@ -1880,15 +1975,21 @@ function start() {
         return o;
       }),
     );
+    if (values.some((value) => String(value) === selected)) select.value = selected;
   }
-  for (const [size, minutes, mode] of [
-    [el.roomSize, el.roomMinutes, null],
-    [el.lobbySize, el.lobbyMinutes, el.lobbyMode],
-  ]) {
-    fillOptions(size, SIZES, sizeText);
-    fillOptions(minutes, MINUTES, (m) => `${m} minutes`);
-    if (mode) fillOptions(mode, PLAYABLE_MODES, modeLabel);
+  function fillRoomOptions() {
+    for (const [size, minutes, mode] of [
+      [el.roomSize, el.roomMinutes, null],
+      [el.lobbySize, el.lobbyMinutes, el.lobbyMode],
+    ]) {
+      fillOptions(size, SIZES, sizeText);
+      fillOptions(minutes, MINUTES, (m) => translate(language, "room.minutes_long", { count: m }));
+      if (mode) fillOptions(mode, PLAYABLE_MODES, modeLabel);
+    }
+    fillOptions(el.roomBots, BOT_DIFFICULTIES, (value) => localizedBotDifficultyLabel(value, language));
+    fillOptions(el.lobbyBots, BOT_DIFFICULTIES, (value) => localizedBotDifficultyLabel(value, language));
   }
+  fillRoomOptions();
   fillOptions(el.lobbyCapacity, [1, 2, 3, 4], (capacity) => String(capacity));
   let roomDraft = loadRoom(storage);
 
@@ -1900,7 +2001,7 @@ function start() {
     el.roomFf.checked = roomDraft.friendly_fire;
     el.roomFfLabel.hidden = roomDraft.mode !== "team";
     el.roomBots.value = roomDraft.bot_difficulty;
-    el.roomModeHint.textContent = MODE_HINTS[roomDraft.mode] ?? "";
+    el.roomModeHint.textContent = localizedModeHint(roomDraft.mode, language);
     el.roomModes.replaceChildren(
       ...PLAYABLE_MODES.map((mode) => {
         const b = document.createElement("button");
@@ -1924,13 +2025,14 @@ function start() {
 
   /** Settings shown in the lobby; the owner's controls follow the lobby message. */
   function renderRoom() {
-    const controls = roomControls(state);
+    const controls = roomControls(state, language);
     el.roomSummary.textContent = state.stage === "lobby" ? controls.summary : "";
     el.roomNote.textContent = state.stage === "lobby" ? controls.note : "";
     renderRoomConfig();
     const room = state.room;
     el.joinRoom.hidden = !(room && room.open);
-    el.joinRoom.textContent = room && room.open ? `Joining: ${roomControlsSummary(room.settings)}${state.selectedRoom ? ` / ${state.selectedRoom.room_id}` : ""}` : "";
+    el.joinRoom.textContent = room && room.open
+      ? `${translate(language, "directory.joining", { summary: roomControlsSummary(room.settings) })}${state.selectedRoom ? ` / ${state.selectedRoom.room_id}` : ""}` : "";
     const protectedRoom = state.selectedRoom?.password_required === true;
     el.joinPassword.hidden = !protectedRoom;
     el.joinPasswordLabel.hidden = !protectedRoom;
@@ -1943,7 +2045,7 @@ function start() {
 
   function renderRoomConfig() {
     if (!configDraft) return;
-    const controls = roomControls(state);
+    const controls = roomControls(state, language);
     const s = configDraft.settings;
     if (document.activeElement !== el.lobbyName) el.lobbyName.value = s.name;
     el.lobbyCapacity.value = String(configDraft.capacity);
@@ -1956,7 +2058,7 @@ function start() {
     el.lobbyFf.checked = s.friendly_fire;
     el.lobbyFfLabel.hidden = s.mode !== "team";
     el.lobbyBots.value = s.bot_difficulty;
-    el.lobbyPasswordStatus.textContent = controls.passwordRequired ? "Password required" : "No password";
+    el.lobbyPasswordStatus.textContent = translate(language, controls.passwordRequired ? "room.password_required" : "room.no_password");
     if (document.activeElement !== el.lobbyPassword) el.lobbyPassword.value = configDraft.password;
     el.lobbyPasswordRemoveLabel.hidden = !controls.passwordRequired;
     el.lobbyPasswordRemove.checked = configDraft.removePassword;
@@ -1967,7 +2069,7 @@ function start() {
     renderRoomConfig();
   }
 
-  const roomControlsSummary = (settings) => roomControls({ stage: "lobby", slot: null, lobby: { slots: [], settings } }).summary;
+  const roomControlsSummary = (settings) => roomControls({ stage: "lobby", slot: null, lobby: { slots: [], settings } }, language).summary;
 
   el.roomName.addEventListener("input", () => {
     roomDraft = roomReducer(roomDraft, { type: "name", value: el.roomName.value });
@@ -2115,6 +2217,26 @@ function start() {
   }
   el.optionsClose.addEventListener("click", closeOptions);
   el.customizeClose.addEventListener("click", closeNavigationLayer);
+  el.language.addEventListener("change", () => {
+    const next = el.language.value;
+    if (!isSupportedLanguage(next)) {
+      el.language.value = language;
+      return;
+    }
+    if (next === language) return;
+    language = next;
+    saveLanguage(storage, language);
+    applyLanguageToDocument(document, language);
+    fillRoomOptions();
+    fillLookOptions();
+    updateUi();
+    renderOptions();
+    renderControlBindings();
+    renderControllerPanel();
+    refreshControlLabels();
+    setControlsStatus(controlsStatus.key, controlsStatus.values);
+    renderEditor();
+  });
   el.musicVolume.addEventListener("input", () => audio.setSettings({ music: Number(el.musicVolume.value) / 100 }));
   el.effectsVolume.addEventListener("input", () => audio.setSettings({ effects: Number(el.effectsVolume.value) / 100 }));
   el.mute.addEventListener("change", () => audio.setSettings({ muted: el.mute.checked }));
@@ -2124,33 +2246,45 @@ function start() {
   let controlsPresentation = controlPresentation();
   let controllerSignature = "";
   const disconnectedGamepadIndices = new Set();
-  const actionLabels = {
-    up: "Move up",
-    down: "Move down",
-    left: "Move left",
-    right: "Move right",
-    bomb: "Place bomb",
-    punch: "Punch bomb",
+  const actionLabelKeys = {
+    up: "controls.action.up",
+    down: "controls.action.down",
+    left: "controls.action.left",
+    right: "controls.action.right",
+    bomb: "controls.action.bomb",
+    punch: "controls.action.punch",
   };
-  const keyLabel = (code) =>
-    code === "Space" ? "Space" : code.startsWith("Arrow") ? code.slice(5) : code.startsWith("Key") ? code.slice(3) : code;
+  const actionLabel = (action) => translate(language, actionLabelKeys[action]);
+  const keyLabel = (code) => code === "Space" ? translate(language, "controls.key.space") :
+    code.startsWith("Arrow") ? translate(language, `controls.key.${code.slice(5).toLowerCase()}`) :
+      code.startsWith("Key") ? code.slice(3) : code;
   let resetArmed = false;
   let resetTimer = null;
   let spaceActivateTarget = null;
+  let controlsStatus = { key: "controls.select_action", values: {} };
 
-  function cancelReset(message = "") {
+  function setControlsStatus(key, values = {}) {
+    controlsStatus = { key, values };
+    el.controlsStatus.textContent = translate(language, key, values);
+  }
+
+  function refreshControlLabels() {
+    el.controlsReset.textContent = translate(language, resetArmed ? "controls.confirm_reset" : "controls.restore_defaults");
+  }
+
+  function cancelReset(messageKey = null) {
     clearTimeout(resetTimer);
     resetTimer = null;
     if (!resetArmed) return;
     resetArmed = false;
-    el.controlsReset.textContent = "Restore defaults";
-    if (message) el.controlsStatus.textContent = message;
+    refreshControlLabels();
+    if (messageKey) setControlsStatus(messageKey);
   }
 
   function renderControlBindings() {
     for (const button of el.controlBindings) {
       const action = button.dataset.bindAction;
-      button.textContent = `${actionLabels[action]}: ${keyboardBindings[action].map(keyLabel).join(" / ")}`;
+      button.textContent = `${actionLabel(action)}: ${keyboardBindings[action].map(keyLabel).join(" / ")}`;
     }
   }
 
@@ -2194,15 +2328,15 @@ function start() {
     const selected = devices.find((device) => device.index === gamepads.selectedIndex) ?? devices[0];
     if (selected) {
       el.controllerSelect.value = String(selected.index);
-      el.controllerStatus.textContent = `${selected.id} is connected and selected.`;
+      el.controllerStatus.textContent = translate(language, "controls.controller_connected", { name: selected.id });
     } else if (snapshot.state === "unsupported") {
-      el.controllerStatus.textContent = "Controller input is unavailable in this browser. Keyboard controls remain available.";
+      el.controllerStatus.textContent = translate(language, "controls.controller_unavailable");
     } else if (snapshot.state === "blocked") {
-      el.controllerStatus.textContent = "Controller access is blocked by this browser or page. Keyboard controls remain available.";
+      el.controllerStatus.textContent = translate(language, "controls.controller_blocked");
     } else if (snapshot.gamepads.some((gamepad) => gamepad && gamepad.connected !== false)) {
-      el.controllerStatus.textContent = "A controller is connected but does not have a supported standard mapping. Keyboard controls remain available.";
+      el.controllerStatus.textContent = translate(language, "controls.controller_mapping_unsupported");
     } else {
-      el.controllerStatus.textContent = "No standard controller is visible. Focus this page and press a button or move a stick.";
+      el.controllerStatus.textContent = translate(language, "controls.controller_none");
     }
   }
 
@@ -2221,7 +2355,8 @@ function start() {
   }
 
   renderControlBindings();
-  el.controlsStatus.textContent = "Select an action to change its key.";
+  setControlsStatus("controls.select_action");
+  refreshControlLabels();
   renderOptions();
   for (const select of el.app.querySelectorAll("select")) {
     const wrapper = document.createElement("span");
@@ -2286,7 +2421,7 @@ function start() {
     button.addEventListener("click", () => {
       cancelReset();
       capturingAction = button.dataset.bindAction;
-      el.controlsStatus.textContent = `Press a key for ${actionLabels[capturingAction].toLowerCase()}.`;
+      setControlsStatus("controls.press_key", { action: actionLabel(capturingAction).toLowerCase() });
       for (const item of el.controlBindings) item.setAttribute("aria-pressed", String(item === button));
       button.focus();
     });
@@ -2294,14 +2429,14 @@ function start() {
   el.controlsReset.addEventListener("click", () => {
     if (!resetArmed) {
       resetArmed = true;
-      el.controlsReset.textContent = "Confirm reset";
-      el.controlsStatus.textContent = "Select Confirm reset within four seconds to restore defaults.";
-      resetTimer = setTimeout(() => cancelReset("Reset cancelled."), 4000);
+      refreshControlLabels();
+      setControlsStatus("controls.confirm_reset_hint");
+      resetTimer = setTimeout(() => cancelReset("controls.reset_cancelled"), 4000);
       return;
     }
     cancelReset();
     setKeyboardBindings(DEFAULT_BINDINGS);
-    el.controlsStatus.textContent = "Default keyboard controls restored.";
+    setControlsStatus("controls.reset_done");
   });
 
   // every button of the menu and lobby clicks (the test button plays its own sound)
@@ -2313,32 +2448,41 @@ function start() {
 
   let draft = loadLook(storage, 0);
 
-  function fillSelect(select, options) {
+  function fillSelect(select, options, category) {
     select.replaceChildren(
       ...options.map((name) => {
         const o = document.createElement("option");
         o.value = name;
-        o.textContent = name;
+        o.textContent = lookOptionLabel(category, name, language);
         return o;
       }),
     );
   }
-  fillSelect(el.head, HEADS);
-  fillSelect(el.face, FACES);
-  fillSelect(el.costume, COSTUMES);
   el.swatches.replaceChildren(
     ...COLOUR_NAMES.map((name) => {
       const b = document.createElement("button");
       b.type = "button";
       b.className = "swatch";
       b.dataset.colour = name;
-      b.title = name;
-      b.setAttribute("aria-label", name);
+      b.title = lookOptionLabel("colour", name, language);
+      b.setAttribute("aria-label", lookOptionLabel("colour", name, language));
       b.style.backgroundColor = COLOUR_CSS[name];
       b.addEventListener("click", () => editLook({ type: "colour", value: name }));
       return b;
     }),
   );
+
+  function fillLookOptions() {
+    fillSelect(el.head, HEADS, "head");
+    fillSelect(el.face, FACES, "face");
+    fillSelect(el.costume, COSTUMES, "costume");
+    for (const swatch of el.swatches.children) {
+      const label = lookOptionLabel("colour", swatch.dataset.colour, language);
+      swatch.title = label;
+      swatch.setAttribute("aria-label", label);
+    }
+  }
+  fillLookOptions();
 
   function editLook(action) {
     draft = editorReducer(draft, action);
@@ -2402,18 +2546,18 @@ function start() {
       if (e.repeat) return;
       if (e.key === "Escape") {
         capturingAction = null;
-        el.controlsStatus.textContent = "Key capture cancelled.";
+        setControlsStatus("controls.capture_cancelled");
         for (const button of el.controlBindings) button.setAttribute("aria-pressed", "false");
         return;
       }
       const result = assignBinding(keyboardBindings, capturingAction, e.code);
       if (result.ok) {
         setKeyboardBindings(result.bindings);
-        el.controlsStatus.textContent = `${actionLabels[capturingAction]} updated.`;
+        setControlsStatus("controls.action_updated", { action: actionLabel(capturingAction) });
       } else {
-        el.controlsStatus.textContent = result.reason === "conflict"
-          ? "That key is already assigned to another action."
-          : "That key is reserved and cannot be assigned.";
+        setControlsStatus(result.reason === "conflict" ? "controls.action_conflict" : "controls.action_reserved", {
+          action: actionLabel(capturingAction),
+        });
       }
       capturingAction = null;
       for (const button of el.controlBindings) button.setAttribute("aria-pressed", "false");
@@ -2558,7 +2702,7 @@ function start() {
 
   async function loadGraphics() {
     if (typeof WebSocket === "undefined") {
-      state = { ...state, stage: "closed", notice: "This browser needs WebSocket support." };
+      state = { ...state, stage: "closed", notice: "This browser needs WebSocket support.", noticeKey: "notice.websocket_required", noticeErrorCode: null };
       updateUi();
       return;
     }
@@ -2587,7 +2731,7 @@ function start() {
   connect();
   fetch("/version")
     .then((response) => (response.ok ? response.text() : ""))
-    .then((text) => { el.version.textContent = versionLabel(text); })
+    .then((text) => { el.version.textContent = versionLabel(text, language); })
     .catch(() => {});
   setInterval(() => {
     if (state.stage === "directory" && screens(state).directoryPanel && directoryRequest === null) refreshDirectory();

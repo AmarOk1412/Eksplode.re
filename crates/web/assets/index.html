@@ -10,248 +10,256 @@
   <main id="app">
     <header>
       <h1>Eksplode.re</h1>
-      <p id="notice" role="status" aria-live="polite">Loading...</p>
+      <p id="notice" role="status" aria-live="polite" data-i18n="status.loading">Loading...</p>
     </header>
 
     <section id="menu-hub" class="dialog menu-hub" role="dialog" aria-modal="true" aria-labelledby="menu-hub-title" hidden>
-      <h2 id="menu-hub-title">Menu</h2>
-      <button id="hub-customize" type="button" aria-controls="customize-panel">Customize</button>
-      <button id="hub-options" type="button" aria-controls="options-panel">Options</button>
-      <button id="hub-lobby" type="button" hidden>Return to lobby</button>
-      <button id="hub-main" type="button" hidden>Main menu</button>
-      <button id="hub-dev" type="button" hidden>Developer</button>
-      <button id="hub-resume" type="button">Resume</button>
+      <h2 id="menu-hub-title" data-i18n="hub.title">Menu</h2>
+      <button id="hub-customize" type="button" aria-controls="customize-panel" data-i18n="menu.customize">Customize</button>
+      <button id="hub-options" type="button" aria-controls="options-panel" data-i18n="menu.options">Options</button>
+      <button id="hub-lobby" type="button" data-i18n="hub.return_lobby" hidden>Return to lobby</button>
+      <button id="hub-main" type="button" data-i18n="hub.main_menu" hidden>Main menu</button>
+      <button id="hub-dev" type="button" data-i18n="hub.developer" hidden>Developer</button>
+      <button id="hub-resume" type="button" data-i18n="hub.resume">Resume</button>
     </section>
 
     <section id="customize-panel" class="dialog options" role="dialog" aria-modal="true" aria-labelledby="customize-title" hidden>
-      <h2 id="customize-title">Customize</h2>
-      <div id="editor" class="editor" role="group" aria-label="Character editor">
+      <h2 id="customize-title" data-i18n="customize.title">Customize</h2>
+      <div class="language-picker">
+        <label for="language" data-i18n="language.label">Language</label>
+        <select id="language" name="language" aria-label="Language" data-i18n-aria-label="language.label">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+          <option value="es">Español</option>
+          <option value="de">Deutsch</option>
+        </select>
+      </div>
+      <div id="editor" class="editor" role="group" aria-label="Character editor" data-i18n-aria-label="customize.character_editor">
         <div class="preview-wrap">
-          <canvas id="preview" class="preview" aria-label="Preview of your character"></canvas>
-          <button id="random-look" class="randomize-icon" type="button" aria-label="Randomize" title="Randomize"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg></button>
+          <canvas id="preview" class="preview" aria-label="Preview of your character" data-i18n-aria-label="customize.preview"></canvas>
+          <button id="random-look" class="randomize-icon" type="button" aria-label="Randomize" title="Randomize" data-i18n-aria-label="customize.randomize" data-i18n-title="customize.randomize"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/></svg></button>
         </div>
         <div class="pickers">
-          <h3>Your character</h3>
-          <div id="swatches" class="swatches" role="group" aria-label="Colour"></div>
-          <label for="head">Head</label>
+          <h3 data-i18n="customize.your_character">Your character</h3>
+          <div id="swatches" class="swatches" role="group" aria-label="Colour" data-i18n-aria-label="look.colour"></div>
+          <label for="head" data-i18n="look.head">Head</label>
           <select id="head"></select>
-          <label for="face">Face</label>
+          <label for="face" data-i18n="look.face">Face</label>
           <select id="face"></select>
-          <label for="costume">Costume</label>
+          <label for="costume" data-i18n="look.costume">Costume</label>
           <select id="costume"></select>
         </div>
       </div>
       <div class="buttons">
-        <button id="customize-close" type="button">Close</button>
+        <button id="customize-close" type="button" data-i18n="common.close">Close</button>
       </div>
     </section>
 
     <section id="options-panel" class="dialog options" role="dialog" aria-modal="true" aria-labelledby="options-title" hidden>
-      <h2 id="options-title">Options</h2>
-      <div class="options-tabs" role="tablist" aria-label="Options">
-        <button id="tab-sound" type="button" role="tab" aria-selected="true" aria-controls="sound-panel">Sound</button>
-        <button id="tab-controls" type="button" role="tab" aria-selected="false" aria-controls="controls-panel">Controls</button>
+      <h2 id="options-title" data-i18n="options.title">Options</h2>
+      <div class="options-tabs" role="tablist" aria-label="Options" data-i18n-aria-label="options.title">
+        <button id="tab-sound" type="button" role="tab" aria-selected="true" aria-controls="sound-panel" data-i18n="options.sound">Sound</button>
+        <button id="tab-controls" type="button" role="tab" aria-selected="false" aria-controls="controls-panel" data-i18n="options.controls">Controls</button>
       </div>
       <section id="sound-panel" class="options-tab sound" role="tabpanel" aria-labelledby="tab-sound">
-        <h2>Sound</h2>
-        <label for="music-volume">Music</label>
+        <h2 data-i18n="options.sound">Sound</h2>
+        <label for="music-volume" data-i18n="options.music">Music</label>
         <input id="music-volume" type="range" min="0" max="100" step="1">
-        <label for="effects-volume">Effects</label>
+        <label for="effects-volume" data-i18n="options.effects">Effects</label>
         <input id="effects-volume" type="range" min="0" max="100" step="1">
-        <label class="check"><input id="mute" type="checkbox"> Mute</label>
+        <label class="check"><input id="mute" type="checkbox"> <span data-i18n="options.mute">Mute</span></label>
         <div class="buttons">
-          <button id="test-sound" type="button">Test sound</button>
+          <button id="test-sound" type="button" data-i18n="options.test_sound">Test sound</button>
         </div>
       </section>
       <section id="controls-panel" class="options-tab controls-panel" role="tabpanel" aria-labelledby="tab-controls" hidden>
-        <h2>Controls</h2>
+        <h2 data-i18n="options.controls">Controls</h2>
         <div id="keyboard-controls">
         <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
-        <div class="control-bindings" role="group" aria-label="Keyboard bindings">
-          <div class="control-binding"><span>Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
-          <div class="control-binding"><span>Move down</span><button type="button" data-bind-action="down">Down: ArrowDown / S</button></div>
-          <div class="control-binding"><span>Move left</span><button type="button" data-bind-action="left">Left: ArrowLeft / A</button></div>
-          <div class="control-binding"><span>Move right</span><button type="button" data-bind-action="right">Right: ArrowRight / D</button></div>
-          <div class="control-binding"><span>Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
-          <div class="control-binding"><span>Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
+        <div class="control-bindings" role="group" aria-label="Keyboard bindings" data-i18n-aria-label="controls.keyboard_bindings">
+          <div class="control-binding"><span data-i18n="controls.move_up">Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
+          <div class="control-binding"><span data-i18n="controls.move_down">Move down</span><button type="button" data-bind-action="down">Down: ArrowDown / S</button></div>
+          <div class="control-binding"><span data-i18n="controls.move_left">Move left</span><button type="button" data-bind-action="left">Left: ArrowLeft / A</button></div>
+          <div class="control-binding"><span data-i18n="controls.move_right">Move right</span><button type="button" data-bind-action="right">Right: ArrowRight / D</button></div>
+          <div class="control-binding"><span data-i18n="controls.place_bomb">Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
+          <div class="control-binding"><span data-i18n="controls.punch_bomb">Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
         </div>
         <div class="buttons">
-          <button id="controls-reset" type="button">Restore defaults</button>
+          <button id="controls-reset" type="button" data-i18n="controls.restore_defaults">Restore defaults</button>
         </div>
         </div>
         <div id="controller-controls" class="controller-settings" hidden>
-          <h3>Game controller</h3>
-          <label for="controller-select">Connected controller</label>
-          <select id="controller-select" aria-label="Select a connected controller" disabled></select>
-          <p id="controller-mapping" class="hint">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
-          <p id="controller-status" class="hint" role="status" aria-live="polite">Focus this page and press a controller button or move a stick to connect.</p>
+          <h3 data-i18n="controls.game_controller">Game controller</h3>
+          <label for="controller-select" data-i18n="controls.connected_controller">Connected controller</label>
+          <select id="controller-select" aria-label="Select a connected controller" data-i18n-aria-label="controls.select_controller" disabled></select>
+          <p id="controller-mapping" class="hint" data-i18n="controls.controller_mapping">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
+          <p id="controller-status" class="hint" role="status" aria-live="polite" data-i18n="controls.controller_connect_hint">Focus this page and press a controller button or move a stick to connect.</p>
         </div>
       </section>
       <div class="buttons">
-        <button id="options-close" type="button">Close</button>
+        <button id="options-close" type="button" data-i18n="common.close">Close</button>
       </div>
     </section>
 
-    <section id="main-menu" class="menu main-menu" aria-label="Main menu">
+    <section id="main-menu" class="menu main-menu" aria-label="Main menu" data-i18n-aria-label="menu.main_label">
       <div id="lobby-scene">
         <img id="lobby-scene-fallback" src="/lobby-scene.png" alt="" aria-hidden="true" width="640" height="200">
         <canvas id="lobby-scene-canvas" aria-hidden="true" hidden></canvas>
       </div>
-      <label for="name">Your name</label>
+      <label for="name" data-i18n="menu.name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
-      <div class="menu-actions" role="group" aria-label="Main menu actions">
-        <button id="menu-create" class="primary" type="button">Create new game</button>
-        <button id="menu-join" type="button">Join a game</button>
-        <button id="menu-customize" type="button" aria-controls="customize-panel">Customize</button>
-        <button id="menu-options" type="button" aria-controls="options-panel">Options</button>
+      <div class="menu-actions" role="group" aria-label="Main menu actions" data-i18n-aria-label="menu.main_label">
+        <button id="menu-create" class="primary" type="button" data-i18n="menu.create">Create new game</button>
+        <button id="menu-join" type="button" data-i18n="menu.join">Join a game</button>
+        <button id="menu-customize" type="button" aria-controls="customize-panel" data-i18n="menu.customize">Customize</button>
+        <button id="menu-options" type="button" aria-controls="options-panel" data-i18n="menu.options">Options</button>
       </div>
-      <button id="retry" type="button" hidden>Retry</button>
-      <a id="donate" class="donate-link" href="https://buymeacoffee.com/kaelinnchacuit" target="_blank" rel="noopener noreferrer" title="Donate on Buy Me a Coffee">Donate</a>
+      <button id="retry" type="button" data-i18n="menu.retry" hidden>Retry</button>
+      <a id="donate" class="donate-link" href="https://buymeacoffee.com/kaelinnchacuit" target="_blank" rel="noopener noreferrer" title="Donate on Buy Me a Coffee" data-i18n="menu.donate" data-i18n-title="menu.donate">Donate</a>
     </section>
 
     <section id="room-panel" class="menu room" aria-label="Create a room" hidden>
-      <h2>Create a room</h2>
-      <label for="room-name">Room name</label>
-      <input id="room-name" maxlength="24" autocomplete="off" spellcheck="false" placeholder="My room">
-      <div id="room-modes" class="mode-cards" role="radiogroup" aria-label="Mode"></div>
+      <h2 data-i18n="room.create_title">Create a room</h2>
+      <label for="room-name" data-i18n="room.name">Room name</label>
+      <input id="room-name" maxlength="24" autocomplete="off" spellcheck="false" placeholder="My room" data-i18n-placeholder="room.name_placeholder">
+      <div id="room-modes" class="mode-cards" role="radiogroup" aria-label="Mode" data-i18n-aria-label="room.mode_label"></div>
       <p id="room-mode-hint" class="hint"></p>
-      <label for="room-size">Board size</label>
+      <label for="room-size" data-i18n="room.board_size">Board size</label>
       <select id="room-size"></select>
-      <label for="room-minutes">Round time</label>
+      <label for="room-minutes" data-i18n="room.round_time">Round time</label>
       <select id="room-minutes"></select>
-      <label for="room-capacity">Maximum players</label>
+      <label for="room-capacity" data-i18n="room.max_players">Maximum players</label>
       <select id="room-capacity"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option></select>
-      <label for="room-password">Room password (optional)</label>
+      <label for="room-password" data-i18n="room.password_optional">Room password (optional)</label>
       <input id="room-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-      <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> Friendly fire</label>
-      <label for="room-bot-difficulty">Bot difficulty</label>
+      <label id="room-ff-label" class="check" hidden><input id="room-ff" type="checkbox"> <span data-i18n="room.friendly_fire_label">Friendly fire</span></label>
+      <label for="room-bot-difficulty" data-i18n="room.bot_difficulty">Bot difficulty</label>
       <select id="room-bot-difficulty"><option value="easy">Easy</option><option value="medium" selected>Medium</option><option value="hard">Hard</option></select>
-      <button id="room-create" class="primary" type="button">Create room</button>
-      <button id="room-back" type="button">Back</button>
+      <button id="room-create" class="primary" type="button" data-i18n="room.create_button">Create room</button>
+      <button id="room-back" type="button" data-i18n="common.back">Back</button>
     </section>
 
-    <section id="directory-panel" class="directory" aria-label="Join a game" hidden>
-      <h2>Rooms</h2>
+    <section id="directory-panel" class="directory" aria-label="Join a game" data-i18n-aria-label="menu.join" hidden>
+      <h2 data-i18n="directory.title">Rooms</h2>
       <div class="buttons">
-        <button id="directory-refresh" type="button">Refresh</button>
-        <button id="directory-create" type="button">New room</button>
-        <button id="directory-back" type="button">Back</button>
+        <button id="directory-refresh" type="button" data-i18n="directory.refresh">Refresh</button>
+        <button id="directory-create" type="button" data-i18n="directory.new_room">New room</button>
+        <button id="directory-back" type="button" data-i18n="common.back">Back</button>
       </div>
       <p id="directory-status" role="status" aria-live="polite"></p>
-      <ul id="directory-rooms" class="directory-rooms" aria-label="Available rooms"></ul>
+      <ul id="directory-rooms" class="directory-rooms" aria-label="Available rooms" data-i18n-aria-label="directory.rooms_available"></ul>
     <section id="join-panel" class="menu">
       <p id="join-room" class="hint" hidden></p>
-      <label id="join-password-label" for="join-password" hidden>Room password</label>
+      <label id="join-password-label" for="join-password" data-i18n="room.join_password" hidden>Room password</label>
       <input id="join-password" type="password" autocomplete="current-password" autocapitalize="off" spellcheck="false" hidden>
-      <button id="join" class="primary" type="button">Join room</button>
+      <button id="join" class="primary" type="button" data-i18n="directory.join_room">Join room</button>
     </section>
     </section>
 
     <section id="leave-panel" class="dialog" role="dialog" aria-modal="true" aria-labelledby="leave-title" hidden>
-      <h2 id="leave-title">Leave this room?</h2>
-      <div class="buttons"><button id="leave-cancel" type="button">Cancel</button><button id="leave-confirm" type="button">Leave room</button></div>
+      <h2 id="leave-title" data-i18n="room.leave_question">Leave this room?</h2>
+      <div class="buttons"><button id="leave-cancel" type="button" data-i18n="common.cancel">Cancel</button><button id="leave-confirm" type="button" data-i18n="room.leave_button">Leave room</button></div>
     </section>
 
     <section id="lobby-panel" class="dialog lobby" hidden>
       <div class="lobby-header">
-        <h2>Lobby</h2>
+        <h2 data-i18n="room.lobby_title">Lobby</h2>
         <p id="room-summary" class="room-summary" aria-live="polite"></p>
         <button id="room-config-open" class="icon-button" type="button" aria-label="Room settings" title="Room settings" aria-controls="room-config" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg></button>
         <button id="leave-room" class="icon-button" type="button" aria-label="Leave room" title="Leave room"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" height="24px" width="24px" fill="#e3e3e3"><path d="M6.4,19L5,17.6L10.6,12L5,6.4L6.4,5L12,10.6L17.6,5L19,6.4L13.4,12L19,17.6L17.6,19L12,13.4L6.4,19Z"/></svg></button>
       </div>
       <p id="room-note" class="hint"></p>
       <ul id="slots" class="cards"></ul>
-      <div class="buttons lobby-actions" role="group" aria-label="Lobby actions">
-        <button id="ready" type="button" aria-pressed="false">Ready</button>
-        <button id="start" class="primary" type="button" hidden>Start</button>
+      <div class="buttons lobby-actions" role="group" aria-label="Lobby actions" data-i18n-aria-label="room.lobby_actions">
+        <button id="ready" type="button" aria-pressed="false" data-i18n="room.ready">Ready</button>
+        <button id="start" class="primary" type="button" data-i18n="room.start" hidden>Start</button>
       </div>
-      <p class="hint">The first human player is the owner: only the owner changes the room settings, removes bots or players and starts the match. Anybody can put a bot into an empty seat with +.
-Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>
+      <p class="hint" data-i18n="lobby.instructions">The first human player is the owner: only the owner changes the room settings, removes bots or players and starts the match. Anybody can put a bot into an empty seat with +. Controls: arrow keys or WASD to move, Space or E for a bomb, Z or Q to punch a bomb (needs the punch power).</p>
     </section>
 
     <section id="room-config" class="dialog room-config" role="dialog" aria-modal="true" aria-labelledby="room-config-title" hidden>
-      <h2 id="room-config-title">Room settings</h2>
-      <div id="room-controls" class="room-controls" role="group" aria-label="Room settings">
-        <label for="lobby-room-name">Name</label>
+      <h2 id="room-config-title" data-i18n="room.settings">Room settings</h2>
+      <div id="room-controls" class="room-controls" role="group" aria-label="Room settings" data-i18n-aria-label="room.settings_group">
+        <label for="lobby-room-name" data-i18n="room.configuration.name">Name</label>
         <input id="lobby-room-name" maxlength="24" autocomplete="off" spellcheck="false">
-        <label for="lobby-capacity">Maximum players</label>
+        <label for="lobby-capacity" data-i18n="room.max_players">Maximum players</label>
         <select id="lobby-capacity"></select>
-        <label for="lobby-mode">Mode</label>
+        <label for="lobby-mode" data-i18n="room.mode_label">Mode</label>
         <select id="lobby-mode"></select>
-        <label for="lobby-size">Board</label>
+        <label for="lobby-size" data-i18n="room.configuration.board">Board</label>
         <select id="lobby-size"></select>
-        <label for="lobby-minutes">Time</label>
+        <label for="lobby-minutes" data-i18n="room.configuration.time">Time</label>
         <select id="lobby-minutes"></select>
-        <label id="lobby-ff-label" class="check" hidden><input id="lobby-ff" type="checkbox"> Friendly fire</label>
-        <label for="lobby-bot-difficulty">Bot difficulty</label>
+        <label id="lobby-ff-label" class="check" hidden><input id="lobby-ff" type="checkbox"> <span data-i18n="room.friendly_fire_label">Friendly fire</span></label>
+        <label for="lobby-bot-difficulty" data-i18n="room.bot_difficulty">Bot difficulty</label>
         <select id="lobby-bot-difficulty"><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option></select>
       </div>
-      <div id="lobby-password-controls" class="room-password-controls" role="group" aria-label="Room password settings">
+      <div id="lobby-password-controls" class="room-password-controls" role="group" aria-label="Room password settings" data-i18n-aria-label="room.password_settings">
         <p id="lobby-password-status" class="hint" aria-live="polite"></p>
-        <label for="lobby-password">New password</label>
+        <label for="lobby-password" data-i18n="room.configuration.new_password">New password</label>
         <input id="lobby-password" type="password" autocomplete="new-password" autocapitalize="off" spellcheck="false">
-        <label id="lobby-password-remove-label" class="check" hidden><input id="lobby-password-remove" type="checkbox"> Remove protection</label>
+        <label id="lobby-password-remove-label" class="check" hidden><input id="lobby-password-remove" type="checkbox"> <span data-i18n="room.configuration.remove_protection">Remove protection</span></label>
       </div>
       <div class="buttons">
-        <button id="room-config-save" type="button">Save</button>
-        <button id="room-config-close" type="button">Close</button>
+        <button id="room-config-save" type="button" data-i18n="room.save">Save</button>
+        <button id="room-config-close" type="button" data-i18n="common.close">Close</button>
       </div>
     </section>
 
     <section id="game-panel" hidden>
       <button id="game-menu" class="icon-button game-menu" type="button" aria-label="Exit menu" title="Menu" aria-controls="menu-hub"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5c-1.11 0-2 .9-2 2v4h2V5h14v14H5v-4H3v4c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg></button>
-      <div id="timer" aria-label="Time left"></div>
+      <div id="timer" aria-label="Time left" data-i18n-aria-label="game.time_left"></div>
       <p id="banner" class="pattern-banner" role="alert" hidden></p>
       <p id="role-banner" class="role-banner" role="alert" hidden></p>
-      <canvas id="view" aria-label="Game arena" tabindex="0"></canvas>
+      <canvas id="view" aria-label="Game arena" data-i18n-aria-label="game.arena" tabindex="0"></canvas>
       <ul id="hud" class="slots" hidden></ul>
-      <div id="touch-controls" class="touch-controls" role="group" aria-label="Mobile match controls" hidden>
-        <button id="touch-joystick" class="touch-joystick" type="button" aria-label="Movement joystick">
+      <div id="touch-controls" class="touch-controls" role="group" aria-label="Mobile match controls" data-i18n-aria-label="game.mobile_controls" hidden>
+        <button id="touch-joystick" class="touch-joystick" type="button" aria-label="Movement joystick" data-i18n-aria-label="game.movement_joystick">
           <span class="touch-joystick-knob" aria-hidden="true"></span>
         </button>
-        <div class="touch-actions" role="group" aria-label="Player actions">
-          <button id="touch-bomb" type="button" aria-label="Place bomb">Bomb</button>
-          <button id="touch-punch" type="button" aria-label="Punch bomb">Punch</button>
+        <div class="touch-actions" role="group" aria-label="Player actions" data-i18n-aria-label="game.player_actions">
+          <button id="touch-bomb" type="button" aria-label="Place bomb" data-i18n-aria-label="controls.place_bomb" data-i18n="game.bomb">Bomb</button>
+          <button id="touch-punch" type="button" aria-label="Punch bomb" data-i18n-aria-label="controls.punch_bomb" data-i18n="game.punch">Punch</button>
         </div>
       </div>
     </section>
 
     <section id="results-panel" class="results" role="dialog" aria-modal="true" aria-labelledby="results-title" hidden>
-      <h2 id="results-title">Round complete</h2>
-      <h3>Final standings</h3>
-      <div class="results-table-wrap" role="region" aria-label="Final standings" tabindex="0">
+      <h2 id="results-title" data-i18n="results.title">Round complete</h2>
+      <h3 data-i18n="results.standings">Final standings</h3>
+      <div class="results-table-wrap" role="region" aria-label="Final standings" data-i18n-aria-label="results.standings" tabindex="0">
         <table class="results-table">
           <thead>
-            <tr><th scope="col">Player</th><th scope="col">Kills</th><th scope="col">Bombs placed</th></tr>
+            <tr><th scope="col" data-i18n="results.player">Player</th><th scope="col" data-i18n="results.kills">Kills</th><th scope="col" data-i18n="results.bombs_placed">Bombs placed</th></tr>
           </thead>
           <tbody id="results-rows"></tbody>
         </table>
       </div>
-      <button id="return-to-lobby" type="button">Return to Lobby</button>
+      <button id="return-to-lobby" type="button" data-i18n="results.return">Return to Lobby</button>
     </section>
 
-    <section id="dev-panel" class="dialog dev" aria-label="Developer mode" hidden>
-      <p class="dev-marker">DEV MODE</p>
+    <section id="dev-panel" class="dialog dev" aria-label="Developer mode" data-i18n-aria-label="dev.title" hidden>
+      <p class="dev-marker" data-i18n="dev.marker">DEV MODE</p>
       <p id="dev-hint" class="hint"></p>
       <div class="buttons">
-        <button id="dev-pause" type="button">Pause bots</button>
-        <button id="dev-reset" type="button">Reset drops</button>
+        <button id="dev-pause" type="button" data-i18n="dev.pause_bots">Pause bots</button>
+        <button id="dev-reset" type="button" data-i18n="dev.reset_drops">Reset drops</button>
       </div>
-      <label for="dev-behaviour">Bot behaviour</label>
+      <label for="dev-behaviour" data-i18n="dev.bot_behaviour">Bot behaviour</label>
       <select id="dev-behaviour">
-        <option value="random">Random</option>
-        <option value="aggressive">Aggressive</option>
-        <option value="protective">Protective</option>
-        <option value="balanced">Balanced</option>
+        <option value="random" data-i18n="dev.random">Random</option>
+        <option value="aggressive" data-i18n="dev.aggressive">Aggressive</option>
+        <option value="protective" data-i18n="dev.protective">Protective</option>
+        <option value="balanced" data-i18n="dev.balanced">Balanced</option>
       </select>
-      <h2>Drop chance per destroyed block</h2>
+      <h2 data-i18n="dev.drop_chance">Drop chance per destroyed block</h2>
       <ul id="dev-sliders" class="dev-sliders"></ul>
     </section>
 
-    <section id="osk" class="dialog osk" role="dialog" aria-modal="true" aria-label="On-screen keyboard" hidden>
-      <h2 id="osk-title">Enter text</h2>
+    <section id="osk" class="dialog osk" role="dialog" aria-modal="true" aria-label="On-screen keyboard" data-i18n-aria-label="osk.title" hidden>
+      <h2 id="osk-title" data-i18n="osk.title">Enter text</h2>
       <output id="osk-preview" aria-live="polite"></output>
-      <div id="osk-keys" class="osk-keys" role="grid" aria-label="Text entry keys"></div>
+      <div id="osk-keys" class="osk-keys" role="grid" aria-label="Text entry keys" data-i18n-aria-label="osk.keys"></div>
     </section>
   </main>
   <p id="version" class="version" aria-live="off"></p>

@@ -1,6 +1,8 @@
 // Room settings: the options, the menu state and the storage. Presentation only: the host reads
 // every value leniently and decides what applies; the rules live in the server.
 
+import { translate } from "./language.js";
+
 /** Every mode, by wire name, and the modes whose rules exist (the menu offers only these). */
 export const MODES = ["normal", "team", "chaser"];
 export const PLAYABLE_MODES = ["normal", "team", "chaser"];
@@ -19,6 +21,22 @@ export const MAX_NAME = 24;
 /** How well the room's bots play; the owner chooses, Medium by default. */
 export const BOT_DIFFICULTIES = ["easy", "medium", "hard"];
 export const BOT_DIFFICULTY_LABELS = { easy: "Easy", medium: "Medium", hard: "Hard" };
+
+export function localizedModeLabel(mode, language = "en") {
+  return translate(language, `room.mode.${mode}`);
+}
+
+export function localizedModeHint(mode, language = "en") {
+  return translate(language, `room.hint.${mode}`);
+}
+
+export function localizedSizeLabel(size, language = "en") {
+  return translate(language, `room.size.${size}`);
+}
+
+export function localizedBotDifficultyLabel(difficulty, language = "en") {
+  return translate(language, `room.difficulty.${difficulty}`);
+}
 
 export const ROOM_KEY = "eksplode.re.room.v1";
 const LEGACY_ROOM_KEY = "bomberust.room.v1";
@@ -72,12 +90,16 @@ export function roomReducer(room, action) {
 
 /** One line for the lobby: `name - Normal - 19 x 15 - 5 min - Medium bots`, with friendly fire
  * for Team. */
-export function roomLabel(settings) {
+export function roomLabel(settings, language = "en") {
   const s = sanitizeRoom(settings);
   const [w, h] = SIZE_DIMENSIONS[s.size];
-  const parts = [s.name, MODE_LABELS[s.mode], `${w} x ${h}`, `${s.minutes} min`];
-  if (s.mode === "team") parts.push(`friendly fire ${s.friendly_fire ? "on" : "off"}`);
-  parts.push(`${BOT_DIFFICULTY_LABELS[s.bot_difficulty]} bots`);
+  const minuteKey = language === "de" ? "room.minutes_de" : "room.minutes";
+  const parts = [s.name, localizedModeLabel(s.mode, language), `${w} x ${h}`, translate(language, minuteKey, { count: s.minutes })];
+  if (s.mode === "team") {
+    const state = translate(language, `room.friendly_fire.${s.friendly_fire ? "on" : "off"}`);
+    parts.push(translate(language, "room.friendly_fire", { state }));
+  }
+  parts.push(translate(language, `room.bots.${s.bot_difficulty}`));
   return parts.filter((p) => p !== "").join(" - ");
 }
 
@@ -133,21 +155,21 @@ export function saveRoom(storage, room) {
 }
 
 /** What the lobby shows about the room and what the owner may change. */
-export function roomControls(state) {
+export function roomControls(state, language = "en") {
   const settings = sanitizeRoom(state.lobby?.settings);
   const owner = state.lobby && Object.hasOwn(state.lobby, "owner_slot") ? state.lobby.owner_slot :
     state.lobby?.slots?.findIndex((s) => s.controller === "Local" || s.controller === "Remote");
   const enabled = state.stage === "lobby" && owner !== undefined && owner >= 0 && owner === state.slot;
   return {
     settings,
-    summary: roomLabel(state.lobby?.settings),
+    summary: roomLabel(state.lobby?.settings, language),
     enabled,
     capacity: state.capacity ?? 4,
     occupied: state.lobby?.slots?.filter((slot) => slot.controller !== "Empty").length ?? 0,
     humans: state.lobby?.slots?.filter((slot) => slot.controller === "Local" || slot.controller === "Remote").length ?? 0,
     passwordRequired: state.password_required === true,
     showFriendlyFire: settings.mode === "team",
-    note: settings.mode === "chaser" ? "One chaser with bombs and hearts, three runners without bombs. Roles are drawn at the start." : "",
+    note: settings.mode === "chaser" ? translate(language, "room.chaser_note") : "",
   };
 }
 

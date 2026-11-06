@@ -20,6 +20,22 @@ fn f14_us2_as5_static_scene_is_a_real_same_origin_png_with_security_headers() {
 }
 
 #[test]
+fn f15_us1_as2_language_catalog_is_a_same_origin_javascript_asset() {
+    let server = server(|_| {});
+    let response = get(server.http_addr(), "/language.js");
+    assert_eq!(response.status, 200);
+    assert_eq!(
+        response.header("content-type"),
+        Some("text/javascript; charset=utf-8")
+    );
+    assert!(!response.body.is_empty());
+    assert_eq!(response.header("cache-control"), Some("no-cache"));
+    assert_eq!(response.header("content-security-policy"), Some(CSP));
+    assert_eq!(response.header("x-content-type-options"), Some("nosniff"));
+    assert_eq!(response.header("referrer-policy"), Some("no-referrer"));
+}
+
+#[test]
 fn room_directory_is_read_only_secret_free_and_works_at_the_player_connection_limit() {
     let server = server(|options| options.max_connections = 4);
     let mut owner = Ws::open(server.http_addr());

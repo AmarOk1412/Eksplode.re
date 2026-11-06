@@ -17,7 +17,7 @@ test("controller navigation includes links and exposes focus on every control", 
   const root = { querySelectorAll: (value) => { selector = value; return [link]; } };
   assert.deepEqual(focusTargets(root), [link]);
   assert.match(selector, /a\[href\]/);
-  assert.match(css, /\.controller-navigation\s+:is\([^)]*a\[href\][^)]*\):focus\s*\{[^}]*outline:\s*3px\s+solid/s);
+  assert.match(css, /\.controller-navigation\s+:is\([^{}]*a\[href\][^{}]*\):focus\s*\{[^}]*outline:\s*3px\s+solid/s);
 });
 
 function element(id, x, y, options = {}) {
@@ -115,4 +115,41 @@ test("stable focus keys restore after an element is rebuilt, and missing keys ar
   assert.equal(restoreFocus(root, key).dataset.navKey, key);
   assert.equal(restoreFocus(root, "missing"), null);
   assert.equal(moveFocus(null, "left", []), null);
+});
+
+test("f15_us2_as2_changing_static_locale_text_preserves_focus_form_values_and_dialog_state", async () => {
+  const { applyLanguageToDocument } = await import("../assets/app.js");
+  const languageSelect = element("language", 0, 0, { dataset: { i18nAriaLabel: "language.label" } });
+  languageSelect.value = "de";
+  languageSelect.attributes = {};
+  languageSelect.setAttribute = function setAttribute(name, value) { this.attributes[name] = value; };
+  const fieldLabel = {
+    dataset: { i18n: "room.name", i18nAriaLabel: "room.name" },
+    textContent: "Room name",
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  };
+  const roomName = element("room-name", 20, 20);
+  roomName.value = "Friday room";
+  const customize = element("customize-panel", 0, 0, { hidden: false });
+  const root = {
+    documentElement: { lang: "en" },
+    activeElement: languageSelect,
+    querySelectorAll: () => [languageSelect, fieldLabel],
+  };
+  applyLanguageToDocument(root, "de");
+  assert.equal(root.documentElement.lang, "de");
+  assert.equal(root.activeElement, languageSelect);
+  assert.equal(languageSelect.value, "de");
+  assert.equal(roomName.value, "Friday room");
+  assert.equal(customize.hidden, false);
+  assert.equal(fieldLabel.textContent, "Raumname");
+  assert.equal(fieldLabel.attributes["aria-label"], "Raumname");
+});
+
+test("f15_us2_as2_the_language_picker_fits_narrow_mobile_widths", () => {
+  const css = readFileSync(new URL("../assets/style.css", import.meta.url), "utf8");
+  assert.match(css, /\.language-picker\s*\{[^}]*grid-template-columns:\s*max-content minmax\(0,\s*1fr\)/s);
+  assert.match(css, /@media\s*\(max-width:\s*480px\)[\s\S]*?\.language-picker\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+  assert.match(css, /@media\s*\(max-width:\s*340px\)[\s\S]*?h1\s*\{[^}]*font-size:\s*2\.35rem/);
 });

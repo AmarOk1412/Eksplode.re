@@ -1,6 +1,8 @@
 // Character looks (colour, head, face, costume): the options, the editor state and the storage. Presentation only: the server
 // validates every look and settles colour conflicts; the drawing is done by the WebAssembly module.
 
+import { translate } from "./language.js";
+
 export const COLOUR_NAMES = ["Blue", "Black", "Red", "Purple", "Green", "Orange", "Yellow", "Pink", "Teal", "White"];
 export const HEADS = ["None", "Cap", "TopHat", "Crown", "Headphones"];
 export const FACES = ["None", "Glasses", "Sunglasses", "Moustache", "Mask"];
@@ -48,6 +50,12 @@ export function sanitizeLook(value, slot = 0) {
 }
 
 const OPTIONS = { colour: COLOUR_NAMES, head: HEADS, face: FACES, costume: COSTUMES };
+
+export function lookOptionLabel(category, value, language = "en") {
+  if (!OPTIONS[category]?.includes(value)) return typeof value === "string" ? value : "";
+  const key = value.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  return translate(language, `look.${category}.${key}`);
+}
 
 /** State of the editor: the look being edited; actions change one choice at a time. */
 export function editorReducer(look, action) {

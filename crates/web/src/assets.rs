@@ -19,6 +19,7 @@ pub fn lookup(path: &str) -> Option<Asset> {
     let (content_type, body): (&'static str, &'static [u8]) = match path {
         "/" | "/index.html" => (HTML, include_bytes!("../assets/index.html")),
         "/app.js" => (JS, include_bytes!("../assets/app.js")),
+        "/language.js" => (JS, include_bytes!("../assets/language.js")),
         "/look.js" => (JS, include_bytes!("../assets/look.js")),
         "/room.js" => (JS, include_bytes!("../assets/room.js")),
         "/audio.js" => (JS, include_bytes!("../assets/audio.js")),

@@ -194,3 +194,15 @@ test("f11_us4_as1_as2_as4_the_customize_dialog_has_head_face_costume_and_a_corne
   assert.match(rule, /right:\s*\d/);
   assert.match(rule, /bottom:\s*\d/);
 });
+
+test("f15_us1_as3_character_option_names_are_localized_without_changing_saved_values", async () => {
+  const { lookOptionLabel } = await import("../assets/look.js");
+  assert.equal(lookOptionLabel("colour", "Blue", "fr"), "Bleu");
+  assert.equal(lookOptionLabel("head", "Cap", "es"), "Gorra");
+  assert.equal(lookOptionLabel("face", "Sunglasses", "de"), "Sonnenbrille");
+  assert.equal(lookOptionLabel("costume", "None", "fr"), "Aucun");
+  assert.deepEqual(COLOUR_NAMES, ["Blue", "Black", "Red", "Purple", "Green", "Orange", "Yellow", "Pink", "Teal", "White"]);
+  assert.deepEqual(HEADS, ["None", "Cap", "TopHat", "Crown", "Headphones"]);
+  assert.deepEqual(FACES, ["None", "Glasses", "Sunglasses", "Moustache", "Mask"]);
+  assert.deepEqual(COSTUMES, ["None", "Scarf", "Cape", "BowTie", "Medal"]);
+});

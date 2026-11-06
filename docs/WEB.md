@@ -127,6 +127,7 @@ eksplode-re-cli join http://192.168.1.20:8080/     # web addresses work too; onl
 |---------|--------|
 | `GET /`, `GET /index.html` | `200 text/html` - the page |
 | `GET /app.js` | `200 text/javascript` - the page logic (ES module) |
+| `GET /language.js` | `200 text/javascript` - supported UI languages, translations and device preference |
 | `GET /look.js` | `200 text/javascript` - the character looks: options, editor state and storage |
 | `GET /room.js` | `200 text/javascript` - the room settings: options, menu state and storage |
 | `GET /audio.js` | `200 text/javascript` - generated sound effects, music and volume settings |
@@ -205,6 +206,12 @@ module draws the body silhouette from the slot. The choice is saved on the devic
 key `eksplode.re.look.v1`; a look saved with a `gender` loads without it), sent with `CreateRoom`
 or `JoinRoom`, and changed in the lobby with `SetLook`; the server settles colour conflicts (see
 [PROTOCOL.md](PROTOCOL.md#looks)). During a match the look cannot change.
+
+**Language.** Customize also offers English, Français, Español and Deutsch. The selected web UI
+language applies immediately, including while a room or match is active, and is remembered on the
+device under `eksplode.re.language.v1`. A new or invalid preference uses English; if a translation
+is missing, its English text is shown. Player and room names remain as entered. This preference is
+not sent to the server, does not alter match state, and does not change the terminal interface.
 
 ## Mouse-free navigation
 

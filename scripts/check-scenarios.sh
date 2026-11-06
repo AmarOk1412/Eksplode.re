@@ -113,6 +113,19 @@ for id in $ids_013; do
     fi
 done
 
+ids_015="f15_us1_as1_ f15_us1_as2_ f15_us1_as3_ f15_us1_as4_ f15_us1_as5_
+f15_us2_as1_ f15_us2_as2_ f15_us2_as3_ f15_us2_as4_ f15_us2_as5_"
+registered_f15=$(node --test --test-reporter=tap --test-name-pattern='^f15_' \
+    crates/web/js-tests/language.test.mjs crates/web/js-tests/app.test.mjs \
+    crates/web/js-tests/room.test.mjs crates/web/js-tests/look.test.mjs \
+    crates/web/js-tests/nav-focus.test.mjs)
+for id in $ids_015; do
+    if ! printf '%s\n' "$registered_f15" | grep -qE "^ok [0-9]+ - ${id}"; then
+        echo "missing: $id has zero registered automated tests" >&2
+        missing=$((missing + 1))
+    fi
+done
+
 ids_014="f14_us1_as1_ f14_us1_as2_ f14_us1_as3_ f14_us1_as4_ f14_us1_as5_
 f14_us2_as1_ f14_us2_as2_ f14_us2_as3_ f14_us2_as4_ f14_us2_as5_ f14_us2_as6_
 f14_us3_as1_ f14_us3_as2_ f14_us3_as3_ f14_us3_as4_ f14_us3_as5_ f14_us3_as6_

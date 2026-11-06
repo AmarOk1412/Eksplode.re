@@ -223,6 +223,25 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   width: min(560px, 100%);
 }
 
+.language-picker {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 8px 12px;
+  width: min(560px, 100%);
+}
+.language-picker select {
+  width: min(240px, 100%);
+  min-width: 0;
+  font: inherit;
+  font-size: 1rem;
+  padding: 4px 8px;
+  border: 3px solid var(--ink);
+  background: #fff;
+  color: var(--ink);
+  border-radius: 0;
+}
+
 .preview { width: 160px; height: 226px; background: #e8e6e9; image-rendering: pixelated; display: block; }
 
 .pickers { display: grid; gap: 8px; justify-items: start; }
@@ -529,11 +548,17 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
 
 @media (max-width: 480px) {
   header { padding-top: 48px; }
+  .language-picker { grid-template-columns: minmax(0, 1fr); justify-items: stretch; }
+  .language-picker select { width: 100%; }
   .editor { grid-template-columns: minmax(0, 1fr); justify-items: center; }
   .pickers { min-width: 0; width: 100%; justify-items: center; }
   .controls-panel { left: 12px; right: 12px; width: auto; padding: 16px; }
   .control-binding { grid-template-columns: minmax(76px, 0.8fr) minmax(0, 1.2fr); }
   .controls-panel .buttons button { font-size: 0.95rem; }
+}
+
+@media (max-width: 340px) {
+  h1 { font-size: 2.35rem; }
 }
 
 @media (orientation: landscape) and (max-height: 500px) {

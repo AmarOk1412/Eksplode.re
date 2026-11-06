@@ -38,7 +38,8 @@ pixel-art view are all small, tested crates.
   opens on a main menu (Create new game, Join a game, Customize, Options); Customize picks colour, head, face and costume (or randomizes them with the
   icon on the preview) and Options has Sound and Controls tabs. Empty lobby seats fill with bots: the owner removes a bot or kicks a
   player with the cross on a seat, anybody puts a bot back with "+", and room settings and the
-  password live behind the gear icon.
+  password live behind the gear icon. The web interface supports English, French, Spanish and
+  German; select a language in Customize. The terminal interface remains unchanged.
 - **Terminal version** for local play on one keyboard, with a lobby screen.
 - **Network play:** an authoritative host, `join` by address, or a server that hosts the match
   and serves the web page.

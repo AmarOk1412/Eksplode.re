@@ -143,6 +143,16 @@ test("roomLabel matches the one line of the terminal lobby", () => {
   );
 });
 
+test("f15_us1_as2_room_settings_are_localized_without_translating_the_room_name", async () => {
+  const { roomLabel } = await import("../assets/room.js");
+  const settings = { name: "Duo", mode: "team", size: "medium", minutes: 5, friendly_fire: false, bot_difficulty: "hard" };
+  assert.equal(roomLabel(settings, "fr"), "Duo - Équipe - 19 x 15 - 5 min - tirs alliés désactivés - bots difficiles");
+  assert.equal(roomLabel(settings, "es"), "Duo - Equipo - 19 x 15 - 5 min - fuego amigo desactivado - bots difíciles");
+  assert.equal(roomLabel(settings, "de"), "Duo - Team - 19 x 15 - 5 Min. - Teambeschuss aus - schwere Bots");
+  assert.deepEqual(settings, { name: "Duo", mode: "team", size: "medium", minutes: 5, friendly_fire: false, bot_difficulty: "hard" });
+  assert.equal(roomLabel(settings), "Duo - Team - 19 x 15 - 5 min - friendly fire off - Hard bots");
+});
+
 test("f12_us3_the_bot_difficulty_is_a_room_setting", () => {
   assert.deepEqual(BOT_DIFFICULTIES, ["easy", "medium", "hard"]);
   assert.equal(sanitizeRoom({ bot_difficulty: "hard" }).bot_difficulty, "hard");

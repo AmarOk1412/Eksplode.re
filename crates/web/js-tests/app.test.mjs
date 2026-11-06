@@ -9,6 +9,41 @@ const lobby = (...controllers) => ({
     ready: false,
   })),
 });
+test("f15_us2_as1_locale_rendering_preserves_room_and_match_state_and_wire_messages", async () => {
+  const { topNotice, resultsTitle } = await import("../assets/app.js");
+  const { roomProtocolMessage } = await import("../assets/room.js");
+  const lobby = { slots: [{ controller: "Remote", name: "Ann", ready: true }], settings: { name: "Friday" } };
+  const roomState = {
+    ...initialState(), protocol: 2, stage: "lobby", room_id: "room", slot: 0, lobby,
+    notice: "You are now the room owner", noticeKey: "notice.room_owner",
+  };
+  const before = structuredClone(roomState);
+  assert.equal(topNotice(roomState, "fr"), "Vous êtes maintenant propriétaire du salon");
+  assert.deepEqual(roomState, before);
+  const { lobbyCards } = await import("../assets/app.js");
+  assert.equal(lobbyCards(lobby, 0, { language: "fr" })[0].name, "Ann");
+  assert.deepEqual(roomProtocolMessage(roomState, { type: "Input", tick: 7, mv: "Left", bomb: false, punch: false }, "ignored"), {
+    type: "Input", room_id: "room", tick: 7, mv: "Left", bomb: false, punch: false,
+  });
+  const results = {
+    ...roomState,
+    stage: "results",
+    result: { outcome: { Winner: 0 }, lobby, observation: { players: [{ alive: true }] } },
+  };
+  assert.equal(resultsTitle(results, "es"), "¡Has ganado!");
+  assert.deepEqual(results, { ...before, stage: "results", result: results.result });
+});
+
+test("f15_us2_as5_player_and_room_authored_names_remain_unchanged_when_copy_is_localized", async () => {
+  const { roomLabel } = await import("../assets/room.js");
+  const { lobbyCards } = await import("../assets/app.js");
+  const lobby = { slots: [{ controller: "Remote", name: "Ann" }, { controller: "Empty" }], settings: { name: "Friday", mode: "normal" } };
+  assert.equal(lobbyCards(lobby, 0, { language: "de" })[1].name, "leer");
+  assert.equal(lobbyCards(lobby, 0, { language: "de" })[0].caption, "Ann (du, Eigentümer)");
+  assert.match(roomLabel({ name: "Friday", mode: "normal" }, "fr"), /^Friday - /);
+  assert.equal(lobby.slots[0].name, "Ann");
+  assert.equal(lobby.settings.name, "Friday");
+});
 
 const welcome = (slot, l = lobby("Remote")) => ({ type: "Welcome", slot, config: {}, lobby: l });
 
@@ -566,6 +601,32 @@ test("the main menu opens Customize on its own dialog and Options on Sound", () 
   assert.match(menu, /id="menu-options"[^>]*aria-controls="options-panel"/);
 });
 
+test("f15_us1_as1_customize_selects_a_locale_and_updates_static_and_menu_copy", async () => {
+  const { applyLanguageToDocument, mainMenuActions } = await import("../assets/app.js");
+  const html = indexHtml();
+  const customize = /<section[^>]*id="customize-panel"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
+  assert.match(customize, /<label[^>]*for="language"[^>]*data-i18n="language\.label"/);
+  const selector = /<select[^>]*id="language"[^>]*>([\s\S]*?)<\/select>/.exec(customize)?.[1] ?? "";
+  assert.deepEqual([...selector.matchAll(/<option[^>]*value="([^"]+)"[^>]*>([^<]+)<\/option>/g)].map((match) => [match[1], match[2]]), [
+    ["en", "English"], ["fr", "Français"], ["es", "Español"], ["de", "Deutsch"],
+  ]);
+  assert.match(html, /^<!doctype html>\s*<html lang="en">/);
+
+  const label = {
+    dataset: { i18n: "language.label", i18nAriaLabel: "language.label" },
+    attributes: {},
+    setAttribute(name, value) { this.attributes[name] = value; },
+  };
+  const root = { documentElement: { lang: "en" }, querySelectorAll: () => [label] };
+  applyLanguageToDocument(root, "fr");
+  assert.equal(root.documentElement.lang, "fr");
+  assert.equal(label.textContent, "Langue");
+  assert.equal(label.attributes["aria-label"], "Langue");
+  assert.deepEqual(mainMenuActions("fr").map((action) => action.label), [
+    "Créer une partie", "Rejoindre une partie", "Personnaliser", "Options",
+  ]);
+});
+
 test("main actions carry the primary style", () => {
   const html = indexHtml();
   for (const id of ["menu-create", "room-create", "join", "start"]) {
@@ -707,4 +768,13 @@ test("the scoreboard keeps its title and the top line stays empty when an error 
   assert.equal(topNotice(refused), "");
   assert.equal(resultsTitle(initialState()), "Round complete");
   assert.equal(topNotice({ ...s, notice: "Player 2 left, a bot took over" }), "Player 2 left, a bot took over");
+});
+
+test("f15_us1_as2_known_server_errors_are_localized_and_unknown_server_text_falls_back_to_english", async () => {
+  const { serverErrorText, localizedGraphicsDetail } = await import("../assets/app.js");
+  assert.equal(serverErrorText("NotOwner", "Only Ann can change settings", "fr"), "Seule la personne propriétaire du salon peut effectuer cette action.");
+  assert.equal(serverErrorText("BadPassword", "wrong password", "de"), "Das Passwort ist falsch.");
+  assert.equal(serverErrorText("FutureCode", "New server message", "es"), "New server message");
+  assert.equal(localizedGraphicsDetail("arena too large", "fr"), "arène trop grande");
+  assert.equal(localizedGraphicsDetail("network fetch failed", "de"), "network fetch failed");
 });
