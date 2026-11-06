@@ -487,6 +487,17 @@ test("f11_us1_a_lost_connection_shows_the_main_menu_with_retry", () => {
 // ---- Options (Sound, Controls) and Customize are two dialogs ----
 import { OPTIONS_TABS, optionsReducer, optionsView, lobbyActions } from "../assets/app.js";
 
+test("adaptive_controls_keyboard_and_controller_controls_are_separate_panels", () => {
+  const html = indexHtml();
+  assert.match(html, /id="keyboard-controls"/);
+  assert.match(html, /id="controller-controls"/);
+  const keyboard = html.indexOf('id="keyboard-controls"');
+  const controller = html.indexOf('id="controller-controls"');
+  assert.ok(html.indexOf('id="controls-reset"') > keyboard && html.indexOf('id="controls-reset"') < controller);
+  assert.ok(html.indexOf('id="controller-select"') > controller);
+});
+
+
 test("donate_link_uses_the_requested_destination_without_changing_primary_actions", () => {
   const menu = section(indexHtml(), "main-menu");
   assert.match(menu, /<a[^>]*id="donate"[^>]*href="https:\/\/buymeacoffee\.com\/kaelinnchacuit"/);

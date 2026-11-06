@@ -11,6 +11,8 @@ import {
   GamepadTracker,
   assignBinding,
   compatibleGamepads,
+  controlPresentation,
+  mobileControlPlatform,
   loadBindings,
   sanitizeBindings,
   saveBindings,
@@ -1064,6 +1066,8 @@ function start() {
     hubResume: $("hub-resume"),
     controlsStatus: $("controls-status"),
     controlBindings: [...document.querySelectorAll("[data-bind-action]")],
+    keyboardControls: $("keyboard-controls"),
+    controllerControls: $("controller-controls"),
     controlsReset: $("controls-reset"),
     controllerSelect: $("controller-select"),
     controllerStatus: $("controller-status"),
@@ -2044,13 +2048,17 @@ function start() {
 
 
   function renderOptions() {
+    renderControllerPanel();
+    if (!controlsPresentation.controlsTab && options?.tab === "controls") {
+      options = optionsReducer(options, { type: "tab", tab: "sound" });
+    }
     const view = optionsView(options);
     for (const tab of el.optionsTabs) {
+      tab.button.hidden = tab.id === "controls" && !controlsPresentation.controlsTab;
       tab.root.hidden = !view[tab.id];
       tab.button.setAttribute("aria-selected", String(view[tab.id]));
       tab.button.tabIndex = view[tab.id] ? 0 : -1;
     }
-    if (view.controls) renderControllerPanel();
   }
 
   /** Opens Options on `tab` (or switches to it when Options is already open). */
@@ -2093,8 +2101,9 @@ function start() {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
       e.stopPropagation();
-      const index = el.optionsTabs.indexOf(tab);
-      const next = el.optionsTabs[(index + (e.key === "ArrowRight" ? 1 : el.optionsTabs.length - 1)) % el.optionsTabs.length];
+      const available = el.optionsTabs.filter((item) => !item.button.hidden);
+      const index = available.indexOf(tab);
+      const next = available[(index + (e.key === "ArrowRight" ? 1 : available.length - 1)) % available.length];
       selectOptionsTab(next.id);
       next.button.focus();
     });
@@ -2107,6 +2116,8 @@ function start() {
   el.testSound.addEventListener("click", () => audio.testSound());
 
   let capturingAction = null;
+  let controlsPresentation = controlPresentation();
+  let controllerSignature = "";
   const actionLabels = {
     up: "Move up",
     down: "Move down",
@@ -2146,9 +2157,22 @@ function start() {
     }
   }
 
-  function renderControllerPanel() {
-    const snapshot = readGamepads();
+  function mobileControls() {
+    return mobileControlPlatform({
+      primaryCoarse: window.matchMedia?.("(pointer: coarse)").matches === true,
+      userAgent: navigator.userAgent ?? "", platform: navigator.platform ?? "",
+      touchPoints: navigator.maxTouchPoints ?? 0, mobile: navigator.userAgentData?.mobile === true,
+    });
+  }
+
+  function renderControllerPanel(snapshot = readGamepads()) {
     const devices = compatibleGamepads(snapshot.gamepads);
+    controlsPresentation = controlPresentation({ mobile: mobileControls(), gamepads: snapshot.gamepads });
+    el.keyboardControls.hidden = !controlsPresentation.keyboard;
+    el.controllerControls.hidden = !controlsPresentation.controller;
+    el.optionsTabs.find((tab) => tab.id === "controls").button.hidden = !controlsPresentation.controlsTab;
+    el.app.classList.toggle("controller-input", controlsPresentation.controller);
+    if (!controlsPresentation.keyboard) stopCapture();
     el.controllerSelect.replaceChildren(
       ...devices.map((device) => {
         const option = document.createElement("option");
@@ -2189,6 +2213,28 @@ function start() {
 
   renderControlBindings();
   el.controlsStatus.textContent = "Select an action to change its key.";
+  renderOptions();
+  for (const select of el.app.querySelectorAll("select")) {
+    const wrapper = document.createElement("span");
+    wrapper.className = "selection-field";
+    select.replaceWith(wrapper);
+    wrapper.append(select);
+    select.addEventListener("pointerdown", (event) => {
+      if (!controlsPresentation.controller || select.disabled) return;
+      event.preventDefault();
+      select.focus();
+      const bounds = select.getBoundingClientRect();
+      adjustControl(select, event.clientX < bounds.left + bounds.width / 2 ? "left" : "right");
+    });
+    select.addEventListener("keydown", (event) => {
+      if (!controlsPresentation.controller) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!select.disabled) adjustControl(select, event.key === "ArrowLeft" ? "left" : "right");
+      } else if (event.key === "Enter" || event.key === " ") event.preventDefault();
+    });
+  }
   el.hubCustomize.addEventListener("click", () => openCustomize(el.hubCustomize));
   el.hubOptions.addEventListener("click", () => openOptions(hubActions(state).options.tab, el.hubOptions));
   el.hubLobby.addEventListener("click", () => {
@@ -2217,11 +2263,12 @@ function start() {
     keys.clear();
     renderControllerPanel();
   });
-  window.addEventListener("gamepadconnected", renderControllerPanel);
+  window.addEventListener("gamepadconnected", () => renderOptions());
   window.addEventListener("gamepaddisconnected", () => {
     gamepads.clear();
-    renderControllerPanel();
+    renderOptions();
   });
+  window.addEventListener("resize", renderOptions);
   for (const button of el.controlBindings) {
     button.addEventListener("click", () => {
       cancelReset();
@@ -2435,8 +2482,18 @@ function start() {
       if (state.stage === "playing") send(inputMessage(state, { mv: null, bomb: false, punch: false }));
       return;
     }
-    const pads = readGamepads().gamepads;
+    const snapshot = readGamepads();
+    const pads = snapshot.gamepads;
     const devices = compatibleGamepads(pads);
+    const signature = JSON.stringify([snapshot.state, mobileControls(), devices]);
+    if (signature !== controllerSignature) {
+      controllerSignature = signature;
+      const active = document.activeElement;
+      renderOptions();
+      if (active?.closest?.("#keyboard-controls") && !controlsPresentation.keyboard) {
+        el.optionsTabs.find((tab) => !tab.button.hidden).button.focus();
+      }
+    }
     const selected = devices.find((device) => device.index === gamepads.selectedIndex) ?? devices[0];
     const navPad = selected ? pads.find((pad) => pad?.index === selected.index) : null;
     const navInput = navTracker.sample(navPad, performance.now());

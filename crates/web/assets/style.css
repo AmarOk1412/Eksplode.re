@@ -134,6 +134,23 @@ section[hidden], [hidden] { display: none !important; }
 
 label { font-size: 0.9rem; color: var(--muted); }
 
+.selection-field { position: relative; display: inline-block; width: 100%; min-width: 0; max-width: 100%; }
+.selection-field > select { width: 100%; max-width: 100%; }
+.controller-input .selection-field > select { appearance: none; background-image: none; padding-inline: 26px; }
+.controller-input .selection-field::before, .controller-input .selection-field::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - 4px);
+  width: 8px;
+  height: 8px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.controller-input .selection-field::before { left: 10px; transform: rotate(135deg); }
+.controller-input .selection-field::after { right: 10px; transform: rotate(-45deg); }
+
 input, button {
   font: inherit;
   font-size: 1.2rem;
@@ -295,6 +312,7 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   display: block;
   background: transparent;
 }
+
 
 .controls-panel {
   position: fixed;

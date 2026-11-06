@@ -6,6 +6,8 @@ import {
   GamepadTracker,
   assignBinding,
   compatibleGamepads,
+  controlPresentation,
+  mobileControlPlatform,
   loadBindings,
   sanitizeBindings,
   saveBindings,
@@ -27,6 +29,32 @@ const gamepad = ({ index = 0, mapping = "standard", buttons = [], axes = [0, 0] 
   mapping,
   buttons: Array.from({ length: 16 }, (_, button) => ({ pressed: buttons.includes(button) })),
   axes,
+});
+
+test("adaptive_controls_mobile_has_no_controls_menu_even_with_a_gamepad", () => {
+  assert.deepEqual(controlPresentation({ mobile: true, gamepads: [gamepad()] }), {
+    mode: "mobile", controlsTab: false, keyboard: false, controller: false,
+  });
+});
+
+test("adaptive_controls_follow_supported_controller_plug_and_unplug", () => {
+  assert.deepEqual(controlPresentation({ gamepads: [] }), {
+    mode: "keyboard", controlsTab: true, keyboard: true, controller: false,
+  });
+  assert.deepEqual(controlPresentation({ gamepads: [gamepad()] }), {
+    mode: "controller", controlsTab: true, keyboard: false, controller: true,
+  });
+  assert.equal(controlPresentation({ gamepads: [gamepad({ mapping: "" })] }).mode, "keyboard");
+  assert.equal(controlPresentation({ gamepads: [] }).mode, "keyboard");
+});
+
+test("adaptive_controls_mobile_detection_does_not_hide_touch_desktop_bindings", () => {
+  assert.equal(mobileControlPlatform({ userAgent: "Firefox Android", touchPoints: 5 }), true);
+  assert.equal(mobileControlPlatform({ platform: "MacIntel", touchPoints: 5 }), true);
+  assert.equal(mobileControlPlatform({ platform: "Win32", touchPoints: 5 }), false);
+  assert.equal(mobileControlPlatform({ primaryCoarse: true }), true);
+  assert.equal(mobileControlPlatform({ mobile: true }), true);
+  assert.equal(mobileControlPlatform({}), false);
 });
 
 test("f13_us1_as3_kart_gamepad_uses_horizontal_and_neutralizes_opposing_dpad", () => {

@@ -65,6 +65,7 @@
       </section>
       <section id="controls-panel" class="options-tab controls-panel" role="tabpanel" aria-labelledby="tab-controls" hidden>
         <h2>Controls</h2>
+        <div id="keyboard-controls">
         <p id="controls-status" class="hint" role="status" aria-live="polite"></p>
         <div class="control-bindings" role="group" aria-label="Keyboard bindings">
           <div class="control-binding"><span>Move up</span><button type="button" data-bind-action="up">Up: ArrowUp / W</button></div>
@@ -74,15 +75,16 @@
           <div class="control-binding"><span>Place bomb</span><button type="button" data-bind-action="bomb">Bomb: Space / E</button></div>
           <div class="control-binding"><span>Punch bomb</span><button type="button" data-bind-action="punch">Punch: Z / Q</button></div>
         </div>
-        <div class="controller-settings">
+        <div class="buttons">
+          <button id="controls-reset" type="button">Restore defaults</button>
+        </div>
+        </div>
+        <div id="controller-controls" class="controller-settings" hidden>
           <h3>Game controller</h3>
           <label for="controller-select">Connected controller</label>
           <select id="controller-select" aria-label="Select a connected controller" disabled></select>
           <p id="controller-mapping" class="hint">Left stick or D-pad: move. A: place bomb. B: punch bomb.</p>
           <p id="controller-status" class="hint" role="status" aria-live="polite">Focus this page and press a controller button or move a stick to connect.</p>
-        </div>
-        <div class="buttons">
-          <button id="controls-reset" type="button">Restore defaults</button>
         </div>
       </section>
       <div class="buttons">

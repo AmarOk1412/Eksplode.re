@@ -156,6 +156,15 @@ function pressed(button) {
 	return button === true || button?.pressed === true || Number(button?.value) > 0.5;
 }
 
+export function controlPresentation({ mobile = false, gamepads = [] } = {}) {
+	const mode = mobile ? "mobile" : compatibleGamepads(gamepads).length > 0 ? "controller" : "keyboard";
+	return { mode, controlsTab: !mobile, keyboard: mode === "keyboard", controller: mode === "controller" };
+}
+
+export function mobileControlPlatform({ primaryCoarse = false, userAgent = "", platform = "", touchPoints = 0, mobile = false } = {}) {
+	return mobile || primaryCoarse || /Android|iPhone|iPad|iPod/i.test(userAgent) || (platform === "MacIntel" && touchPoints > 1);
+}
+
 function gamepadDirection(gamepad, deadZone) {
 	const buttons = gamepad.buttons ?? [];
 	if (pressed(buttons[12])) return "Up";
