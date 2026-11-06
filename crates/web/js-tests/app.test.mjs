@@ -640,10 +640,15 @@ test("the version line reads the server's version text", async () => {
   assert.match(rule, /bottom:/);
 });
 
-test("the main menu shows the player's character instead of a fixed logo", () => {
+test("f14_us1_as1_the_main_menu_replaces_the_logo_without_changing_actions", () => {
   const html = readAsset(new URL("../assets/index.html", import.meta.url), "utf8");
   const menu = /<section id="main-menu"[^>]*>([\s\S]*?)<\/section>/.exec(html)?.[1] ?? "";
-  assert.match(menu, /<canvas id="logo"[^>]*aria-label="Your character"/);
+  assert.doesNotMatch(menu, /id="logo"/);
+  assert.match(menu, /id="lobby-scene"/);
+  assert.match(menu, /<canvas id="lobby-scene-canvas"[^>]*aria-hidden="true"/);
+  assert.match(menu, /id="lobby-scene-fallback"[^>]*alt=""/);
+  assert.equal((menu.match(/id="menu-(?:create|join|customize|options)"/g) ?? []).length, 4);
+  assert.match(html, /<h1>Eksplode.re<\/h1>/);
 });
 
 test("the player drawn as the chaser is told so when the round starts", async () => {

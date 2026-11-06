@@ -1,6 +1,36 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { focusKey, focusTargets, moveFocus, moveFormFocus, moveGroupFocus, restoreFocus } from "../assets/nav.js";
+
+test("f14_us2_as4_scene_layout_reserves_a_clipped_stable_area", () => {
+  const css = readFileSync(new URL("../assets/style.css", import.meta.url), "utf8");
+  const scene = /^#lobby-scene\s*\{([^}]*)\}/m.exec(css)?.[1] ?? "";
+  assert.match(scene, /width:\s*100%/);
+  assert.match(scene, /aspect-ratio:\s*16\s*\/\s*5/);
+  assert.match(scene, /overflow:\s*hidden/);
+  assert.match(css, /#lobby-scene > canvas, #lobby-scene > img\s*\{[^}]*pointer-events:\s*none/s);
+});
+
+test("f14_us2_as1_scene_art_never_takes_focus_or_changes_the_primary_actions", () => {
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  const menu = /<section id="main-menu"[^>]*>([\s\S]*?)<\/section>/.exec(html)[1];
+  const actions = /<div class="menu-actions"[^>]*>([\s\S]*?)<\/div>/.exec(menu)[1];
+  assert.equal((actions.match(/<button /g) ?? []).length, 4);
+  assert.doesNotMatch(actions, /lobby-scene-pause/);
+  assert.doesNotMatch(menu, /id="lobby-scene-pause"/);
+  assert.match(menu, /<canvas id="lobby-scene-canvas"[^>]*aria-hidden="true"/);
+  assert.doesNotMatch(menu, /<canvas[^>]*tabindex/);
+});
+
+test("f14_us2_as3_the_scene_adds_no_pause_button_or_focus_target", () => {
+  const html = readFileSync(new URL("../assets/index.html", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /id="lobby-scene-pause"|scene-pause-icon|scene-play-icon/);
+  const name = element("name", 0, 0);
+  const root = { querySelectorAll: () => [name] };
+  assert.deepEqual(focusTargets(root), [name]);
+  assert.equal(restoreFocus(root, focusKey(name)), name);
+});
 
 function element(id, x, y, options = {}) {
   return {

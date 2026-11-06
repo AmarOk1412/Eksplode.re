@@ -1,13 +1,66 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createRenderer, paintCommands } from "../assets/app.js";
+import { createRenderer, paintCommands, LobbySceneController } from "../assets/app.js";
 import { WASM, fixtureText } from "./wasm-helper.mjs";
 
 async function exportsOfModule() {
   const { instance } = await WebAssembly.instantiate(readFileSync(WASM), {});
   return instance.exports;
 }
+
+test("f14_us2_as5_decorative_failures_leave_application_state_and_gameplay_exports_alone", async () => {
+  const { graphicsFailure } = await import("../assets/app.js");
+  assert.equal(typeof graphicsFailure, "function");
+  const state = { stage: "directory", protocol: 2, menu: "main", notice: "", room_id: null };
+  assert.deepEqual(graphicsFailure(state, "offline"), { ...state, graphicsError: "Graphics unavailable: offline" });
+  assert.equal(state.graphicsError, undefined);
+  for (const available of [false, true]) {
+    let stopped = 0;
+    const scene = new LobbySceneController({ raf: () => 1, caf: () => {}, paint: () => false, still: () => { stopped += 1; } });
+    scene.setRenderer({ lobbyAvailable: () => available, resetLobby: () => 0 });
+    scene.sync({ menuVisible: true });
+    assert.equal(scene.failed, true);
+    assert.equal(scene.animator.active, false);
+    assert.ok(stopped > 0);
+  }
+});
+
+test("f14_foundation_scene_wrapper_detects_optional_exports_and_validates_inputs", () => {
+  const memory = new WebAssembly.Memory({ initial: 1 });
+  const calls = [];
+  const ex = {
+    memory, eksplode_re_stride: () => 16, eksplode_re_output_ptr: () => 16,
+    eksplode_re_lobby_reset: (seed) => { calls.push(seed); return 0; },
+    eksplode_re_lobby_advance: (ticks) => { calls.push(ticks); return 0; },
+    eksplode_re_lobby_frame: (_width, _height, alpha) => {
+      assert.ok(Math.fround(alpha) < 1, "interpolation stays valid after the WASM f32 conversion");
+      memory.grow(1);
+      new Float32Array(memory.buffer, 16, 16).fill(0.5);
+      return 1;
+    },
+  };
+  const renderer = createRenderer(ex);
+  assert.equal(renderer.lobbyAvailable(), true);
+  assert.equal(renderer.resetLobby(0xffffffff), 0);
+  assert.equal(renderer.advanceLobby(15), 0);
+  assert.notEqual(renderer.resetLobby(-1), 0);
+  assert.notEqual(renderer.resetLobby(0x100000000), 0);
+  assert.notEqual(renderer.advanceLobby(16), 0);
+  assert.notEqual(renderer.advanceLobby(0.5), 0);
+  assert.deepEqual(calls, [0xffffffff, 15]);
+  const first = renderer.lobbyFrame(640, 200, 0);
+  assert.equal(first.data.length, 16);
+  const copy = first.data.slice();
+  const second = renderer.lobbyFrame(640, 200, 0.5);
+  assert.equal(second.data.buffer, memory.buffer);
+  assert.deepEqual(second.data, copy);
+  assert.equal(renderer.lobbyFrame(640, 200, 1 - Number.EPSILON).count, 1);
+  const old = createRenderer({ memory, eksplode_re_stride: () => 16 });
+  assert.equal(old.lobbyAvailable(), false);
+  assert.notEqual(old.resetLobby(1), 0);
+  assert.equal(old.lobbyFrame(640, 200, 0).count, 0);
+});
 
 class FakeCtx {
   constructor() {

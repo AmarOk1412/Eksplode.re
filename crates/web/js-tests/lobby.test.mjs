@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { lobbyCards, Animator, initialState, reduce } from "../assets/app.js";
+import { lobbyCards, Animator, LobbySceneController, initialState, reduce } from "../assets/app.js";
 import { defaultRoom, loadRoom, roomControls, saveRoom } from "../assets/room.js";
 
 const slot = (controller, name = "", ready = false) => ({ controller, name, ready });
@@ -68,6 +68,87 @@ test("f3_us1_as3_the_animation_runs_only_while_the_lobby_is_visible", () => {
   a.setActive(true);
   frames.tick(9000);
   assert.deepEqual(seen.slice(2), [0], "a new run starts from zero");
+});
+
+function sceneFixture() {
+  const frames = fakeFrames();
+  const counts = { ticks: 0, resets: 0, stills: 0, paints: [] };
+  const scene = new LobbySceneController({
+    raf: frames.raf, caf: frames.caf,
+    still: () => { counts.stills += 1; },
+    paint: (_renderer, alpha) => { counts.paints.push(alpha); return true; },
+  });
+  scene.setRenderer({
+    lobbyAvailable: () => true,
+    resetLobby: () => { counts.resets += 1; return 0; },
+    advanceLobby: (ticks) => { assert.ok(ticks >= 0 && ticks <= 15); counts.ticks += ticks; return 0; },
+  });
+  return { scene, frames, counts };
+}
+
+test("f14_us2_as2_live_reduced_motion_preserves_an_explicit_pause", () => {
+  const { scene, frames, counts } = sceneFixture();
+  scene.sync({ menuVisible: true, documentVisible: true });
+  scene.togglePause();
+  assert.equal(scene.userPaused, true);
+  assert.equal(frames.pending.size, 0);
+  scene.sync({ reducedMotion: true });
+  assert.ok(counts.stills > 0);
+  scene.sync({ reducedMotion: false });
+  assert.equal(scene.userPaused, true);
+  assert.equal(frames.pending.size, 0);
+  scene.togglePause();
+  assert.equal(frames.pending.size, 1);
+  scene.sync({ reducedMotion: true });
+  assert.equal(frames.pending.size, 0);
+  scene.togglePause();
+  assert.equal(scene.userPaused, false, "disabled control cannot change the explicit choice");
+});
+
+test("f14_us2_as3_pause_freezes_fractional_time_and_resume_has_no_catchup", () => {
+  const { scene, frames, counts } = sceneFixture();
+  scene.sync({ menuVisible: true });
+  frames.tick(100);
+  frames.tick(125);
+  assert.equal(counts.ticks, 1);
+  const alpha = scene.fraction;
+  scene.togglePause();
+  scene.repaint();
+  assert.equal(scene.fraction, alpha);
+  assert.equal(frames.pending.size, 0);
+  scene.togglePause();
+  frames.tick(10000);
+  assert.equal(counts.ticks, 1);
+  frames.tick(10025);
+  assert.equal(counts.ticks, 3);
+  assert.equal(counts.resets, 1);
+});
+
+test("f14_us2_as6_visibility_and_modals_suspend_one_loop_and_dispose_listeners", () => {
+  const { scene, frames, counts } = sceneFixture();
+  scene.sync({ menuVisible: true });
+  scene.sync({ menuVisible: true });
+  assert.equal(frames.pending.size, 1);
+  frames.tick(0);
+  frames.tick(5000);
+  assert.equal(counts.ticks, 15, "one stalled callback is bounded");
+  scene.sync({ covered: true });
+  assert.equal(frames.pending.size, 0);
+  scene.sync({ covered: false, documentVisible: false });
+  assert.equal(frames.pending.size, 0);
+  scene.sync({ documentVisible: true });
+  frames.tick(9000);
+  frames.tick(8990);
+  assert.equal(counts.ticks, 15);
+  const target = new EventTarget();
+  let events = 0;
+  scene.listen(target, "change", () => { events += 1; });
+  target.dispatchEvent(new Event("change"));
+  scene.dispose();
+  target.dispatchEvent(new Event("change"));
+  assert.equal(events, 1);
+  assert.equal(frames.pending.size, 0);
+  assert.equal(counts.resets, 1);
 });
 
 test("f4_us3_as1_in_team_mode_each_card_shows_its_team", () => {

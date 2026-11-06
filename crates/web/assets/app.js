@@ -613,6 +613,118 @@ export class Animator {
   }
 }
 
+export class LobbySceneController {
+  constructor({ raf, caf, paint, still, status = () => {}, seed = 42 }) {
+    this.paint = paint;
+    this.still = still;
+    this.seed = seed;
+    this.renderer = null;
+    this.failed = false;
+    this.previous = null;
+    this.fraction = 0;
+    this.userPaused = false;
+    this.conditions = { menuVisible: false, documentVisible: true, covered: false, reducedMotion: false };
+    this.status = status;
+    this.listeners = [];
+    this.disposed = false;
+    this.animator = new Animator(raf, caf, (seconds) => this.frame(seconds * 1000));
+  }
+
+  setRenderer(renderer) {
+    if (renderer === this.renderer) return;
+    this.animator.setActive(false);
+    this.previous = null;
+    this.renderer = renderer;
+    try {
+      this.failed = !renderer?.lobbyAvailable() || renderer.resetLobby(this.seed) !== 0;
+    } catch {
+      this.failed = true;
+    }
+    if (this.failed) this.still();
+  }
+
+  setActive(on) {
+    on = Boolean(on && this.renderer && !this.failed && !this.disposed);
+    if (on === this.animator.active) return;
+    this.previous = null;
+    this.animator.setActive(on);
+    if (on) this.repaint();
+  }
+
+  sync(conditions = {}) {
+    this.conditions = { ...this.conditions, ...conditions };
+    const { menuVisible, documentVisible, covered, reducedMotion } = this.conditions;
+    this.setActive(menuVisible && documentVisible && !covered && !reducedMotion && !this.userPaused);
+    if (!this.renderer || this.failed || reducedMotion) this.still();
+    else if (menuVisible && documentVisible && !covered && !this.animator.active) this.repaint();
+    this.report();
+  }
+
+  togglePause() {
+    if (this.failed || !this.renderer || this.conditions.reducedMotion || this.disposed) return;
+    this.userPaused = !this.userPaused;
+    this.sync();
+  }
+
+  report() {
+    const reduced = this.conditions.reducedMotion;
+    this.status({
+      paused: this.userPaused,
+      disabled: reduced || this.failed || !this.renderer,
+      label: reduced ? "Animation disabled by reduced motion" : this.failed || !this.renderer ? "Animation unavailable" : this.userPaused ? "Resume animation" : "Pause animation",
+    });
+  }
+
+  listen(target, event, callback) {
+    if (!target?.addEventListener || this.disposed) return;
+    target.addEventListener(event, callback);
+    this.listeners.push(() => target.removeEventListener(event, callback));
+  }
+
+  dispose() {
+    this.disposed = true;
+    this.setActive(false);
+    for (const remove of this.listeners) remove();
+    this.listeners = [];
+  }
+
+  frame(timestamp) {
+    if (!Number.isFinite(timestamp)) return;
+    const elapsed = this.previous === null ? 0 : Math.max(0, Math.min(250, timestamp - this.previous));
+    this.previous = Math.max(this.previous ?? timestamp, timestamp);
+    const total = this.fraction + elapsed * 0.06;
+    const ticks = Math.floor(total);
+    this.fraction = total - ticks;
+    try {
+      if (this.renderer.advanceLobby(ticks) !== 0) throw new Error("Scene clock failed");
+      this.repaint();
+    } catch {
+      this.fail();
+    }
+  }
+
+  repaint() {
+    if (!this.renderer || this.failed || this.disposed || this.conditions.reducedMotion || this.conditions.covered || !this.conditions.documentVisible) return;
+    try {
+      if (!this.paint(this.renderer, this.fraction)) this.fail();
+    } catch {
+      this.fail();
+    }
+  }
+
+  fail() {
+    this.failed = true;
+    this.animator.setActive(false);
+    this.previous = null;
+    this.still();
+    this.report();
+  }
+}
+
+export function graphicsFailure(state, detail) {
+  return { ...state, graphicsError: `Graphics unavailable: ${detail}` };
+}
+
 /** One row per participant for the status list next to the canvas. */
 export function punchPowerActive(state) {
   return Number.isInteger(state?.slot) && state.observation?.players?.[state.slot]?.has_punch === true;
@@ -750,7 +862,27 @@ export function createRenderer(ex) {
     throw new Error("The graphics module and the page are out of sync (stride " + stride + ").");
   }
   const encoder = new TextEncoder();
+  const lobbyAvailable = () => ["reset", "advance", "frame"].every((name) => typeof ex["eksplode_re_lobby_" + name] === "function");
   return {
+    lobbyAvailable,
+    resetLobby(seed) {
+      if (!lobbyAvailable()) return -1;
+      if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) return 1;
+      return ex.eksplode_re_lobby_reset(seed);
+    },
+    advanceLobby(ticks) {
+      if (!lobbyAvailable()) return -1;
+      if (!Number.isInteger(ticks) || ticks < 0 || ticks > 15) return 1;
+      return ex.eksplode_re_lobby_advance(ticks);
+    },
+    lobbyFrame(width, height, alpha) {
+      if (!lobbyAvailable() || !Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 8192 || height > 8192 || !Number.isFinite(alpha) || alpha < 0 || alpha >= 1) {
+        return { count: 0, stride, data: new Float32Array() };
+      }
+      const count = ex.eksplode_re_lobby_frame(width, height, Math.min(alpha, 1 - 2 ** -24));
+      const data = new Float32Array(ex.memory.buffer, ex.eksplode_re_output_ptr(), count * stride);
+      return { count, stride, data };
+    },
     load(text) {
       const bytes = encoder.encode(text);
       const size = Math.max(bytes.length, 1);
@@ -915,7 +1047,8 @@ function start() {
     timer: $("timer"),
     banner: $("banner"),
     roleBanner: $("role-banner"),
-    logo: $("logo"),
+    sceneCanvas: $("lobby-scene-canvas"),
+    sceneFallback: $("lobby-scene-fallback"),
     version: $("version"),
     editor: $("editor"),
     preview: $("preview"),
@@ -971,7 +1104,6 @@ function start() {
   let pageFocused = true;
   let lastSnapshotAt = 0;
   let resultsTimer = null;
-  let logoKey = "";
   let lobbyCanvases = [];
   let bannerTimer = null;
   let roleBannerTimer = null;
@@ -982,7 +1114,24 @@ function start() {
   let oskAccepted = false;
   let configDraft = null;
   let options = null;
-  const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+  const motionQuery = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+  const reducedMotion = () => motionQuery?.matches === true;
+  const menuScene = new LobbySceneController({
+    raf: (callback) => requestAnimationFrame(callback),
+    caf: (handle) => cancelAnimationFrame(handle),
+    seed: window.crypto?.getRandomValues ? window.crypto.getRandomValues(new Uint32Array(1))[0] : 42,
+    paint: paintMenuScene,
+    still: () => { el.sceneCanvas.hidden = true; el.sceneFallback.hidden = false; },
+  });
+  const syncMenuScene = () => {
+    menuScene.setRenderer(renderer);
+    menuScene.sync({ menuVisible: screens(state).mainMenu, covered: Boolean(navigationLayers.top), documentVisible: !document.hidden, reducedMotion: reducedMotion() });
+  };
+  menuScene.listen(document, "visibilitychange", syncMenuScene);
+  menuScene.listen(window, "resize", () => { if (!el.mainMenu.hidden) menuScene.repaint(); });
+  menuScene.listen(motionQuery, "change", syncMenuScene);
+  menuScene.listen(window, "pagehide", (event) => { if (event.persisted) menuScene.sync({ documentVisible: false }); else menuScene.dispose(); });
+  menuScene.listen(window, "pageshow", syncMenuScene);
 
   function touchDevice() {
     return isTouchCapable({
@@ -1254,6 +1403,7 @@ function start() {
   }
 
   function syncLayerInert() {
+    syncMenuScene();
     const root = navigationLayers.top?.root ??
       (!el.resultsPanel.hidden ? el.resultsPanel : null);
     if (!el.app) return;
@@ -1415,7 +1565,7 @@ function start() {
   function updateUi() {
     const previousKey = focusKey(document.activeElement);
     renderDev();
-    el.notice.textContent = topNotice(state);
+    el.notice.textContent = topNotice(state) || (["lobby", "playing", "results"].includes(state.stage) ? state.graphicsError ?? "" : "");
     const playing = state.stage === "playing";
     const inLobby = state.stage === "lobby";
     const resultsVisible = state.stage === "results";
@@ -1531,7 +1681,6 @@ function start() {
     paintLobby(0);
     animator.setActive(state.stage === "lobby" && !document.hidden && renderer !== null && !reducedMotion());
     el.timer.textContent = timerText(state.observation);
-    if (renderer && !el.mainMenu.hidden) paintLogo();
     el.hud.hidden = !hudVisible(state);
     el.hud.replaceChildren(
       ...hudRows(state).map((row) => {
@@ -2144,21 +2293,26 @@ function start() {
     el.costume.value = draft.costume;
     for (const b of el.swatches.children) b.classList.toggle("selected", b.dataset.colour === draft.colour);
     paintPreview();
-    if (renderer && !el.mainMenu.hidden) paintLogo();
+    if (!el.mainMenu.hidden) menuScene.repaint();
   }
 
-  /** The main menu shows the player's own character, repainted when the look or size changes. */
-  function paintLogo() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = el.logo.getBoundingClientRect();
-    const w = Math.max(16, Math.round((rect.width || 96) * dpr));
-    const h = Math.max(16, Math.round((rect.height || 136) * dpr));
-    const key = `${JSON.stringify(draft)} ${w}x${h}`;
-    if (key === logoKey) return;
-    logoKey = key;
-    el.logo.width = w;
-    el.logo.height = h;
-    paintCommands(el.logo.getContext("2d"), previewCommands(renderer, draft, w, h, 0, state.looks));
+  function paintMenuScene(source, alpha) {
+    const canvas = el.sceneCanvas;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const width = Math.max(1, Math.min(8192, Math.round(rect.width * dpr)));
+    const height = Math.max(1, Math.min(8192, Math.round(rect.height * dpr)));
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return false;
+    const commands = source.lobbyFrame(width, height, alpha);
+    if (!commands.count) return false;
+    context.clearRect(0, 0, width, height);
+    paintCommands(context, commands);
+    canvas.hidden = false;
+    el.sceneFallback.hidden = true;
+    return true;
   }
 
   function paintPreview() {
@@ -2331,19 +2485,26 @@ function start() {
   }
 
   async function loadGraphics() {
-    if (typeof WebAssembly === "undefined" || typeof WebSocket === "undefined") {
-      state = { ...state, stage: "closed", notice: "This browser needs WebAssembly and WebSocket support." };
+    if (typeof WebSocket === "undefined") {
+      state = { ...state, stage: "closed", notice: "This browser needs WebSocket support." };
+      updateUi();
+      return;
+    }
+    if (typeof WebAssembly === "undefined" || !ctx) {
+      state = graphicsFailure(state, "this browser needs WebAssembly and Canvas 2D support.");
       updateUi();
       return;
     }
     try {
       const response = await fetch("/eksplode_re_render.wasm");
+      if (!response.ok) throw new Error(`graphics download returned ${response.status}`);
       const bytes = await response.arrayBuffer();
       const { instance } = await WebAssembly.instantiate(bytes, {});
       renderer = createRenderer(instance.exports);
       renderer.setLooks(state.looks);
     } catch (e) {
-      state = { ...state, stage: "closed", notice: `Graphics module failed: ${e.message}` };
+      renderer = null;
+      state = graphicsFailure(state, e.message);
     }
     updateUi();
     renderEditor();

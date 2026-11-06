@@ -18,21 +18,98 @@ const TEXT: &str = "text/plain; charset=utf-8";
 /// `<package version>-<short git commit>`, shown in the page's corner.
 pub const VERSION: &str = concat!(env!("CARGO_PKG_VERSION"), "-", env!("EKSPLODE_RE_GIT_SHA"));
 
+/// The complete static page inventory, shared by routing and the page-size gate.
+pub const PAGE_ASSETS: &[(&str, Asset)] = &[
+    (
+        "/index.html",
+        Asset {
+            content_type: HTML,
+            body: include_bytes!("../assets/index.html"),
+        },
+    ),
+    (
+        "/app.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/app.js"),
+        },
+    ),
+    (
+        "/look.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/look.js"),
+        },
+    ),
+    (
+        "/room.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/room.js"),
+        },
+    ),
+    (
+        "/audio.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/audio.js"),
+        },
+    ),
+    (
+        "/controls.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/controls.js"),
+        },
+    ),
+    (
+        "/nav.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/nav.js"),
+        },
+    ),
+    (
+        "/touch.js",
+        Asset {
+            content_type: JS,
+            body: include_bytes!("../assets/touch.js"),
+        },
+    ),
+    (
+        "/style.css",
+        Asset {
+            content_type: CSS,
+            body: include_bytes!("../assets/style.css"),
+        },
+    ),
+    (
+        "/lobby-scene.png",
+        Asset {
+            content_type: "image/png",
+            body: include_bytes!("../assets/lobby-scene.png"),
+        },
+    ),
+    (
+        "/eksplode_re_render.wasm",
+        Asset {
+            content_type: WASM,
+            body: include_bytes!("../assets/eksplode_re_render.wasm"),
+        },
+    ),
+];
+
 /// The fixed routes; anything else is `None`.
 pub fn lookup(path: &str) -> Option<Asset> {
-    let (content_type, body): (&'static str, &'static [u8]) = match path {
-        "/" | "/index.html" => (HTML, include_bytes!("../assets/index.html")),
-        "/app.js" => (JS, include_bytes!("../assets/app.js")),
-        "/look.js" => (JS, include_bytes!("../assets/look.js")),
-        "/room.js" => (JS, include_bytes!("../assets/room.js")),
-        "/audio.js" => (JS, include_bytes!("../assets/audio.js")),
-        "/controls.js" => (JS, include_bytes!("../assets/controls.js")),
-        "/nav.js" => (JS, include_bytes!("../assets/nav.js")),
-        "/touch.js" => (JS, include_bytes!("../assets/touch.js")),
-        "/style.css" => (CSS, include_bytes!("../assets/style.css")),
-        "/eksplode_re_render.wasm" => (WASM, include_bytes!("../assets/eksplode_re_render.wasm")),
-        "/version" => (TEXT, VERSION.as_bytes()),
-        _ => return None,
-    };
-    Some(Asset { content_type, body })
+    if path == "/version" {
+        return Some(Asset {
+            content_type: TEXT,
+            body: VERSION.as_bytes(),
+        });
+    }
+    let path = if path == "/" { "/index.html" } else { path };
+    PAGE_ASSETS
+        .iter()
+        .find(|(route, _)| *route == path)
+        .map(|(_, asset)| *asset)
 }

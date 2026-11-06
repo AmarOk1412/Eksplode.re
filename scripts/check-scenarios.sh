@@ -113,6 +113,22 @@ for id in $ids_013; do
     fi
 done
 
+ids_014="f14_us1_as1_ f14_us1_as2_ f14_us1_as3_ f14_us1_as4_ f14_us1_as5_
+f14_us2_as1_ f14_us2_as2_ f14_us2_as3_ f14_us2_as4_ f14_us2_as5_ f14_us2_as6_
+f14_us3_as1_ f14_us3_as2_ f14_us3_as3_ f14_us3_as4_ f14_us3_as5_ f14_us3_as6_
+f14_us4_as1_ f14_us4_as2_ f14_us4_as3_"
+registered_f14=$(cargo test -p eksplode-re-web-render --test lobby --test ffi -- --list &&
+    cargo test -p eksplode-re-web --test http -- --list &&
+    node --test --test-reporter=tap --test-name-pattern='^f14_' \
+        crates/web/js-tests/app.test.mjs crates/web/js-tests/lobby.test.mjs \
+        crates/web/js-tests/glue.test.mjs crates/web/js-tests/nav-focus.test.mjs)
+for id in $ids_014; do
+    if ! printf '%s\n' "$registered_f14" | grep -qE "^${id}[^:]*: test$|^ok [0-9]+ - ${id}"; then
+        echo "missing: $id has zero registered automated tests" >&2
+        missing=$((missing + 1))
+    fi
+done
+
 if [ "$missing" -gt 0 ]; then
     echo "$missing scenario(s) are not covered" >&2
     exit 1

@@ -9,6 +9,17 @@ use common::*;
 const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; connect-src 'self' ws: wss:; img-src 'self' data:";
 
 #[test]
+fn f14_us2_as5_static_scene_is_a_real_same_origin_png_with_security_headers() {
+    let server = server(|_| {});
+    let response = get(server.http_addr(), "/lobby-scene.png");
+    assert_eq!(response.status, 200);
+    assert_eq!(response.header("content-type"), Some("image/png"));
+    assert!(response.body.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(response.header("cache-control"), Some("no-cache"));
+    assert_eq!(response.header("content-security-policy"), Some(CSP));
+}
+
+#[test]
 fn room_directory_is_read_only_secret_free_and_works_at_the_player_connection_limit() {
     let server = server(|options| options.max_connections = 4);
     let mut owner = Ws::open(server.http_addr());
@@ -388,19 +399,11 @@ fn random_bytes_do_not_hurt_the_server() {
 
 #[test]
 fn sc005_the_whole_page_stays_small() {
-    let total: usize = [
-        "/",
-        "/app.js",
-        "/look.js",
-        "/room.js",
-        "/audio.js",
-        "/nav.js",
-        "/style.css",
-        "/eksplode_re_render.wasm",
-    ]
-    .iter()
-    .map(|p| eksplode_re_web::assets::lookup(p).unwrap().body.len())
-    .sum();
+    let total: usize = eksplode_re_web::assets::PAGE_ASSETS
+        .iter()
+        .map(|(_, asset)| asset.body.len())
+        .sum::<usize>()
+        + eksplode_re_web::assets::VERSION.len();
     let wasm = eksplode_re_web::assets::lookup("/eksplode_re_render.wasm")
         .unwrap()
         .body

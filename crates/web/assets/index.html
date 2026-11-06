@@ -91,7 +91,10 @@
     </section>
 
     <section id="main-menu" class="menu main-menu" aria-label="Main menu">
-      <canvas id="logo" role="img" aria-label="Your character"></canvas>
+      <div id="lobby-scene">
+        <img id="lobby-scene-fallback" src="/lobby-scene.png" alt="" aria-hidden="true" width="640" height="200">
+        <canvas id="lobby-scene-canvas" aria-hidden="true" hidden></canvas>
+      </div>
       <label for="name">Your name</label>
       <input id="name" maxlength="16" autocomplete="off" spellcheck="false">
       <div class="menu-actions" role="group" aria-label="Main menu actions">

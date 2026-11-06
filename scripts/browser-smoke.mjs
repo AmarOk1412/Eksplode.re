@@ -11,8 +11,9 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
 
-const url = process.argv[2] ?? "http://0.0.0.0:8080/";
-const out = process.argv[3] ?? "browser-smoke";
+const sceneMode = process.argv.includes("--lobby-scene");
+const url = sceneMode ? process.env.BASE_URL ?? "http://127.0.0.1:8080/" : process.argv[2] ?? "http://0.0.0.0:8080/";
+const out = sceneMode ? process.env.OUT_DIR ?? "browser-smoke" : process.argv[3] ?? "browser-smoke";
 const browser = process.env.BROWSER ?? "chromium-browser";
 const port = 9300 + Math.floor(Math.random() * 500);
 const profile = mkdtempSync(path.join(homedir(), ".eksplode_re-smoke-"));
@@ -263,7 +264,239 @@ async function main() {
     })();`,
   });
   await call("Network.enable");
+  if (sceneMode) {
+    await call("Page.enable");
+    const seed = Number(process.env.SCENE_SEED ?? 4);
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error("Invalid SCENE_SEED");
+    await call("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
+      const original = Crypto.prototype.getRandomValues;
+      Crypto.prototype.getRandomValues = function (array) {
+        if (array instanceof Uint32Array && array.length === 1) { array[0] = ${seed}; return array; }
+        return original.call(this, array);
+      };
+      const instantiate=WebAssembly.instantiate;
+      WebAssembly.instantiate=async function (...args) {
+        const result=await instantiate.apply(this,args);
+        if (!result.instance || window.__sceneRuntime) return result;
+        const originalExports=result.instance.exports;
+        if (!originalExports.eksplode_re_lobby_reset) return result;
+        const { LobbySceneController } = await import('/app.js');
+        const setRenderer = LobbySceneController.prototype.setRenderer;
+        LobbySceneController.prototype.setRenderer = function (renderer) {
+          window.__sceneController = this;
+          return setRenderer.call(this, renderer);
+        };
+        const trace=window.__sceneRuntime={ticks:0,resets:0,frames:0};
+        const exports={...originalExports};
+        exports.eksplode_re_lobby_reset=(seed)=>{trace.resets+=1;return originalExports.eksplode_re_lobby_reset(seed);};
+        exports.eksplode_re_lobby_advance=(ticks)=>{const code=originalExports.eksplode_re_lobby_advance(ticks);if(code===0)trace.ticks+=ticks;return code;};
+        exports.eksplode_re_lobby_frame=(...args)=>{trace.frames+=1;return originalExports.eksplode_re_lobby_frame(...args);};
+        return {module:result.module,instance:{exports}};
+      };
+    })()` });
+  }
   await call("Page.navigate", { url });
+  if (sceneMode) {
+    await waitFor("document.getElementById('main-menu') && !document.getElementById('main-menu').hidden", "main menu");
+    const started = Date.now();
+    await waitFor(`(() => {
+      const canvas = document.getElementById('lobby-scene-canvas');
+      return canvas && !canvas.hidden && canvas.width > 0 && canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value > 0);
+    })()`, "f14_us1_as1_ animated main-menu scene", 1000);
+    const pixels = `(() => {
+      const canvas = document.getElementById('lobby-scene-canvas');
+      return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.reduce((hash, value, index) => (hash + value * (index % 997)) >>> 0, 0);
+    })()`;
+    const first = await evaluate(pixels);
+    await waitFor(`(${pixels}) !== ${first}`, "moving scene pixels", 1000);
+    console.log("f14_us1_as1_ moving scene startup:", Date.now() - started, "ms");
+    await shot("f14-main-menu.png");
+    if (process.env.GENERATE_FALLBACK) {
+      const image = await evaluate(`(async () => {
+        const { createRenderer, paintCommands } = await import('/app.js');
+        const { instance } = await WebAssembly.instantiate(await (await fetch('/eksplode_re_render.wasm')).arrayBuffer(), {});
+        const renderer = createRenderer(instance.exports);
+        renderer.resetLobby(4);
+        for (let index=0; index<8; index+=1) renderer.advanceLobby(15);
+        const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=200;
+        paintCommands(canvas.getContext('2d'), renderer.lobbyFrame(640,200,0));
+        return canvas.toDataURL('image/png');
+      })()`);
+      if (!image?.startsWith("data:image/png;base64,")) throw new Error("Fallback PNG generation failed");
+      writeFileSync(process.env.GENERATE_FALLBACK, Buffer.from(image.split(",")[1], "base64"));
+      console.log("generated first-party scene PNG:", process.env.GENERATE_FALLBACK);
+      ws.close();
+      return;
+    }
+    if (process.env.SCENE_SET) {
+      await waitFor("window.__sceneController && !window.__sceneController.failed", "fixture controller");
+      await evaluate("window.__sceneController.togglePause()");
+      await evaluate(`(async () => {
+        const { createRenderer, paintCommands } = await import('/app.js');
+        const { instance } = await WebAssembly.instantiate(await (await fetch('/eksplode_re_render.wasm')).arrayBuffer(), {});
+        window.__sceneFixture = { renderer: createRenderer(instance.exports), paintCommands };
+      })()`);
+      const fixtures = [
+        [0,"run-drop",120], [1,"background",90], [2,"same-level",90],
+        [3,"kart-right",120], [4,"elimination",200], [5,"kart-left",120], [6,"flatten",185],
+      ].filter(([stage]) => process.env.SCENE_SET !== "encounters" || [1,2,4,6].includes(stage));
+      for (const [width,height] of [[1440,900],[390,844],[320,568],[844,390]]) {
+        await call("Emulation.setDeviceMetricsOverride", { width,height,deviceScaleFactor:1,mobile:width<500 });
+        await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+        if (!await evaluate("document.documentElement.scrollWidth <= innerWidth && document.getElementById('lobby-scene').getBoundingClientRect().bottom <= document.getElementById('name').getBoundingClientRect().top")) {
+          throw new Error(`Fixture layout overlaps or overflows ${width}x${height}`);
+        }
+        for (const [stage,label,tick] of fixtures) {
+          const count = await evaluate(`(() => {
+            const {renderer,paintCommands}=window.__sceneFixture;
+            renderer.resetLobby(4);
+            let ticks=${stage * 300 + tick};
+            while(ticks>0){const delta=Math.min(ticks,15);renderer.advanceLobby(delta);ticks-=delta;}
+            const canvas=document.getElementById('lobby-scene-canvas');
+            const commands=renderer.lobbyFrame(canvas.width,canvas.height,0);
+            canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
+            paintCommands(canvas.getContext('2d'),commands);
+            return commands.count;
+          })()`);
+          if (count <= 80) throw new Error(`Missing visible ${label} fixture: only ${count} commands`);
+          await shot(`f14-${label}-${width}.png`);
+        }
+      }
+      const liveSeconds=Number(process.env.SCENE_LIVE_SECONDS ?? 0);
+      if (process.env.SCENE_NAV_ONLY) {
+        await evaluate("window.__sceneController.togglePause()");
+        for (const [open,panel,close] of [["menu-create","room-panel","room-back"],["menu-join","directory-panel","directory-back"],["menu-customize","customize-panel","customize-close"],["menu-options","options-panel","options-close"]]) {
+          await evaluate(`document.getElementById('${open}').click()`);
+          await waitFor(`!document.getElementById('${panel}').hidden`,"navigation regression destination");
+          const frozen=await evaluate("window.__sceneRuntime.ticks");
+          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+          if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error(`Scene advanced behind ${panel}`);
+          await evaluate(`document.getElementById('${close}').click()`);
+        }
+        const hidden = await call("Target.createTarget", { url:"about:blank" });
+        await call("Target.activateTarget", { targetId:hidden.result.targetId });
+        const pageHidden=await evaluate("document.hidden");
+        if (pageHidden) {
+          const frozen=await evaluate("window.__sceneRuntime.ticks");
+          const other=await (await fetch(`http://127.0.0.1:${port}/json`)).json();
+          const original=other.find(target=>target.webSocketDebuggerUrl===ws.url)?.id;
+          await call("Target.activateTarget", { targetId:original });
+          if(await evaluate("window.__sceneRuntime.ticks")-frozen>15)throw new Error("Hidden tab caught up accumulated ticks");
+        }
+        await call("Target.closeTarget", { targetId:hidden.result.targetId });
+        await call("Page.bringToFront");
+        await evaluate("document.getElementById('menu-create').click()");
+        await waitFor("!document.getElementById('room-create').disabled", "room creation enabled");
+        await evaluate("document.getElementById('room-name').value='Scene validation';document.getElementById('room-create').click()");
+        await waitFor("!document.getElementById('lobby-panel').hidden && document.querySelectorAll('#slots .portrait').length===4", "unchanged bot-filled room lobby");
+        const frozen=await evaluate("window.__sceneRuntime.ticks");
+        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+        if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error("Scene advanced inside the room lobby");
+        await shot("f14-unchanged-room-lobby.png");
+        console.log("f14_us2_as6_ all navigation destinations freeze scene ticks");
+      }
+      if (liveSeconds) {
+        if (!Number.isInteger(liveSeconds) || liveSeconds<90 || liveSeconds>600) throw new Error("SCENE_LIVE_SECONDS must be an integer from 90 to 600");
+        await call("Emulation.setDeviceMetricsOverride", {width:1440,height:900,deviceScaleFactor:1,mobile:false});
+        await evaluate("window.__sceneController.togglePause()");
+        const startTicks=await evaluate("window.__sceneRuntime.ticks");
+        for(let elapsed=0;elapsed<liveSeconds;elapsed+=5){
+          const duration=Math.min(5,liveSeconds-elapsed)*1000;
+          await evaluate(`new Promise(resolve=>{const end=performance.now()+${duration};const frame=()=>performance.now()>=end?resolve():requestAnimationFrame(frame);requestAnimationFrame(frame);})`);
+          if(elapsed%30===0 && liveSeconds>=300){
+            const choices=[["menu-create","room-panel","room-back"],["menu-join","directory-panel","directory-back"],["menu-customize","customize-panel","customize-close"],["menu-options","options-panel","options-close"]];
+            const [open,panel,close]=choices[Math.floor(elapsed/30)%choices.length];
+            await evaluate(`document.getElementById('${open}').click()`);
+            await waitFor(`!document.getElementById('${panel}').hidden`,"live menu action");
+            const frozen=await evaluate("window.__sceneRuntime.ticks");
+            await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+            if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error("off-menu scene advanced");
+            await evaluate(`document.getElementById('${close}').click()`);
+          }
+          if(elapsed%15===0)console.log("live main-menu playback:",Math.min(elapsed+5,liveSeconds),"seconds");
+        }
+        const trace=await evaluate("window.__sceneRuntime");
+        if(trace.resets!==1 || trace.ticks-startTicks<liveSeconds*60*0.9)throw new Error(`Live scene stalled or reset: ${JSON.stringify(trace)}`);
+        if(sentInputs.length)throw new Error("Decorative menu sent gameplay input");
+        console.log("live scene evidence:",JSON.stringify(trace));
+        await shot("f14-live-complete.png");
+      }
+      console.log("actual WASM fixture pixels passed:", process.env.SCENE_SET);
+      ws.close();
+      return;
+    }
+    if (await evaluate("document.getElementById('lobby-scene-pause') !== null")) throw new Error("f14_us2_as3_ scene icon must be absent");
+    await waitFor("window.__sceneController", "fixture controller");
+    await evaluate("window.__sceneController.togglePause()");
+    const frozen = await evaluate(pixels);
+    await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
+    if (await evaluate(pixels) !== frozen) throw new Error("f14_us2_as3_ paused pixels moved");
+    await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+    await waitFor("document.getElementById('lobby-scene-canvas').hidden && !document.getElementById('lobby-scene-fallback').hidden", "f14_us2_as2_ reduced motion still image");
+    await call("Emulation.setEmulatedMedia", { features: [] });
+    await waitFor("window.__sceneController.userPaused && !window.__sceneController.conditions.reducedMotion", "retained test-fixture pause");
+    for (const [width, height] of [[1440,900],[390,844],[320,568],[844,390]]) {
+      await call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 500 });
+      const fits = await evaluate(`(() => {
+        const scene=document.getElementById('lobby-scene').getBoundingClientRect();
+        const name=document.getElementById('name').getBoundingClientRect();
+        return scene.width>0 && scene.bottom<=name.top && document.documentElement.scrollWidth<=innerWidth;
+      })()`);
+      if (!fits) throw new Error(`f14_us2_as4_ scene overlaps or overflows ${width}x${height}`);
+      await shot(`f14-${width}x${height}.png`);
+      await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
+      await waitFor("document.getElementById('lobby-scene-fallback').complete && document.getElementById('lobby-scene-fallback').naturalWidth > 0 && document.getElementById('lobby-scene-canvas').hidden", "loaded motion-safe PNG");
+      await shot(`f14-still-${width}x${height}.png`);
+      await call("Emulation.setEmulatedMedia", { features: [] });
+    }
+    console.log("f14_us2_as1_ menu actions and decorative focus isolation:", await evaluate("document.querySelectorAll('#main-menu .menu-actions button').length"));
+    for (const [open, panel, close] of [
+      ["menu-create", "room-panel", "room-back"],
+      ["menu-join", "directory-panel", "directory-back"],
+      ["menu-customize", "customize-panel", "customize-close"],
+      ["menu-options", "options-panel", "options-close"],
+    ]) {
+      await evaluate(`document.getElementById('${open}').click()`);
+      await waitFor(`!document.getElementById('${panel}').hidden`, `f14_us2_as1_ ${panel}`);
+      await evaluate(`document.getElementById('${close}').click()`);
+      await waitFor("!document.getElementById('main-menu').hidden && window.__sceneController.userPaused", "f14_us2_as6_ preserved fixture after navigation");
+    }
+    await call("Network.setCacheDisabled", { cacheDisabled: true });
+    for (const failure of ["old-module", "scene-error", "canvas", "wasm"]) {
+      let identifier = null;
+      if (failure === "wasm") await call("Network.setBlockedURLs", { urls: ["*eksplode_re_render.wasm*"] });
+      else {
+        const source = failure === "canvas" ? `HTMLCanvasElement.prototype.getContext = function () { return null; };` : `(() => {
+          const instantiate=WebAssembly.instantiate;
+          WebAssembly.instantiate=async function (...args) {
+            const result=await instantiate.apply(this,args);
+            if (!result.instance) return result;
+            const exports={...result.instance.exports};
+            if (${JSON.stringify(failure)} === 'old-module') {
+              for (const name of ['reset','advance','frame']) delete exports['eksplode_re_lobby_'+name];
+            } else exports.eksplode_re_lobby_frame=()=>0;
+            return {module:result.module,instance:{exports}};
+          };
+        })();`;
+        identifier = (await call("Page.addScriptToEvaluateOnNewDocument", { source })).result.identifier;
+      }
+      await call("Page.navigate", { url });
+      await waitFor("document.getElementById('lobby-scene-canvas')?.hidden && document.getElementById('lobby-scene-fallback').naturalWidth > 0 && document.getElementById('retry').hidden && !document.getElementById('room-create').disabled", `f14_us2_as5_ ${failure} fallback`);
+      await evaluate("document.getElementById('menu-create').click()");
+      await waitFor("!document.getElementById('room-panel').hidden", `${failure} preserves Create`);
+      await evaluate("document.getElementById('room-back').click()");
+      await evaluate("document.getElementById('menu-customize').click()");
+      await waitFor("!document.getElementById('customize-panel').hidden", `${failure} preserves Customize`);
+      await evaluate("document.getElementById('customize-close').click()");
+      await shot(`f14-fallback-${failure}.png`);
+      if (identifier) await call("Page.removeScriptToEvaluateOnNewDocument", { identifier });
+      await call("Network.setBlockedURLs", { urls: [] });
+    }
+    console.log("f14_us2_as2_as3_as4_as5_as6_ motion, layout, navigation and failure checks passed");
+    if (consoleLines.some(line => line.startsWith("EXCEPTION"))) throw new Error(consoleLines.join(" | "));
+    ws.close();
+    return;
+  }
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
 
   if (process.env.MOBILE_FLOW === "setup") {

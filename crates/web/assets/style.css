@@ -101,10 +101,24 @@ section[hidden], [hidden] { display: none !important; }
 
 .dialog { width: min(1000px, 100%); }
 
-#logo {
-  width: 96px;
-  height: 136px;
+.main-menu { position: relative; width: min(680px, 100%); }
+
+#lobby-scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 5;
+  max-height: 200px;
+  overflow: hidden;
+}
+
+#lobby-scene > canvas, #lobby-scene > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   image-rendering: pixelated;
+  pointer-events: none;
 }
 
 .version {
