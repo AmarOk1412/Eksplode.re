@@ -1571,6 +1571,7 @@ function start() {
     renderDev();
     el.notice.textContent = topNotice(state) || (["lobby", "playing", "results"].includes(state.stage) ? state.graphicsError ?? "" : "");
     const playing = state.stage === "playing";
+    el.app.classList.toggle("match-view", playing && !mobileControls());
     const inLobby = state.stage === "lobby";
     const resultsVisible = state.stage === "results";
     const visible = screens(state);

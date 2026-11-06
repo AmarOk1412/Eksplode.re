@@ -497,6 +497,12 @@ test("adaptive_controls_keyboard_and_controller_controls_are_separate_panels", (
   assert.ok(html.indexOf('id="controller-select"') > controller);
 });
 
+test("large_screen_matches_use_the_viewport_instead_of_the_menu_width_cap", () => {
+  const css = readAsset(new URL("../assets/style.css", import.meta.url), "utf8");
+  assert.match(css, /#app\.match-view\s*\{[^}]*max-width:\s*none/s);
+  assert.match(css, /#app\.match-view\s*\{[^}]*height:\s*100dvh/s);
+  assert.match(css, /#app\.match-view #view\s*\{[^}]*height:\s*100%/s);
+});
 
 test("donate_link_uses_the_requested_destination_without_changing_primary_actions", () => {
   const menu = section(indexHtml(), "main-menu");

@@ -10,10 +10,12 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { fixtureText } from "../crates/web/js-tests/wasm-helper.mjs";
 
 const sceneMode = process.argv.includes("--lobby-scene");
 const adaptiveMode = process.argv.includes("--adaptive-controls");
-const isolatedMode = sceneMode || adaptiveMode;
+const renderMode = process.argv.includes("--render-view");
+const isolatedMode = sceneMode || adaptiveMode || renderMode;
 const url = isolatedMode ? process.env.BASE_URL ?? "http://127.0.0.1:8080/" : process.argv[2] ?? "http://0.0.0.0:8080/";
 const out = isolatedMode ? process.env.OUT_DIR ?? "browser-smoke" : process.argv[3] ?? "browser-smoke";
 const browser = process.env.BROWSER ?? "chromium-browser";
@@ -297,7 +299,60 @@ async function main() {
       };
     })()` });
   }
+  if (renderMode) await call("Page.enable");
   await call("Page.navigate", { url });
+  if (renderMode) {
+    await waitFor("document.readyState === 'complete' && document.getElementById('main-menu') && !document.getElementById('room-create').disabled", "ready render test menu");
+    await setViewport(1920,1080,false);
+    await evaluate("document.getElementById('menu-create').click()");
+    await waitFor("!document.getElementById('room-panel').hidden", "render room creation");
+    await evaluate("document.getElementById('room-create').click()");
+    await waitFor("!document.getElementById('lobby-panel').hidden && !document.getElementById('start').disabled", "render lobby ready");
+    await evaluate("document.getElementById('start').click()");
+    await waitFor("!document.getElementById('game-panel').hidden", "render match running");
+    for (const [width,height] of [[1920,1080],[2560,1440],[1440,900]]) {
+      await setViewport(width,height,false);
+      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
+      const geometry = await evaluate(`(() => {
+        const canvas=document.getElementById('view');const rect=canvas.getBoundingClientRect();
+        return {width:rect.width,height:rect.height,viewportWidth:innerWidth,viewportHeight:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth,painted:canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(value=>value>0)};
+      })()`);
+      if (geometry.width<width*0.9 || geometry.height<height*0.8 || geometry.overflow || !geometry.painted) throw new Error(`Large-screen arena did not fill the viewport: ${JSON.stringify(geometry)}`);
+      console.log("large-screen canvas:",JSON.stringify(geometry));
+      await shot(`render-${width}x${height}.png`);
+    }
+    for (const [width,height] of [[390,844],[844,390]]) {
+      await setViewport(width,height,true);
+      await waitFor("!document.getElementById('touch-controls').hidden", "mobile gameplay touch controls");
+      if (await evaluate("document.documentElement.scrollWidth > innerWidth")) throw new Error("Expanded desktop canvas broke mobile overflow");
+      await shot(`render-mobile-${width}x${height}.png`);
+    }
+    await setViewport(1280,720,false);
+    const result = await evaluate(`(async () => {
+      const {createRenderer,paintCommands}=await import('/app.js');
+      const {instance}=await WebAssembly.instantiate(await(await fetch('/eksplode_re_render.wasm')).arrayBuffer(),{});
+      const renderer=createRenderer(instance.exports);
+      const observation=JSON.parse(${JSON.stringify(fixtureText())});
+      if(renderer.load(JSON.stringify(observation))!==0)throw new Error('Fixture load failed');
+      const baseline=renderer.frame(1280,720,0).count;
+      observation.tick+=1;
+      observation.events=[{BombPunched:{player:0,from:{x:2,y:1},dir:'Right'}}];
+      if(renderer.load(JSON.stringify(observation))!==0)throw new Error('Punch event load failed');
+      const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;
+      canvas.style.cssText='position:fixed;inset:0;z-index:99;width:100vw;height:100vh;background:#dddbdf';document.body.append(canvas);
+      window.__punchFixture={renderer,paintCommands,canvas};
+      const frame=renderer.frame(1280,720,1);paintCommands(canvas.getContext('2d'),frame);
+      return {baseline,punch:frame.count,expired:renderer.frame(1280,720,8).count};
+    })()`);
+    if(result.punch<=result.baseline || result.expired!==result.baseline)throw new Error(`Punch fixture lacks a transient hand: ${JSON.stringify(result)}`);
+    await evaluate("(()=>{const {renderer,paintCommands,canvas}=window.__punchFixture;canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);paintCommands(canvas.getContext('2d'),renderer.frame(1280,720,1));})()");
+    await shot("render-punch.png");
+    await evaluate("(()=>{const {renderer,paintCommands,canvas}=window.__punchFixture;canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);paintCommands(canvas.getContext('2d'),renderer.frame(1280,720,3));})()");
+    await shot("render-punch-extended.png");
+    console.log("transient real-WASM punch commands:",JSON.stringify(result));
+    if(consoleLines.some(line=>line.startsWith('EXCEPTION')))throw new Error(consoleLines.join(' | '));
+    ws.close();return;
+  }
   if (adaptiveMode) {
     await waitFor("document.readyState === 'complete' && document.getElementById('main-menu') && !document.getElementById('room-create').disabled", "ready main menu");
     await setViewport(1440,900,false);
