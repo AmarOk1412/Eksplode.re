@@ -11,12 +11,27 @@ cargo run -p eksplode-re-web -- --bind 127.0.0.1 --bots 1
 ```
 
 Open the address in a browser: the main menu offers **Create new game** (the room creation
-form), **Join a game** (the room list with Refresh and New room) and **Options**. Creating a room
+form), **Join a game** (the room list with Refresh and New room), **Customize**, and **Options**. Creating a room
 makes you its owner, and every other seat (up to the room's capacity) starts with a bot; a joining
 player takes a bot's seat, and a seat left before the match gets a bot again (so `--bots` no
 longer changes how a new room starts). Each room has
 independent settings, players, bots and simulation. Opening the room list alone never takes a
 player slot.
+
+**Animated main menu.** The former logo zone is a silent 2D side-view scene, separate from the
+room lobby. Seven randomly ordered short vignettes show bomb drops, runners on the same level
+and in the background, opposing runners, cartoon explosions, karts in both directions, and a
+pushed-bomb mishap ending in a brief flattening. All characters are decorative, not room members;
+their actions never change readiness, scores, or match rules.
+
+The scene has no pause/play icon or extra navigation target. Reduced-motion preferences take effect
+immediately and show a static scene; disabling reduced motion resumes playback only when the menu is visible.
+Playback stops behind dialogs, off the main menu, or in a hidden tab, without catching up on return.
+
+A same-origin PNG appears while graphics load or if scene animation is unavailable. Decorative
+failures leave all menu actions and the connection usable; a full graphics-module failure still
+prevents rendering a match and is reported when graphics are needed. No new room setting, command
+line option, sound effect, or saved preference is introduced.
 
 **Lobby.** The header shows the room summary, a gear icon (owner only) that opens the room
 settings panel (name, mode, board size, round time, maximum players, friendly fire and password,

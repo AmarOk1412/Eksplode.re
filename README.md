@@ -12,7 +12,7 @@ pixel-art view are all small, tested crates.
 
 | | |
 |---|---|
-| ![The main menu with your character, your name, Create new game, Join a game and Options](docs/screenshots/main-menu.png) | ![The lobby with the owner and three bots on animated 3D cards](docs/screenshots/lobby.png) |
+| ![The main menu with its animated side-view scene and game actions](docs/screenshots/f14-desktop.png) | ![The lobby with the owner and three bots on animated 3D cards](docs/screenshots/lobby.png) |
 | Pick a name and jump in. | The lobby: empty seats fill with bots, the owner starts. |
 | ![Customize: colour, head, face and costume](docs/screenshots/customize.png) | ![The scoreboard after a match: kills and bombs placed](docs/screenshots/scoreboard.png) |
 | Dress your character up (or let the dice decide). | Who won, who blew up whom. |
@@ -20,6 +20,10 @@ pixel-art view are all small, tested crates.
 ## Features
 
 - Four players per match: any mix of people (terminal or browser) and bots.
+- **Animated main menu:** side-view runners drop bombs, cross paths in the foreground/background,
+  ride karts, and get caught in occasional cartoon mishaps. No scene controls are shown;
+  reduced motion uses a still image. These silent scenes never
+  affect rooms, readiness, or gameplay.
 - **Revenge karts:** eliminated Normal/Team players drive around the perimeter and throw inward until walls start closing. Direct hits stop movement for one second; eliminating an opponent with a current kart bomb earns a return to the board. Chaser rules are unchanged.
 - **Rooms and modes:** the owner of a room chooses the mode (Normal, Team, Chaser), the board size (small,
   medium, large), the round time (2, 3, 5 or 10 minutes), for Team friendly fire, and the bot
