@@ -159,6 +159,21 @@ button:hover:not(:disabled), button:focus-visible { background: var(--ink); colo
 .menu button { width: min(270px, 100%); font-size: 1.6rem; }
 .main-menu .menu-actions { display: grid; gap: 12px; justify-items: center; width: 100%; margin-top: 8px; }
 .main-menu .menu-actions button { width: min(320px, 100%); }
+.donate-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+.donate-link:hover, .donate-link:focus-visible { background: var(--ink); color: #fff; }
+.donate-link:focus-visible { outline: 2px solid var(--slot0); outline-offset: 3px; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button.primary { background: var(--slot0); border-color: var(--slot0); color: #fff; }
 button.primary:hover:not(:disabled), button.primary:focus-visible { background: var(--ink); border-color: var(--ink); }

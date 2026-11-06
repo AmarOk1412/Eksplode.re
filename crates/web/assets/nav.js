@@ -1,4 +1,4 @@
-const FOCUS_SELECTOR = 'button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
+const FOCUS_SELECTOR = 'a[href], button, input, select, textarea, [tabindex]:not([tabindex="-1"])';
 const DIRECTIONS = ["up", "down", "left", "right"];
 const NEUTRAL_INPUT = Object.freeze({ direction: null, confirm: false, back: false, menu: false });
 const OSK_ROWS = Object.freeze([
@@ -314,7 +314,7 @@ export function adjustControl(element, direction) {
 export function activateControl(element) {
 	if (!element || element.disabled) return "ignored";
 	if (element.type === "text" || element.type === "search" || element.tagName === "TEXTAREA") return "osk";
-	if (element.tagName === "BUTTON" || element.type === "checkbox" || element.type === "radio") {
+	if (element.tagName === "BUTTON" || element.tagName === "A" || element.type === "checkbox" || element.type === "radio") {
 		element.click?.();
 		return "activated";
 	}

@@ -15,6 +15,12 @@ function control(properties = {}) {
   };
 }
 
+test("donate_link_controller_confirmation_activates_native_links", () => {
+  const link = control({ tagName: "A", type: "", href: "https://buymeacoffee.com/kaelinnchacuit" });
+  assert.equal(activateControl(link), "activated");
+  assert.equal(link.clicked, true);
+});
+
 test("left and right cycle selects and dispatch change", () => {
   const select = control({ tagName: "SELECT", options: [{ value: "a" }, { value: "b" }, { value: "c" }], selectedIndex: 0, value: "a" });
   assert.equal(adjustControl(select, "right"), true);

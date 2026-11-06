@@ -487,6 +487,15 @@ test("f11_us1_a_lost_connection_shows_the_main_menu_with_retry", () => {
 // ---- Options (Sound, Controls) and Customize are two dialogs ----
 import { OPTIONS_TABS, optionsReducer, optionsView, lobbyActions } from "../assets/app.js";
 
+test("donate_link_uses_the_requested_destination_without_changing_primary_actions", () => {
+  const menu = section(indexHtml(), "main-menu");
+  assert.match(menu, /<a[^>]*id="donate"[^>]*href="https:\/\/buymeacoffee\.com\/kaelinnchacuit"/);
+  assert.match(menu, /id="donate"[^>]*rel="noopener noreferrer"/);
+  const actions = /<div class="menu-actions"[^>]*>([\s\S]*?)<\/div>/.exec(menu)[1];
+  assert.equal((actions.match(/<button /g) ?? []).length, 4);
+  assert.doesNotMatch(actions, /id="donate"/);
+});
+
 test("options_has_exactly_two_tabs_and_customize_is_a_dialog_of_its_own", () => {
   assert.deepEqual(OPTIONS_TABS.map((t) => t.label), ["Sound", "Controls"]);
   const html = indexHtml();
