@@ -11,6 +11,7 @@ import {
   GamepadTracker,
   assignBinding,
   compatibleGamepads,
+  filterDisconnectedGamepads,
   controlPresentation,
   mobileControlPlatform,
   loadBindings,
@@ -1537,6 +1538,9 @@ function start() {
   }
 
   function handleNavigationInput(input) {
+    if (input.direction || input.confirm || input.back || input.menu) {
+      el.app.classList.add("controller-navigation");
+    }
     if (input.menu) {
       if (navigationLayers.top?.id === "hub") closeNavigationLayer();
       else if (!navigationLayers.top) openMenuHub();
@@ -2119,6 +2123,7 @@ function start() {
   let capturingAction = null;
   let controlsPresentation = controlPresentation();
   let controllerSignature = "";
+  const disconnectedGamepadIndices = new Set();
   const actionLabels = {
     up: "Move up",
     down: "Move down",
@@ -2152,7 +2157,10 @@ function start() {
   function readGamepads() {
     if (typeof navigator.getGamepads !== "function") return { state: "unsupported", gamepads: [] };
     try {
-      return { state: "available", gamepads: Array.from(navigator.getGamepads() ?? []) };
+      return {
+        state: "available",
+        gamepads: filterDisconnectedGamepads(navigator.getGamepads(), disconnectedGamepadIndices),
+      };
     } catch {
       return { state: "blocked", gamepads: [] };
     }
@@ -2264,8 +2272,12 @@ function start() {
     keys.clear();
     renderControllerPanel();
   });
-  window.addEventListener("gamepadconnected", () => renderOptions());
-  window.addEventListener("gamepaddisconnected", () => {
+  window.addEventListener("gamepadconnected", (event) => {
+    disconnectedGamepadIndices.delete(event.gamepad.index);
+    renderOptions();
+  });
+  window.addEventListener("gamepaddisconnected", (event) => {
+    disconnectedGamepadIndices.add(event.gamepad.index);
     gamepads.clear();
     renderOptions();
   });
@@ -2381,7 +2393,9 @@ function start() {
   // the small icon on the preview's corner randomizes colour, head, face and costume together
   el.randomLook.addEventListener("click", () => editLook({ type: "random" }));
 
+  window.addEventListener("pointerdown", () => el.app.classList.remove("controller-navigation"));
   window.addEventListener("keydown", (e) => {
+    el.app.classList.remove("controller-navigation");
     if (capturingAction) {
       e.preventDefault();
       e.stopPropagation();

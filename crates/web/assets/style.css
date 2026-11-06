@@ -150,6 +150,7 @@ label { font-size: 0.9rem; color: var(--muted); }
 }
 .controller-input .selection-field::before { left: 10px; transform: rotate(135deg); }
 .controller-input .selection-field::after { right: 10px; transform: rotate(-45deg); }
+.controller-input .selection-field:has(> select:focus-visible) { color: #fff; }
 
 input, button {
   font: inherit;
@@ -191,6 +192,11 @@ button:hover:not(:disabled), button:focus-visible { background: var(--ink); colo
 }
 .donate-link:hover, .donate-link:focus-visible { background: var(--ink); color: #fff; }
 .donate-link:focus-visible { outline: 2px solid var(--slot0); outline-offset: 3px; }
+.controller-navigation :is(a[href], button, input, select, textarea, [role="radio"], [tabindex="0"]:not(#view)):focus {
+  outline: 3px solid var(--slot0);
+  outline-offset: 3px;
+}
+.controller-navigation .selection-field:has(> select:focus-visible) { color: #fff; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button.primary { background: var(--slot0); border-color: var(--slot0); color: #fff; }
 button.primary:hover:not(:disabled), button.primary:focus-visible { background: var(--ink); border-color: var(--ink); }
@@ -469,6 +475,8 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   border-radius: 0;
   width: min(270px, 100%);
 }
+.room > .selection-field, .room-controls .selection-field { width: min(270px, 100%); }
+.room .selection-field > select, .room-controls .selection-field > select { width: 100%; }
 
 .pattern-banner {
   margin: 8px auto;
@@ -545,6 +553,7 @@ button.primary:hover:not(:disabled), button.primary:focus-visible { background: 
   .room > #room-ff-label, .room > #room-create { grid-column: 1 / -1; }
   .room > label { justify-self: end; font-size: 0.8rem; }
   .room input, .room select { width: 100%; min-width: 0; font-size: 0.9rem; padding: 4px 8px; }
+  .room > .selection-field { width: 100%; }
   .room > #room-mode-hint { margin: 0; }
   .mode-cards { gap: 4px; }
   .mode-cards button { min-height: 36px; padding: 4px 10px; font-size: 0.85rem; }

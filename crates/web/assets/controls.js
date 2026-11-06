@@ -152,6 +152,12 @@ export function compatibleGamepads(gamepads) {
 		.map(({ index, id }) => ({ index, id: typeof id === "string" && id ? id : `Controller ${index}` }));
 }
 
+/** Excludes devices the browser has explicitly reported as disconnected. */
+export function filterDisconnectedGamepads(gamepads, disconnectedIndices) {
+	const disconnected = new Set(disconnectedIndices);
+	return Array.from(gamepads ?? []).filter((gamepad) => !gamepad || !disconnected.has(gamepad.index));
+}
+
 function pressed(button) {
 	return button === true || button?.pressed === true || Number(button?.value) > 0.5;
 }

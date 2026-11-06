@@ -10,14 +10,9 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { fixtureText } from "../crates/web/js-tests/wasm-helper.mjs";
 
-const sceneMode = process.argv.includes("--lobby-scene");
-const adaptiveMode = process.argv.includes("--adaptive-controls");
-const renderMode = process.argv.includes("--render-view");
-const isolatedMode = sceneMode || adaptiveMode || renderMode;
-const url = isolatedMode ? process.env.BASE_URL ?? "http://127.0.0.1:8080/" : process.argv[2] ?? "http://0.0.0.0:8080/";
-const out = isolatedMode ? process.env.OUT_DIR ?? "browser-smoke" : process.argv[3] ?? "browser-smoke";
+const url = process.argv[2] ?? "http://0.0.0.0:8080/";
+const out = process.argv[3] ?? "browser-smoke";
 const browser = process.env.BROWSER ?? "chromium-browser";
 const port = 9300 + Math.floor(Math.random() * 500);
 const profile = mkdtempSync(path.join(homedir(), ".eksplode_re-smoke-"));
@@ -268,342 +263,7 @@ async function main() {
     })();`,
   });
   await call("Network.enable");
-  if (sceneMode) {
-    await call("Page.enable");
-    const seed = Number(process.env.SCENE_SEED ?? 4);
-    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error("Invalid SCENE_SEED");
-    await call("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
-      const original = Crypto.prototype.getRandomValues;
-      Crypto.prototype.getRandomValues = function (array) {
-        if (array instanceof Uint32Array && array.length === 1) { array[0] = ${seed}; return array; }
-        return original.call(this, array);
-      };
-      const instantiate=WebAssembly.instantiate;
-      WebAssembly.instantiate=async function (...args) {
-        const result=await instantiate.apply(this,args);
-        if (!result.instance || window.__sceneRuntime) return result;
-        const originalExports=result.instance.exports;
-        if (!originalExports.eksplode_re_lobby_reset) return result;
-        const { LobbySceneController } = await import('/app.js');
-        const setRenderer = LobbySceneController.prototype.setRenderer;
-        LobbySceneController.prototype.setRenderer = function (renderer) {
-          window.__sceneController = this;
-          return setRenderer.call(this, renderer);
-        };
-        const trace=window.__sceneRuntime={ticks:0,resets:0,frames:0};
-        const exports={...originalExports};
-        exports.eksplode_re_lobby_reset=(seed)=>{trace.resets+=1;return originalExports.eksplode_re_lobby_reset(seed);};
-        exports.eksplode_re_lobby_advance=(ticks)=>{const code=originalExports.eksplode_re_lobby_advance(ticks);if(code===0)trace.ticks+=ticks;return code;};
-        exports.eksplode_re_lobby_frame=(...args)=>{trace.frames+=1;return originalExports.eksplode_re_lobby_frame(...args);};
-        return {module:result.module,instance:{exports}};
-      };
-    })()` });
-  }
-  if (renderMode) await call("Page.enable");
   await call("Page.navigate", { url });
-  if (renderMode) {
-    await waitFor("document.readyState === 'complete' && document.getElementById('main-menu') && !document.getElementById('room-create').disabled", "ready render test menu");
-    await setViewport(1920,1080,false);
-    await evaluate("document.getElementById('menu-create').click()");
-    await waitFor("!document.getElementById('room-panel').hidden", "render room creation");
-    await evaluate("document.getElementById('room-create').click()");
-    await waitFor("!document.getElementById('lobby-panel').hidden && !document.getElementById('start').disabled", "render lobby ready");
-    await evaluate("document.getElementById('start').click()");
-    await waitFor("!document.getElementById('game-panel').hidden", "render match running");
-    for (const [width,height] of [[1920,1080],[2560,1440],[1440,900]]) {
-      await setViewport(width,height,false);
-      await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-      const geometry = await evaluate(`(() => {
-        const canvas=document.getElementById('view');const rect=canvas.getBoundingClientRect();
-        return {width:rect.width,height:rect.height,viewportWidth:innerWidth,viewportHeight:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth,painted:canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data.some(value=>value>0)};
-      })()`);
-      if (geometry.width<width*0.9 || geometry.height<height*0.8 || geometry.overflow || !geometry.painted) throw new Error(`Large-screen arena did not fill the viewport: ${JSON.stringify(geometry)}`);
-      console.log("large-screen canvas:",JSON.stringify(geometry));
-      await shot(`render-${width}x${height}.png`);
-    }
-    for (const [width,height] of [[390,844],[844,390]]) {
-      await setViewport(width,height,true);
-      await waitFor("!document.getElementById('touch-controls').hidden", "mobile gameplay touch controls");
-      if (await evaluate("document.documentElement.scrollWidth > innerWidth")) throw new Error("Expanded desktop canvas broke mobile overflow");
-      await shot(`render-mobile-${width}x${height}.png`);
-    }
-    await setViewport(1280,720,false);
-    const result = await evaluate(`(async () => {
-      const {createRenderer,paintCommands}=await import('/app.js');
-      const {instance}=await WebAssembly.instantiate(await(await fetch('/eksplode_re_render.wasm')).arrayBuffer(),{});
-      const renderer=createRenderer(instance.exports);
-      const observation=JSON.parse(${JSON.stringify(fixtureText())});
-      if(renderer.load(JSON.stringify(observation))!==0)throw new Error('Fixture load failed');
-      const baseline=renderer.frame(1280,720,0).count;
-      observation.tick+=1;
-      observation.events=[{BombPunched:{player:0,from:{x:2,y:1},dir:'Right'}}];
-      if(renderer.load(JSON.stringify(observation))!==0)throw new Error('Punch event load failed');
-      const canvas=document.createElement('canvas');canvas.width=1280;canvas.height=720;
-      canvas.style.cssText='position:fixed;inset:0;z-index:99;width:100vw;height:100vh;background:#dddbdf';document.body.append(canvas);
-      window.__punchFixture={renderer,paintCommands,canvas};
-      const frame=renderer.frame(1280,720,1);paintCommands(canvas.getContext('2d'),frame);
-      return {baseline,punch:frame.count,expired:renderer.frame(1280,720,8).count};
-    })()`);
-    if(result.punch<=result.baseline || result.expired!==result.baseline)throw new Error(`Punch fixture lacks a transient hand: ${JSON.stringify(result)}`);
-    await evaluate("(()=>{const {renderer,paintCommands,canvas}=window.__punchFixture;canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);paintCommands(canvas.getContext('2d'),renderer.frame(1280,720,1));})()");
-    await shot("render-punch.png");
-    await evaluate("(()=>{const {renderer,paintCommands,canvas}=window.__punchFixture;canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);paintCommands(canvas.getContext('2d'),renderer.frame(1280,720,3));})()");
-    await shot("render-punch-extended.png");
-    console.log("transient real-WASM punch commands:",JSON.stringify(result));
-    if(consoleLines.some(line=>line.startsWith('EXCEPTION')))throw new Error(consoleLines.join(' | '));
-    ws.close();return;
-  }
-  if (adaptiveMode) {
-    await waitFor("document.readyState === 'complete' && document.getElementById('main-menu') && !document.getElementById('room-create').disabled", "ready main menu");
-    await setViewport(1440,900,false);
-    if (!await evaluate("document.getElementById('donate')?.href === 'https://buymeacoffee.com/kaelinnchacuit' && document.getElementById('donate').rel === 'noopener noreferrer'")) throw new Error("Donate destination/security attributes are incorrect");
-    await setFakeGamepad([], [0,0], "standard", 2);
-    await pulseGamepad([]);
-    await evaluate("window.__donateActivated=false;document.getElementById('donate').addEventListener('click',event=>{event.preventDefault();window.__donateActivated=true;});document.getElementById('donate').focus()");
-    await pulseGamepad([0]);
-    await waitFor("window.__donateActivated", "controller activates Donate link");
-    await shot("adaptive-main-menu.png");
-    await setFakeGamepad([], [0,0], "standard", 0);
-    await evaluate("document.getElementById('menu-options').click()");
-    await waitFor("!document.getElementById('tab-controls').hidden", "desktop Controls tab");
-    await evaluate("document.getElementById('tab-controls').click()");
-    await waitFor("!document.getElementById('keyboard-controls').hidden && document.getElementById('controller-controls').hidden", "keyboard-only controls");
-    const bindings = await evaluate("document.querySelector('[data-bind-action=up]').textContent");
-    await evaluate("document.querySelector('[data-bind-action=up]').click()");
-    await shot("adaptive-keyboard.png");
-    await setFakeGamepad([], [0,0], "standard", 2);
-    await waitFor("document.getElementById('keyboard-controls').hidden && !document.getElementById('controller-controls').hidden && document.getElementById('app').classList.contains('controller-input')", "controller-only settings on plug");
-    if (!await evaluate("[...document.querySelectorAll('[data-bind-action]')].every(button=>!button.hasAttribute('aria-pressed'))")) throw new Error("Hidden keyboard capture was not cancelled");
-    await evaluate("document.getElementById('controller-select').focus()");
-    const selected = await evaluate("document.getElementById('controller-select').value");
-    await pulseGamepad([15]);
-    await waitFor(`document.getElementById('controller-select').value !== ${JSON.stringify(selected)}`, "right changes controller selection");
-    await pulseGamepad([14]);
-    await waitFor(`document.getElementById('controller-select').value === ${JSON.stringify(selected)}`, "left restores controller selection");
-    const arrows = await evaluate("getComputedStyle(document.getElementById('controller-select')).appearance === 'none' && getComputedStyle(document.getElementById('controller-select').parentElement,'::before').content !== 'none'");
-    if (!arrows) throw new Error("Controller select lacks left/right affordances");
-    await shot("adaptive-controller.png");
-    await setFakeGamepad([], [0,0], "standard", 0);
-    await waitFor("!document.getElementById('keyboard-controls').hidden && document.getElementById('controller-controls').hidden", "keyboard settings restored on unplug");
-    if (await evaluate("document.querySelector('[data-bind-action=up]').textContent") !== bindings) throw new Error("Plug/unplug changed keyboard bindings");
-    await setViewport(390,844,true);
-    await waitFor("document.getElementById('tab-controls').hidden && document.getElementById('controls-panel').hidden && !document.getElementById('sound-panel').hidden", "mobile has no Controls menu");
-    await setFakeGamepad([], [0,0], "standard", 2);
-    await waitFor("document.getElementById('tab-controls').hidden && !document.getElementById('app').classList.contains('controller-input')", "mobile priority with gamepad");
-    await shot("adaptive-mobile.png");
-    await setViewport(1440,900,false);
-    await waitFor("!document.getElementById('tab-controls').hidden", "Controls returns on desktop");
-    await evaluate("document.getElementById('tab-controls').click()");
-    await waitFor("!document.getElementById('controller-controls').hidden", "desktop controller settings restored");
-    await setFakeGamepad([], [0,0], "standard", 0);
-    await evaluate(`Object.defineProperty(Navigator.prototype,'getGamepads',{configurable:true,value:()=>[{index:0,id:'Polling controller',mapping:'standard',connected:true,buttons:[],axes:[0,0]}]})`);
-    await waitFor("document.getElementById('keyboard-controls').hidden", "polling discovers a controller");
-    if (consoleLines.some(line=>line.startsWith("EXCEPTION"))) throw new Error(consoleLines.join(" | "));
-    console.log("adaptive controls: platform menus, hot-plug, horizontal arrows, mobile priority and bindings preservation passed");
-    ws.close();
-    return;
-  }
-  if (sceneMode) {
-    await waitFor("document.getElementById('main-menu') && !document.getElementById('main-menu').hidden", "main menu");
-    const started = Date.now();
-    await waitFor(`(() => {
-      const canvas = document.getElementById('lobby-scene-canvas');
-      return canvas && !canvas.hidden && canvas.width > 0 && canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.some(value => value > 0);
-    })()`, "f14_us1_as1_ animated main-menu scene", 1000);
-    const pixels = `(() => {
-      const canvas = document.getElementById('lobby-scene-canvas');
-      return canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data.reduce((hash, value, index) => (hash + value * (index % 997)) >>> 0, 0);
-    })()`;
-    const first = await evaluate(pixels);
-    await waitFor(`(${pixels}) !== ${first}`, "moving scene pixels", 1000);
-    console.log("f14_us1_as1_ moving scene startup:", Date.now() - started, "ms");
-    await shot("f14-main-menu.png");
-    if (process.env.GENERATE_FALLBACK) {
-      const image = await evaluate(`(async () => {
-        const { createRenderer, paintCommands } = await import('/app.js');
-        const { instance } = await WebAssembly.instantiate(await (await fetch('/eksplode_re_render.wasm')).arrayBuffer(), {});
-        const renderer = createRenderer(instance.exports);
-        renderer.resetLobby(4);
-        for (let index=0; index<8; index+=1) renderer.advanceLobby(15);
-        const canvas=document.createElement('canvas'); canvas.width=640; canvas.height=200;
-        paintCommands(canvas.getContext('2d'), renderer.lobbyFrame(640,200,0));
-        return canvas.toDataURL('image/png');
-      })()`);
-      if (!image?.startsWith("data:image/png;base64,")) throw new Error("Fallback PNG generation failed");
-      writeFileSync(process.env.GENERATE_FALLBACK, Buffer.from(image.split(",")[1], "base64"));
-      console.log("generated first-party scene PNG:", process.env.GENERATE_FALLBACK);
-      ws.close();
-      return;
-    }
-    if (process.env.SCENE_SET) {
-      await waitFor("window.__sceneController && !window.__sceneController.failed", "fixture controller");
-      await evaluate("window.__sceneController.togglePause()");
-      await evaluate(`(async () => {
-        const { createRenderer, paintCommands } = await import('/app.js');
-        const { instance } = await WebAssembly.instantiate(await (await fetch('/eksplode_re_render.wasm')).arrayBuffer(), {});
-        window.__sceneFixture = { renderer: createRenderer(instance.exports), paintCommands };
-      })()`);
-      const fixtures = [
-        [0,"run-drop",120], [1,"background",90], [2,"same-level",90],
-        [3,"kart-right",120], [4,"elimination",200], [5,"kart-left",120], [6,"flatten",185],
-      ].filter(([stage]) => process.env.SCENE_SET !== "encounters" || [1,2,4,6].includes(stage));
-      for (const [width,height] of [[1440,900],[390,844],[320,568],[844,390]]) {
-        await call("Emulation.setDeviceMetricsOverride", { width,height,deviceScaleFactor:1,mobile:width<500 });
-        await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-        if (!await evaluate("document.documentElement.scrollWidth <= innerWidth && document.getElementById('lobby-scene').getBoundingClientRect().bottom <= document.getElementById('name').getBoundingClientRect().top")) {
-          throw new Error(`Fixture layout overlaps or overflows ${width}x${height}`);
-        }
-        for (const [stage,label,tick] of fixtures) {
-          const count = await evaluate(`(() => {
-            const {renderer,paintCommands}=window.__sceneFixture;
-            renderer.resetLobby(4);
-            let ticks=${stage * 300 + tick};
-            while(ticks>0){const delta=Math.min(ticks,15);renderer.advanceLobby(delta);ticks-=delta;}
-            const canvas=document.getElementById('lobby-scene-canvas');
-            const commands=renderer.lobbyFrame(canvas.width,canvas.height,0);
-            canvas.getContext('2d').clearRect(0,0,canvas.width,canvas.height);
-            paintCommands(canvas.getContext('2d'),commands);
-            return commands.count;
-          })()`);
-          if (count <= 80) throw new Error(`Missing visible ${label} fixture: only ${count} commands`);
-          await shot(`f14-${label}-${width}.png`);
-        }
-      }
-      const liveSeconds=Number(process.env.SCENE_LIVE_SECONDS ?? 0);
-      if (process.env.SCENE_NAV_ONLY) {
-        await evaluate("window.__sceneController.togglePause()");
-        for (const [open,panel,close] of [["menu-create","room-panel","room-back"],["menu-join","directory-panel","directory-back"],["menu-customize","customize-panel","customize-close"],["menu-options","options-panel","options-close"]]) {
-          await evaluate(`document.getElementById('${open}').click()`);
-          await waitFor(`!document.getElementById('${panel}').hidden`,"navigation regression destination");
-          const frozen=await evaluate("window.__sceneRuntime.ticks");
-          await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-          if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error(`Scene advanced behind ${panel}`);
-          await evaluate(`document.getElementById('${close}').click()`);
-        }
-        const hidden = await call("Target.createTarget", { url:"about:blank" });
-        await call("Target.activateTarget", { targetId:hidden.result.targetId });
-        const pageHidden=await evaluate("document.hidden");
-        if (pageHidden) {
-          const frozen=await evaluate("window.__sceneRuntime.ticks");
-          const other=await (await fetch(`http://127.0.0.1:${port}/json`)).json();
-          const original=other.find(target=>target.webSocketDebuggerUrl===ws.url)?.id;
-          await call("Target.activateTarget", { targetId:original });
-          if(await evaluate("window.__sceneRuntime.ticks")-frozen>15)throw new Error("Hidden tab caught up accumulated ticks");
-        }
-        await call("Target.closeTarget", { targetId:hidden.result.targetId });
-        await call("Page.bringToFront");
-        await evaluate("document.getElementById('menu-create').click()");
-        await waitFor("!document.getElementById('room-create').disabled", "room creation enabled");
-        await evaluate("document.getElementById('room-name').value='Scene validation';document.getElementById('room-create').click()");
-        await waitFor("!document.getElementById('lobby-panel').hidden && document.querySelectorAll('#slots .portrait').length===4", "unchanged bot-filled room lobby");
-        const frozen=await evaluate("window.__sceneRuntime.ticks");
-        await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-        if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error("Scene advanced inside the room lobby");
-        await shot("f14-unchanged-room-lobby.png");
-        console.log("f14_us2_as6_ all navigation destinations freeze scene ticks");
-      }
-      if (liveSeconds) {
-        if (!Number.isInteger(liveSeconds) || liveSeconds<90 || liveSeconds>600) throw new Error("SCENE_LIVE_SECONDS must be an integer from 90 to 600");
-        await call("Emulation.setDeviceMetricsOverride", {width:1440,height:900,deviceScaleFactor:1,mobile:false});
-        await evaluate("window.__sceneController.togglePause()");
-        const startTicks=await evaluate("window.__sceneRuntime.ticks");
-        for(let elapsed=0;elapsed<liveSeconds;elapsed+=5){
-          const duration=Math.min(5,liveSeconds-elapsed)*1000;
-          await evaluate(`new Promise(resolve=>{const end=performance.now()+${duration};const frame=()=>performance.now()>=end?resolve():requestAnimationFrame(frame);requestAnimationFrame(frame);})`);
-          if(elapsed%30===0 && liveSeconds>=300){
-            const choices=[["menu-create","room-panel","room-back"],["menu-join","directory-panel","directory-back"],["menu-customize","customize-panel","customize-close"],["menu-options","options-panel","options-close"]];
-            const [open,panel,close]=choices[Math.floor(elapsed/30)%choices.length];
-            await evaluate(`document.getElementById('${open}').click()`);
-            await waitFor(`!document.getElementById('${panel}').hidden`,"live menu action");
-            const frozen=await evaluate("window.__sceneRuntime.ticks");
-            await evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
-            if(await evaluate("window.__sceneRuntime.ticks")!==frozen)throw new Error("off-menu scene advanced");
-            await evaluate(`document.getElementById('${close}').click()`);
-          }
-          if(elapsed%15===0)console.log("live main-menu playback:",Math.min(elapsed+5,liveSeconds),"seconds");
-        }
-        const trace=await evaluate("window.__sceneRuntime");
-        if(trace.resets!==1 || trace.ticks-startTicks<liveSeconds*60*0.9)throw new Error(`Live scene stalled or reset: ${JSON.stringify(trace)}`);
-        if(sentInputs.length)throw new Error("Decorative menu sent gameplay input");
-        console.log("live scene evidence:",JSON.stringify(trace));
-        await shot("f14-live-complete.png");
-      }
-      console.log("actual WASM fixture pixels passed:", process.env.SCENE_SET);
-      ws.close();
-      return;
-    }
-    if (await evaluate("document.getElementById('lobby-scene-pause') !== null")) throw new Error("f14_us2_as3_ scene icon must be absent");
-    await waitFor("window.__sceneController", "fixture controller");
-    await evaluate("window.__sceneController.togglePause()");
-    const frozen = await evaluate(pixels);
-    await evaluate("new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))");
-    if (await evaluate(pixels) !== frozen) throw new Error("f14_us2_as3_ paused pixels moved");
-    await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-    await waitFor("document.getElementById('lobby-scene-canvas').hidden && !document.getElementById('lobby-scene-fallback').hidden", "f14_us2_as2_ reduced motion still image");
-    await call("Emulation.setEmulatedMedia", { features: [] });
-    await waitFor("window.__sceneController.userPaused && !window.__sceneController.conditions.reducedMotion", "retained test-fixture pause");
-    for (const [width, height] of [[1440,900],[390,844],[320,568],[844,390]]) {
-      await call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: width < 500 });
-      const fits = await evaluate(`(() => {
-        const scene=document.getElementById('lobby-scene').getBoundingClientRect();
-        const name=document.getElementById('name').getBoundingClientRect();
-        return scene.width>0 && scene.bottom<=name.top && document.documentElement.scrollWidth<=innerWidth;
-      })()`);
-      if (!fits) throw new Error(`f14_us2_as4_ scene overlaps or overflows ${width}x${height}`);
-      await shot(`f14-${width}x${height}.png`);
-      await call("Emulation.setEmulatedMedia", { features: [{ name: "prefers-reduced-motion", value: "reduce" }] });
-      await waitFor("document.getElementById('lobby-scene-fallback').complete && document.getElementById('lobby-scene-fallback').naturalWidth > 0 && document.getElementById('lobby-scene-canvas').hidden", "loaded motion-safe PNG");
-      await shot(`f14-still-${width}x${height}.png`);
-      await call("Emulation.setEmulatedMedia", { features: [] });
-    }
-    console.log("f14_us2_as1_ menu actions and decorative focus isolation:", await evaluate("document.querySelectorAll('#main-menu .menu-actions button').length"));
-    for (const [open, panel, close] of [
-      ["menu-create", "room-panel", "room-back"],
-      ["menu-join", "directory-panel", "directory-back"],
-      ["menu-customize", "customize-panel", "customize-close"],
-      ["menu-options", "options-panel", "options-close"],
-    ]) {
-      await evaluate(`document.getElementById('${open}').click()`);
-      await waitFor(`!document.getElementById('${panel}').hidden`, `f14_us2_as1_ ${panel}`);
-      await evaluate(`document.getElementById('${close}').click()`);
-      await waitFor("!document.getElementById('main-menu').hidden && window.__sceneController.userPaused", "f14_us2_as6_ preserved fixture after navigation");
-    }
-    await call("Network.setCacheDisabled", { cacheDisabled: true });
-    for (const failure of ["old-module", "scene-error", "canvas", "wasm"]) {
-      let identifier = null;
-      if (failure === "wasm") await call("Network.setBlockedURLs", { urls: ["*eksplode_re_render.wasm*"] });
-      else {
-        const source = failure === "canvas" ? `HTMLCanvasElement.prototype.getContext = function () { return null; };` : `(() => {
-          const instantiate=WebAssembly.instantiate;
-          WebAssembly.instantiate=async function (...args) {
-            const result=await instantiate.apply(this,args);
-            if (!result.instance) return result;
-            const exports={...result.instance.exports};
-            if (${JSON.stringify(failure)} === 'old-module') {
-              for (const name of ['reset','advance','frame']) delete exports['eksplode_re_lobby_'+name];
-            } else exports.eksplode_re_lobby_frame=()=>0;
-            return {module:result.module,instance:{exports}};
-          };
-        })();`;
-        identifier = (await call("Page.addScriptToEvaluateOnNewDocument", { source })).result.identifier;
-      }
-      await call("Page.navigate", { url });
-      await waitFor("document.getElementById('lobby-scene-canvas')?.hidden && document.getElementById('lobby-scene-fallback').naturalWidth > 0 && document.getElementById('retry').hidden && !document.getElementById('room-create').disabled", `f14_us2_as5_ ${failure} fallback`);
-      await evaluate("document.getElementById('menu-create').click()");
-      await waitFor("!document.getElementById('room-panel').hidden", `${failure} preserves Create`);
-      await evaluate("document.getElementById('room-back').click()");
-      await evaluate("document.getElementById('menu-customize').click()");
-      await waitFor("!document.getElementById('customize-panel').hidden", `${failure} preserves Customize`);
-      await evaluate("document.getElementById('customize-close').click()");
-      await shot(`f14-fallback-${failure}.png`);
-      if (identifier) await call("Page.removeScriptToEvaluateOnNewDocument", { identifier });
-      await call("Network.setBlockedURLs", { urls: [] });
-    }
-    console.log("f14_us2_as2_as3_as4_as5_as6_ motion, layout, navigation and failure checks passed");
-    if (consoleLines.some(line => line.startsWith("EXCEPTION"))) throw new Error(consoleLines.join(" | "));
-    ws.close();
-    return;
-  }
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page");
 
   if (process.env.MOBILE_FLOW === "setup") {
@@ -945,6 +605,20 @@ async function main() {
   await setFakeGamepad();
   await sleep(100);
 
+  // the sound settings (feature 003): open the panel, move a slider, check that it is stored
+  await evaluate("document.getElementById('sound-button').click(); 1");
+  await evaluate(`(() => {
+    const m = document.getElementById('music-volume');
+    m.value = '60';
+    m.dispatchEvent(new Event('input'));
+    document.getElementById('mute').click();
+    return 1;
+  })()`);
+  await sleep(200);
+  await shot("1a-sound.png");
+  console.log("audio settings:", await evaluate("localStorage.getItem('eksplode.re.audio.v1')"));
+  await evaluate("document.getElementById('mute').click(); document.getElementById('close-sound').click(); 1");
+
   // keyboard controls (feature 005): edit a binding, reload, reject a conflict, and reset
   await setFakeGamepad([], [0, 0], "");
   await evaluate("document.getElementById('controls-button').click(); 1");
@@ -968,6 +642,17 @@ async function main() {
   await call("Page.reload");
   await waitFor("document.readyState === 'complete' && !document.getElementById('join').disabled", "the page after reloading controls");
   await setFakeGamepad();
+  await evaluate("document.getElementById('controls-button').click(); 1");
+  await waitFor("!document.getElementById('controls-panel').hidden && document.querySelector('[data-bind-action=up]').textContent.includes('I')", "the restored movement binding");
+  await evaluate(`document.querySelector('[data-bind-action="down"]').click(); 1`);
+  await key("KeyI", "i", 73);
+  await waitFor("document.getElementById('controls-status').textContent.toLowerCase().includes('already assigned')", "the duplicate-key message");
+  await evaluate("document.getElementById('controls-reset').click(); 1");
+  await waitFor("document.getElementById('controls-reset').textContent === 'Confirm reset'", "the reset confirmation step");
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('KeyI')", "the unchanged binding before reset confirmation");
+  await evaluate("document.getElementById('controls-reset').click(); 1");
+  await waitFor("JSON.parse(localStorage.getItem('eksplode.re.controls.v1')).bindings.up.includes('ArrowUp')", "the reset keyboard defaults");
+  await shot("1c-controls.png");
   await evaluate("document.getElementById('controls-button').click(); 1");
 
   // pick a look in the character editor (feature 003) and save a screenshot of it

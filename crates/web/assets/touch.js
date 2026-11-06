@@ -17,7 +17,6 @@ export class TouchInputTracker {
 		this.joystickPointer = null;
 		this.origin = null;
 		this.direction = null;
-		this.horizontalDirection = null;
 		this.actionPointers = new Map();
 		this.pendingBomb = false;
 		this.pendingPunch = false;
@@ -34,7 +33,6 @@ export class TouchInputTracker {
 	moveJoystick(pointerId, x, y) {
 		if (pointerId !== this.joystickPointer || !Number.isFinite(x) || !Number.isFinite(y)) return false;
 		this.direction = directionFromVector(x - this.origin.x, y - this.origin.y, this.deadZone);
-		this.horizontalDirection = directionFromVector(x - this.origin.x, 0, this.deadZone);
 		return true;
 	}
 
@@ -43,7 +41,6 @@ export class TouchInputTracker {
 		this.joystickPointer = null;
 		this.origin = null;
 		this.direction = null;
-		this.horizontalDirection = null;
 		return true;
 	}
 
@@ -59,20 +56,18 @@ export class TouchInputTracker {
 		return this.actionPointers.delete(pointerId);
 	}
 
-	take(inKart = false) {
+	take() {
 		const input = {
-			mv: inKart ? this.horizontalDirection : this.direction,
+			mv: this.direction,
 			bomb: this.pendingBomb,
 			punch: this.pendingPunch,
 		};
 		this.pendingBomb = false;
 		this.pendingPunch = false;
-		if (inKart) input.horizontal = this.horizontalDirection ? [this.horizontalDirection] : [];
 		return input;
 	}
 
 	clear() {
-		this.horizontalDirection = null;
 		this.joystickPointer = null;
 		this.origin = null;
 		this.direction = null;

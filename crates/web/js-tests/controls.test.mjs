@@ -6,6 +6,7 @@ import {
   GamepadTracker,
   assignBinding,
   compatibleGamepads,
+  filterDisconnectedGamepads,
   controlPresentation,
   mobileControlPlatform,
   loadBindings,
@@ -145,6 +146,14 @@ test("blocked storage never prevents default keyboard play", () => {
 test("only connected standard-mapped controllers are selectable", () => {
   const pads = [gamepad(), gamepad({ index: 1, mapping: "" }), null, gamepad({ index: 3 })];
   assert.deepEqual(compatibleGamepads(pads).map(({ index }) => index), [0, 3]);
+});
+
+test("disconnect events override stale connected gamepad snapshots until reconnect", () => {
+  const pads = [gamepad(), gamepad({ index: 1 })];
+  const unplugged = filterDisconnectedGamepads(pads, new Set([0]));
+  assert.deepEqual(compatibleGamepads(unplugged).map(({ index }) => index), [1]);
+  assert.equal(controlPresentation({ gamepads: filterDisconnectedGamepads(pads, new Set([0, 1])) }).mode, "keyboard");
+  assert.deepEqual(filterDisconnectedGamepads(pads, new Set()), pads);
 });
 
 test("D-pad and left stick map to movement with a drift dead zone", () => {
