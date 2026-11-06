@@ -20,6 +20,46 @@ fn fixture_json() -> Vec<u8> {
 }
 
 #[test]
+fn f14_foundation_scene_exports_are_bounded_and_isolated() {
+    assert_eq!(eksplode_re_lobby_advance(1), 2);
+    assert_eq!(eksplode_re_lobby_frame(640.0, 200.0, 0.0), 0);
+    assert_eq!(load(&fixture_json()), 0);
+    assert_eq!(set_looks(br#"[{"head":"Crown"}]"#), 0);
+    let copy_output = |count| unsafe {
+        std::slice::from_raw_parts(eksplode_re_output_ptr(), count * 16).to_vec()
+    };
+    let count = eksplode_re_frame(800.0, 600.0, 0.5);
+    let baseline = copy_output(count);
+    let tile = eksplode_re_pick_tile(400.0, 300.0);
+    let portrait_count = eksplode_re_portrait(0, 80.0, 100.0, 0);
+    let portrait = copy_output(portrait_count);
+    assert_eq!(eksplode_re_lobby_reset(42), 0);
+    let count = eksplode_re_lobby_frame(640.0, 200.0, 0.5);
+    assert!(count > 0);
+    let scene = copy_output(count);
+    assert!(scene.iter().all(|value| value.is_finite()));
+    assert_eq!(eksplode_re_lobby_advance(16), 1);
+    assert_eq!(eksplode_re_lobby_frame(640.0, 200.0, 0.5), count);
+    assert_eq!(copy_output(count), scene);
+    for (width, height, alpha) in [
+        (0.0, 200.0, 0.0),
+        (8193.0, 200.0, 0.0),
+        (640.0, f32::NAN, 0.0),
+        (640.0, 200.0, f32::NAN),
+        (640.0, 200.0, 1.0),
+        (640.0, 200.0, -0.1),
+    ] {
+        assert_eq!(eksplode_re_lobby_frame(width, height, alpha), 0);
+    }
+    assert_eq!(eksplode_re_lobby_advance(15), 0);
+    assert_eq!(eksplode_re_pick_tile(400.0, 300.0), tile);
+    assert_eq!(eksplode_re_frame(800.0, 600.0, 0.5) * 16, baseline.len());
+    assert_eq!(copy_output(baseline.len() / 16), baseline);
+    assert_eq!(eksplode_re_portrait(0, 80.0, 100.0, 0), portrait_count);
+    assert_eq!(copy_output(portrait_count), portrait);
+}
+
+#[test]
 fn f13_invalid_added_kart_state_is_inert_or_rejected_without_panics() {
     let mut value: serde_json::Value = serde_json::from_slice(&fixture_json()).unwrap();
     value["players"][0]["alive"] = serde_json::json!(false);

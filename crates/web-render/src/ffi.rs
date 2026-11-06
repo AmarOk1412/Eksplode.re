@@ -23,6 +23,7 @@ struct State {
     out: Vec<f32>,
     canvas: (f32, f32),
     looks: [Look; 4],
+    lobby: Option<crate::lobby::LobbyTimeline>,
 }
 
 thread_local! {
@@ -32,6 +33,7 @@ thread_local! {
         out: Vec::new(),
         canvas: (0.0, 0.0),
         looks: [0, 1, 2, 3].map(default_for),
+        lobby: None,
     });
 }
 
@@ -132,6 +134,49 @@ pub extern "C" fn eksplode_re_frame(width: f32, height: f32, alpha: f32) -> usiz
         let list = build_with_looks(obs, &s.interp, alpha, (width, height), &s.looks);
         s.out = flatten(&list);
         s.canvas = (width, height);
+        list.len()
+    })
+}
+
+/// Initializes only the independent decorative timeline.
+#[no_mangle]
+pub extern "C" fn eksplode_re_lobby_reset(seed: u32) -> i32 {
+    STATE.with(|state| state.borrow_mut().lobby = Some(crate::lobby::LobbyTimeline::new(seed)));
+    0
+}
+
+/// Advances 0-15 decorative ticks; 1 means invalid ticks, 2 means uninitialized.
+#[no_mangle]
+pub extern "C" fn eksplode_re_lobby_advance(ticks: u32) -> i32 {
+    if ticks > 15 {
+        return 1;
+    }
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let Some(scene) = state.lobby.as_mut() else {
+            return 2;
+        };
+        if scene.advance(ticks).is_ok() {
+            0
+        } else {
+            1
+        }
+    })
+}
+
+/// Samples the decorative frame without changing match state or picking geometry.
+#[no_mangle]
+pub extern "C" fn eksplode_re_lobby_frame(width: f32, height: f32, alpha: f32) -> usize {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let frame = state
+            .lobby
+            .as_ref()
+            .and_then(|scene| scene.sample(alpha).ok());
+        let list = frame.map_or_else(Vec::new, |frame| {
+            crate::lobby::commands(&frame, (width, height))
+        });
+        state.out = flatten(&list);
         list.len()
     })
 }
