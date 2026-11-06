@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/AmarOk1412/Eksplode.re/actions/workflows/ci.yml/badge.svg)](https://github.com/AmarOk1412/Eksplode.re/actions/workflows/ci.yml)
 
+[Donate on Buy Me a Coffee](https://buymeacoffee.com/kaelinnchacuit)
+
 Note: This is a "Toy project" fully sloppy generated.
 
 Four-player Bomberman in Rust. Play in a terminal or in a web page, add bots, and let browser and
@@ -63,6 +65,163 @@ The creator owns their room and starts its match (Enter or the Start button). Ot
 select that room from the directory; each room manages its own four participants and settings.
 Prefer to host from the terminal? `cargo run -p eksplode-re-cli -- host --bots 1 --web-port 8080`
 does the same and lets browsers join too.
+
+## Install on Linux
+
+Ubuntu/Debian examples; use the equivalent packages on other distributions. Install Rust stable
+from [rustup](https://rustup.rs/) first. The committed WASM needs no browser build toolchain.
+
+```sh
+sudo apt update
+sudo apt install -y build-essential pkg-config git
+git clone https://github.com/AmarOk1412/Eksplode.re.git
+cd Eksplode.re
+cargo +stable build --release --locked -p eksplode-re-web -p eksplode-re-cli
+./target/release/eksplode-re-server --bind 127.0.0.1
+```
+
+Open `http://127.0.0.1:8080/`. The terminal client is `./target/release/eksplode-re-cli`.
+For a local installation, put the two release binaries on your PATH. Rebuild and replace the
+server binary after updates: its HTML, JavaScript, PNG and WASM are embedded in the executable.
+
+### Run as a service
+
+For a public browser deployment, point a DNS name such as `play.example.com` at the host. The
+following example uses a dedicated user, loopback listeners, 100 rooms and a 1,024-connection
+ceiling; those limits include directory/HTTP connections, not only active players.
+
+```sh
+sudo useradd --system --home /var/lib/eksplode-re --shell /usr/sbin/nologin eksplode-re
+sudo install -d -o eksplode-re -g eksplode-re /var/lib/eksplode-re
+sudo install -m 0755 target/release/eksplode-re-server /usr/local/bin/eksplode-re-server
+```
+
+Create `/etc/systemd/system/eksplode-re.service`, substituting your real hostname:
+
+```ini
+[Unit]
+Description=Eksplode.re game server
+After=network.target
+
+[Service]
+User=eksplode-re
+WorkingDirectory=/var/lib/eksplode-re
+ExecStart=/usr/local/bin/eksplode-re-server --bind 127.0.0.1 --http-port 8080 --game-port 7878 --allow-origin https://play.example.com --max-rooms 100 --max-connections 1024
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=16384
+TasksMax=2048
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable it with `sudo systemctl daemon-reload && sudo systemctl enable --now eksplode-re`.
+Inspect logs with `journalctl -u eksplode-re`. Do not expose ports 8080 or 7878 publicly; the
+unencrypted terminal transport is for a private network/VPN. Do not enable `--allow-any-origin`.
+
+### nginx and HTTPS
+
+```sh
+sudo apt install -y nginx certbot python3-certbot-nginx
+```
+
+Put this in `/etc/nginx/sites-available/eksplode-re`; the `map` belongs in nginx's `http`
+context, as Debian's included site files do. Change the hostname to your DNS name.
+
+```nginx
+map $http_upgrade $connection_upgrade {
+  default upgrade;
+  '' close;
+}
+
+server {
+  listen 80;
+  server_name play.example.com;
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection $connection_upgrade;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_read_timeout 65s;
+    proxy_send_timeout 65s;
+    proxy_buffering off;
+  }
+}
+```
+
+```sh
+sudo ln -s /etc/nginx/sites-available/eksplode-re /etc/nginx/sites-enabled/eksplode-re
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx --redirect -d play.example.com
+sudo certbot renew --dry-run
+```
+
+Allow public TCP 80/443 in the host/cloud firewall and keep 80 reachable for certificate renewal.
+Certbot needs working public DNS and will ask for the certificate account details locally. Open
+`https://play.example.com/` after TLS is installed; the configured HTTPS origin permits its WSS
+connection. Before that, the HTTPS-only origin setting intentionally does not permit an HTTP
+browser game. Check the distribution's certbot renewal timer is enabled.
+
+## Hosting resources
+
+Measured on 2026-11-06: Intel i7-13700H, 20 logical CPUs, about 31 GiB RAM, Linux, Node 22,
+release Rust server. Workload: WebSocket loopback, Normal 15x13 boards, four humans per room,
+movement inputs, no bombs/bots, two-second warmup and 15-second observation. Server RSS/CPU
+exclude the load generator, nginx, TLS, OS/kernel socket memory and browser rendering. These
+are short light-workload measurements, not production guarantees or worst-case game costs.
+
+The 400-player run used 408 server threads and 407 descriptors. Check service/container task,
+user-process, descriptor and kernel limits as well as RAM/CPU; raising those limits alone does
+not establish the unsuccessful 4,000-player target.
+
+| Target players | Rooms / instances | Server CPU cores used | Server RSS | Payload egress | Update-rate result |
+|---|---|---:|---:|---:|---|
+| 4 | 1 / 1 | 0.026 | 5.0 MiB peak | 2.24 Mbps | 20 Hz; all four active |
+| 400 | 100 / 1 | 1.55 | 99.1 MiB peak | 224.2 Mbps | 20 Hz median; 19.93 Hz p05; all 400 active |
+| 4000 | 1000 / 8 attempted | No valid steady-state result | About 899 MiB aggregate high-water during failed setup | Not certified | Setup timed out after 3,876 admissions; disconnects; target not met |
+
+The 4,000-player attempt used eight independent generators/backends; failed/partial observation
+windows must not be summed into a claimed 4,000-player capacity. Full machine/workload/shard
+results are in [docs/hosting-measurements.json](docs/hosting-measurements.json). A single-generator
+attempt also failed. The cause has not been isolated to server, generator or host limits.
+
+**Starting budgets, estimates only:** for four players, 1 vCPU / 1 GiB host RAM / 10 Mbps; for
+400, 4 vCPU / 2 GiB / at least 500 Mbps; for 4,000, roughly 32-40 vCPU / 8-20 GiB / at least
+5 Gbps aggregate across multiple hosts/instances is an initial extrapolation with headroom,
+**not a validated capacity recommendation**. Large boards, bots, bomb effects, TLS and cold
+asset downloads need separate testing. A cold page is under 500 KiB, so 4,000 simultaneous first
+visits can add nearly 2 GiB of downloads before steady gameplay traffic.
+
+The CLI allows at most 128 rooms and 1,024 connections per process: at four humans per room,
+one process supports at most 512 active seats, with directory connections needing spare capacity.
+Defaults are only 32 rooms/256 connections. Prefer no more than the measured 400 players per
+instance while evaluating larger deployments. Independent backends have independent rooms;
+give each a dedicated hostname/origin (for example `play1.example.com`, `play2.example.com`).
+Do not round-robin a single origin's directory HTTP and WebSocket requests across different
+backends: clients can see room identities belonging to the wrong server. Automatic cross-server
+room aggregation is not implemented.
+
+Reproduce on the target Linux host, with Node 22 and free ports 18080-19580:
+
+```sh
+cargo +stable build --release --locked -p eksplode-re-web
+node scripts/host-load.mjs --players 4,400,4000 --seconds 15 --output /tmp/hosting-results.json
+```
+
+The harness creates/stops its own loopback servers and real four-human matches; workloads above
+512 players use a generator/backend per shard. Run away from production traffic. Monitor CPU,
+RSS, descriptors, disconnects and low-percentile snapshot rate on the actual machines with
+nginx/TLS and realistic gameplay before promising a capacity. This guide's nginx/certbot examples
+were not deployed on the measurement machine.
 
 ## Modes
 

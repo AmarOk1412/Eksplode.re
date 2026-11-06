@@ -250,12 +250,19 @@ update until Return to Lobby is selected; the button then reveals the latest lob
 
 Focused controls show a blue (`--slot0`) outline instead of the former red one.
 
-**Control settings.** The keyboard icon in the page header opens Options on the Controls tab. Select one of
+**Control settings.** Options shows no Controls tab on mobile: touch controls are fixed. On a
+non-mobile platform without a supported controller, Controls shows only keyboard assignments.
+Select one of
 the six actions and press a key to replace its current assignment; a conflicting or reserved key
 is rejected without changing the existing mapping. The defaults remain arrows plus WASD, Space
 plus E, and Z plus Q. Valid keyboard bindings are stored on this device under
 `eksplode.re.controls.v1`; use "Restore defaults" to reset them. Storage that is unavailable or
 contains invalid data falls back to usable defaults.
+
+With a supported controller, Controls shows only the controller section; keyboard assignments
+and their reset/capture controls are hidden. Plug/unplug events and polling update the view
+without reloading or changing saved bindings. Hidden key capture is cancelled. Mobile still
+has no Controls tab even if a controller is connected.
 
 The controller section lists standard-mapped controllers visible to the browser. A controller
 already plugged in may not appear until the page is visible and focused and a button or stick is
@@ -264,12 +271,28 @@ uses the left stick or D-pad to move, A to place a bomb, and B to punch a bomb. 
 a small dead zone; bomb and punch fire once per press. Disconnecting or changing the selected
 controller clears held input, and keyboard play remains available if the controller is unavailable.
 
+When a controller is available, selection fields display left/right arrows and are changed with
+left/right, not a dropdown. On/off checkboxes remain binary toggles. Unsupported or blocked
+controllers leave the non-mobile keyboard settings available. The main menu also includes a
+script-free Donate link to [Buy Me a Coffee](https://buymeacoffee.com/kaelinnchacuit).
+
 Terminal key configuration is independent of the web panel. Local CLI play accepts `--p1-keys`
 through `--p4-keys`; a terminal client joining a hosted game accepts `--keys`. Each value contains
 six comma-separated keys in `up,down,left,right,bomb,punch` order. Values may be one character or
 `Up`, `Down`, `Left`, `Right` or `Space`; character case is ignored. Duplicate keys and the reserved
 `q`, `p` and `r` commands are refused. Terminal bindings apply only to that process; web keyboard
 preferences persist on that browser device.
+
+**Match rendering.** Large-screen desktop matches use the available viewport with a compact
+heading and timer rather than the menu's width/height caps. Tiles retain their proportions, so
+rectangular displays can still have side space when fitting a near-square board. Existing mobile
+touch layouts remain separate. Accepted `BombPunched` and `BombKicked` snapshot events briefly
+extend and retract a small directional hand for the acting player; the cue expires after seven
+render ticks and clears on a new match. This is feedback only, not a new game action or rule.
+
+Future 100x100 boards and extra players are not enabled. Their rendering should use a partial-board
+camera with independent scale/offset and visible-region culling, not shrink an entire large world
+into today's whole-board fit. Existing player and arena limits remain in force.
 
 The page never evaluates game rules. During play it sends keyboard and controller state as the
 existing `Input` messages every 50 ms and draws the `Snapshot`s it receives. Navigation samples the
