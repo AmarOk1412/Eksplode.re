@@ -1,11 +1,12 @@
 //! Smooth player movement between two server ticks.
 
-use eksplode_re_core::Observation;
+use eksplode_re_core::{Dir, Event, Observation};
 
 use crate::look::Frame;
 
 /// How many ticks the dying animation of a player lasts.
 pub const DYING_TICKS: f32 = 16.0;
+pub const PUNCH_TICKS: f32 = 7.0;
 
 /// Remembers where every player was one tick ago and now.
 #[derive(Clone, Debug, Default)]
@@ -22,6 +23,7 @@ pub struct Interp {
     alive: [bool; 4],
     died_at: [Option<u32>; 4],
     kart_stints: [Option<u32>; 4],
+    punched_at: [Option<(u32, Dir)>; 4],
 }
 
 impl Interp {
@@ -68,6 +70,7 @@ impl Interp {
                 self.last_move = [None; 4];
                 self.steps = [0; 4];
                 self.died_at = [None; 4];
+                self.punched_at = [None; 4];
             }
         }
         for (slot, player) in obs.players.iter().enumerate() {
@@ -88,6 +91,37 @@ impl Interp {
         self.cur = now;
         self.alive = alive;
         self.tick = Some(obs.tick);
+    }
+
+    pub fn update_with_events(&mut self, obs: &Observation, events: &[Event]) {
+        let fresh = self.tick != Some(obs.tick);
+        self.update(obs);
+        if !fresh {
+            return;
+        }
+        for event in events {
+            if let Event::BombPunched { player, dir, .. } | Event::BombKicked { player, dir, .. } =
+                event
+            {
+                if let Some(cue) = self.punched_at.get_mut(player.index()) {
+                    *cue = Some((obs.tick, *dir));
+                }
+            }
+        }
+    }
+
+    pub fn punch(&self, slot: usize, ticks: f32) -> Option<(Dir, f32)> {
+        let (at, direction) = (*self.punched_at.get(slot)?)?;
+        if !self.alive[slot] {
+            return None;
+        }
+        let ticks = if ticks.is_finite() {
+            ticks.max(0.0)
+        } else {
+            0.0
+        };
+        let elapsed = self.tick?.saturating_sub(at) as f32 + ticks;
+        (elapsed < PUNCH_TICKS).then_some((direction, elapsed / PUNCH_TICKS))
     }
 
     /// How far (0.0-1.0) a player who just died is into the dying animation, `ticks` after the

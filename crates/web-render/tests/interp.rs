@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)]
 
-use eksplode_re_core::{Arena, Config, GameState, Observation, PlayerId, Pos};
+use eksplode_re_core::{Arena, Config, Dir, Event, GameState, Observation, PlayerId, Pos};
 use eksplode_re_web_render::interp::Interp;
 
 fn obs_at(tick: u32, p0: (u8, u8)) -> Observation {
@@ -12,6 +12,35 @@ fn obs_at(tick: u32, p0: (u8, u8)) -> Observation {
     let mut s = GameState::custom(Config::default(), arena, starts, 1).unwrap();
     s.tick = tick;
     s.observe(PlayerId::new(0).unwrap())
+}
+
+#[test]
+fn punch_animation_follows_confirmed_bomb_actions_and_expires() {
+    let mut interpolation = Interp::default();
+    let observation = obs_at(20, (1, 1));
+    let event = Event::BombPunched {
+        player: PlayerId::new(0).unwrap(),
+        from: Pos::new(2, 1),
+        dir: Dir::Right,
+    };
+    interpolation.update_with_events(&observation, &[event]);
+    assert_eq!(interpolation.punch(0, 0.0).unwrap().0, Dir::Right);
+    assert!(interpolation.punch(1, 0.0).is_none());
+    interpolation.update(&obs_at(23, (1, 1)));
+    assert!(interpolation.punch(0, 0.5).is_some());
+    interpolation.update(&obs_at(28, (1, 1)));
+    assert!(interpolation.punch(0, 0.0).is_none());
+    interpolation.update_with_events(
+        &obs_at(30, (1, 1)),
+        &[Event::BombKicked {
+            player: PlayerId::new(0).unwrap(),
+            from: Pos::new(1, 2),
+            dir: Dir::Down,
+        }],
+    );
+    assert_eq!(interpolation.punch(0, 0.0).unwrap().0, Dir::Down);
+    interpolation.update(&obs_at(0, (1, 1)));
+    assert!(interpolation.punch(0, 0.0).is_none());
 }
 
 #[test]

@@ -193,6 +193,42 @@ pub fn build_with_looks(
         emit(&mut out, &view, &it, looks, phase);
     }
     for (slot, player) in obs.players.iter().enumerate() {
+        if let Some((direction, progress)) = interp.punch(slot, alpha) {
+            let (column, row) = interp.position(slot, alpha);
+            let (dx, dy) = direction.delta();
+            let extension = 0.25 + 0.4 * (std::f32::consts::PI * progress).sin();
+            let (cx, cy) = (column + 0.5, row + 0.35);
+            let (hand_x, hand_y) = (
+                cx + f32::from(dx) * extension,
+                cy + f32::from(dy) * extension,
+            );
+            let mut pen = Pen {
+                view: &view,
+                out: &mut out,
+                layer: 998.0,
+            };
+            pen.rect(
+                WHITE,
+                cx.min(hand_x) - 0.04,
+                cy.min(hand_y) - 0.04,
+                cx.max(hand_x) + 0.04,
+                cy.max(hand_y) + 0.04,
+            );
+            pen.rect(
+                [0.16, 0.18, 0.18],
+                hand_x - 0.14,
+                hand_y - 0.12,
+                hand_x + 0.14,
+                hand_y + 0.12,
+            );
+            pen.rect(
+                WHITE,
+                hand_x - 0.1,
+                hand_y - 0.08,
+                hand_x + 0.1,
+                hand_y + 0.08,
+            );
+        }
         if player.alive && player.immobilized_left > 0 {
             let (column, row) = interp.position(slot, alpha);
             let mut pen = Pen {

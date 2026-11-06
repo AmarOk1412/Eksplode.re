@@ -20,6 +20,24 @@ fn fixture_json() -> Vec<u8> {
 }
 
 #[test]
+fn renderer_load_accepts_optional_punch_events_without_changing_plain_observations() {
+    assert_eq!(load(&fixture_json()), 0);
+    let baseline = eksplode_re_frame(800.0, 600.0, 0.0);
+    let mut value: serde_json::Value = serde_json::from_slice(&fixture_json()).unwrap();
+    value["tick"] = serde_json::json!(1);
+    value["events"] = serde_json::to_value([eksplode_re_core::Event::BombPunched {
+        player: eksplode_re_core::PlayerId::new(0).unwrap(),
+        from: eksplode_re_core::Pos::new(2, 1),
+        dir: eksplode_re_core::Dir::Right,
+    }])
+    .unwrap();
+    assert_eq!(load(value.to_string().as_bytes()), 0);
+    assert!(eksplode_re_frame(800.0, 600.0, 1.0) > baseline);
+    value["events"] = serde_json::json!("invalid");
+    assert_eq!(load(value.to_string().as_bytes()), 2);
+}
+
+#[test]
 fn f14_foundation_scene_exports_are_bounded_and_isolated() {
     assert_eq!(eksplode_re_lobby_advance(1), 2);
     assert_eq!(eksplode_re_lobby_frame(640.0, 200.0, 0.0), 0);

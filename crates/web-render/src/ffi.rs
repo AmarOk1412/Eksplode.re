@@ -73,7 +73,17 @@ pub unsafe extern "C" fn eksplode_re_load(ptr: *const u8, len: usize) -> i32 {
     let Ok(text) = std::str::from_utf8(bytes) else {
         return 1;
     };
-    let Ok(mut obs) = serde_json::from_str::<Observation>(text) else {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return 2;
+    };
+    let events: Vec<eksplode_re_core::Event> = match value.get("events") {
+        None => Vec::new(),
+        Some(events) => match serde_json::from_value(events.clone()) {
+            Ok(events) => events,
+            Err(_) => return 2,
+        },
+    };
+    let Ok(mut obs) = serde_json::from_value::<Observation>(value) else {
         return 2;
     };
     if !obs.arena.is_valid() {
@@ -85,7 +95,7 @@ pub unsafe extern "C" fn eksplode_re_load(ptr: *const u8, len: usize) -> i32 {
     obs.sanitize_participation();
     STATE.with(|s| {
         let mut s = s.borrow_mut();
-        s.interp.update(&obs);
+        s.interp.update_with_events(&obs, &events);
         s.obs = Some(obs);
     });
     0

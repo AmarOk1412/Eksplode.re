@@ -1335,7 +1335,7 @@ function start() {
     audio.setTune(tuneForStage(state.stage));
     if (["Welcome", "Lobby", "RoomUpdated"].includes(event.type) && renderer) renderer.setLooks(state.looks);
     if (event.type === "Snapshot" && renderer) {
-      const code = renderer.load(JSON.stringify(event.state));
+      const code = renderer.load(JSON.stringify({ ...event.state, events: event.events ?? [] }));
       if (code !== 0) state = { ...state, notice: `Graphics error: ${renderer.describe(code)}` };
       lastSnapshotAt = performance.now();
     }

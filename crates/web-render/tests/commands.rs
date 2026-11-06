@@ -10,6 +10,28 @@ use eksplode_re_web_render::view::fit;
 const CANVAS: (f32, f32) = (800.0, 600.0);
 
 #[test]
+fn punch_animation_emits_a_directional_hand_then_returns_to_normal() {
+    let state = standard();
+    let observation = obs(&state);
+    let mut interpolation = Interp::default();
+    interpolation.update(&observation);
+    let baseline = build(&observation, &interpolation, 0.0, CANVAS);
+    let mut animated = Interp::default();
+    animated.update_with_events(
+        &observation,
+        &[eksplode_re_core::Event::BombPunched {
+            player: eksplode_re_core::PlayerId::new(0).unwrap(),
+            from: Pos::new(2, 1),
+            dir: Dir::Right,
+        }],
+    );
+    let punch = build(&observation, &animated, 1.0, CANVAS);
+    assert!(punch.len() > baseline.len());
+    assert_ne!(punch, build(&observation, &animated, 3.0, CANVAS));
+    assert_eq!(build(&observation, &animated, 8.0, CANVAS), baseline);
+}
+
+#[test]
 fn f13_kart_has_a_visible_driver_with_the_players_custom_look() {
     use eksplode_re_web_render::commands::build_with_looks;
     use eksplode_re_web_render::look::{default_for, skin, Costume, Face, Head, CAP, SCARF};
